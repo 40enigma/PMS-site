@@ -1,18 +1,93 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gallery – PIEAS Materials Society</title>
-  <meta name="description" content="Photo gallery from PMS PIEAS events – workshops, seminars, and industrial visits.">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gallery &amp; Micrographs – PIEAS Materials Society</title>
+  <meta name="description" content="Optical and SEM micrographs, event photography, etching competitions, and industrial tours from PMS PIEAS.">
   <link rel="stylesheet" href="/assets/style.css">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 </head>
 <body>
 <div id="announcement-banner" class="banner" style="display:none"></div>
-<nav class="navbar"><div class="container nav-inner"><a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a><button class="hamburger" aria-label="Toggle navigation" aria-expanded="false"><span></span><span></span><span></span></button><ul class="nav-links" role="list"><li><a href="/">Home</a></li><li><a href="/about">About</a></li><li><a href="/team">Team</a></li><li><a href="/events">Events</a></li><li><a href="/blog">Blog</a></li><li><a href="/resources">Resources</a></li><li><a href="/opportunities">Opportunities</a></li><li><a href="/alumni">Alumni</a></li><li><a href="/projects">Projects</a></li><li><a href="/gallery">Gallery</a></li><li><a href="/sponsors">Sponsors</a></li><li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li></ul></div></nav>
-<section class="hero" style="padding:3.5rem 0 2.5rem"><div class="container hero-content"><span class="badge">Photo Gallery</span><h1 class="fade-up">PMS Gallery</h1><p class="hero-desc fade-up fade-up-delay-1">Memories from our workshops, seminars, competitions, and industrial visits.</p></div></section>
-<section class="section"><div class="container"><div id="gallery-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem"><div class="spinner"></div></div></div></section>
-<footer><div class="container footer-bottom"><p>© 2026 PIEAS Materials Society</p></div></footer>
+
+<!-- Navbar -->
+<nav class="navbar" role="navigation" aria-label="Main navigation">
+  <div class="container nav-inner">
+    <a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a>
+    <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <ul class="nav-links" id="nav-links" role="list">
+      <li><a href="/">Home</a></li>
+      <li><a href="/about">About</a></li>
+      <li><a href="/team">Team</a></li>
+      <li><a href="/events">Events</a></li>
+      <li><a href="/blog">Blog</a></li>
+      <li><a href="/resources">Resources</a></li>
+      <li><a href="/opportunities">Opportunities</a></li>
+      <li><a href="/alumni">Alumni</a></li>
+      <li><a href="/projects">Projects</a></li>
+      <li><a href="/gallery">Gallery</a></li>
+      <li><a href="/sponsors">Sponsors</a></li>
+      <li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li>
+    </ul>
+  </div>
+</nav>
+
+<section class="hero" style="padding:3.5rem 0 2.5rem">
+  <div class="container hero-content">
+    <span class="badge">Visual Archive</span>
+    <h1 class="fade-up">PMS Photo Gallery &amp; Micrographs</h1>
+    <p class="hero-desc fade-up fade-up-delay-1">Optical metallography, SEM micrographs, etching Olympiads, and industrial visits from DMME laboratory sessions.</p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div id="gallery-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.25rem">
+      <div class="spinner"></div>
+    </div>
+  </div>
+</section>
+
+<!-- Unified Footer -->
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <div class="footer-title">⚛️ PMS PIEAS</div>
+        <p style="font-size:.85rem">Official academic society of the Department of Metallurgy &amp; Materials Engineering (DMME), PIEAS Islamabad.</p>
+      </div>
+      <div>
+        <div class="footer-title">Quick Links</div>
+        <ul class="footer-links">
+          <li><a href="/events">Events</a></li>
+          <li><a href="/blog">Technical Blog</a></li>
+          <li><a href="/resources">Toolkit &amp; ASTM</a></li>
+          <li><a href="/opportunities">Opportunities</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-title">Society</div>
+        <ul class="footer-links">
+          <li><a href="/about">About PMS</a></li>
+          <li><a href="/team">Our Council</a></li>
+          <li><a href="/alumni">Alumni Network</a></li>
+          <li><a href="/sponsors">Sponsors</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-title">Contact &amp; Location</div>
+        <p style="font-size:.85rem">pms@pieas.edu.pk<br>DMME Block, PIEAS, Nilore, Islamabad</p>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>© 2026 PIEAS Materials Society (PMS). Department of Metallurgy &amp; Materials Engineering.</p>
+    </div>
+  </div>
+</footer>
+
 <script src="/assets/app.js"></script>
 <script>
 (async () => {
@@ -20,13 +95,19 @@
   try {
     const images = await PMS.apiFetch('/api/gallery');
     grid.innerHTML = images.length ? images.map(img => `
-      <figure style="margin:0;border-radius:var(--radius-lg);overflow:hidden;position:relative;aspect-ratio:4/3;background:var(--bg-card)">
-        <img src="${PMS.escHtml(img.image_url)}" alt="${PMS.escHtml(img.caption || '')}" loading="lazy"
+      <figure style="margin:0;border-radius:var(--radius-lg);overflow:hidden;position:relative;aspect-ratio:4/3;background:var(--bg-card);border:1px solid var(--border)">
+        <img src="${PMS.safeUrl(img.image_url)}" alt="${PMS.escHtml(img.caption || '')}" loading="lazy"
           style="width:100%;height:100%;object-fit:cover;transition:transform .3s ease"
           onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
-        <figcaption style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.8));padding:.75rem;font-size:.78rem;color:#e2e8f0">${PMS.escHtml(img.caption || '')}</figcaption>
-      </figure>`).join('') : '<p style="color:var(--text-muted);grid-column:1/-1">No images in gallery.</p>';
-  } catch(e) { grid.innerHTML = '<p style="color:var(--danger)">Could not load gallery.</p>'; }
+        <figcaption style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.85));padding:.75rem 1rem;font-size:.8rem;color:#f8fafc">
+          <strong>${PMS.escHtml(img.caption || '')}</strong>
+          ${img.event_name ? `<br><small style="color:#94a3b8">${PMS.escHtml(img.event_name)} (${PMS.escHtml(img.year)})</small>` : ''}
+        </figcaption>
+      </figure>`).join('') : '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No images in gallery.</p>';
+  } catch(e) {
+    grid.innerHTML = '<p style="color:var(--danger);grid-column:1/-1;text-align:center">Could not load gallery.</p>';
+  }
 })();
 </script>
-</body></html>
+</body>
+</html>

@@ -1,26 +1,182 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Resources – PIEAS Materials Society</title>
-  <meta name="description" content="Student resources for DMME at PIEAS – software guides, phase diagrams, ASTM standards, and lab safety.">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Undergraduate Toolkit &amp; Resources – PIEAS Materials Society</title>
+  <meta name="description" content="Undergraduate materials engineering toolkit: ASTM standards, metallography etching cheatsheets, Thermo-Calc, and phase diagram software.">
   <link rel="stylesheet" href="/assets/style.css">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 </head>
 <body>
 <div id="announcement-banner" class="banner" style="display:none"></div>
-<nav class="navbar"><div class="container nav-inner"><a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a><button class="hamburger" aria-label="Toggle navigation" aria-expanded="false"><span></span><span></span><span></span></button><ul class="nav-links" role="list"><li><a href="/">Home</a></li><li><a href="/about">About</a></li><li><a href="/team">Team</a></li><li><a href="/events">Events</a></li><li><a href="/blog">Blog</a></li><li><a href="/resources">Resources</a></li><li><a href="/opportunities">Opportunities</a></li><li><a href="/alumni">Alumni</a></li><li><a href="/projects">Projects</a></li><li><a href="/gallery">Gallery</a></li><li><a href="/sponsors">Sponsors</a></li><li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li></ul></div></nav>
-<section class="hero" style="padding:3.5rem 0 2.5rem"><div class="container hero-content"><span class="badge">Academic Resources</span><h1 class="fade-up">Student Resources</h1><p class="hero-desc fade-up fade-up-delay-1">Curated software guides, databases, standards, and lab safety references for DMME students.</p></div></section>
-<section class="section"><div class="container"><div id="resources-grid" class="grid grid-3"><div class="spinner"></div></div></div></section>
-<footer><div class="container footer-bottom"><p>© 2026 PIEAS Materials Society</p></div></footer>
+
+<!-- Navbar -->
+<nav class="navbar" role="navigation" aria-label="Main navigation">
+  <div class="container nav-inner">
+    <a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a>
+    <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <ul class="nav-links" id="nav-links" role="list">
+      <li><a href="/">Home</a></li>
+      <li><a href="/about">About</a></li>
+      <li><a href="/team">Team</a></li>
+      <li><a href="/events">Events</a></li>
+      <li><a href="/blog">Blog</a></li>
+      <li><a href="/resources">Resources</a></li>
+      <li><a href="/opportunities">Opportunities</a></li>
+      <li><a href="/alumni">Alumni</a></li>
+      <li><a href="/projects">Projects</a></li>
+      <li><a href="/gallery">Gallery</a></li>
+      <li><a href="/sponsors">Sponsors</a></li>
+      <li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- Hero Section with Category Filters -->
+<section class="hero" style="padding:3.5rem 0 2.5rem">
+  <div class="container hero-content">
+    <span class="badge">Academic Toolkit</span>
+    <h1 class="fade-up">Student Toolkit &amp; Materials Engineering Resources</h1>
+    <p class="hero-desc fade-up fade-up-delay-1">Curated ASTM testing standards, software tutorials, lab safety protocols, and crystallography databases for DMME students.</p>
+    <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1.5rem">
+      <button class="btn btn-outline btn-sm res-filter active" data-cat="">All Toolkit Items</button>
+      <button class="btn btn-outline btn-sm res-filter" data-cat="Standards">Standards (ASTM)</button>
+      <button class="btn btn-outline btn-sm res-filter" data-cat="Software">Software &amp; Tools</button>
+      <button class="btn btn-outline btn-sm res-filter" data-cat="Safety">Lab Safety</button>
+      <button class="btn btn-outline btn-sm res-filter" data-cat="Databases">Databases</button>
+    </div>
+  </div>
+</section>
+
+<!-- ASTM Standards & Cheatsheet Strip (Dynamic from site_sections) -->
+<section class="section" style="padding-top:1.5rem;padding-bottom:1.5rem;background:rgba(255,255,255,.01);border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
+  <div class="container">
+    <div class="section-header" style="margin-bottom:1.5rem">
+      <span class="badge" id="astm-badge">Testing Protocols</span>
+      <h2 id="astm-title" style="font-size:1.5rem">Materials Testing &amp; ASTM Cheatsheet Strip</h2>
+      <p id="astm-desc" style="font-size:.875rem">Critical mechanical testing and metallography protocols used across DMME laboratory coursework.</p>
+    </div>
+    <div id="astm-strip" class="grid grid-4" style="gap:1rem">
+      <div class="spinner"></div>
+    </div>
+  </div>
+</section>
+
+<!-- General Resources Grid -->
+<section class="section">
+  <div class="container">
+    <div id="resources-grid" class="grid grid-3">
+      <div class="spinner"></div>
+    </div>
+  </div>
+</section>
+
+<!-- Unified Footer -->
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <div class="footer-title">⚛️ PMS PIEAS</div>
+        <p style="font-size:.85rem">Official academic society of the Department of Metallurgy &amp; Materials Engineering (DMME), PIEAS Islamabad.</p>
+      </div>
+      <div>
+        <div class="footer-title">Quick Links</div>
+        <ul class="footer-links">
+          <li><a href="/events">Events</a></li>
+          <li><a href="/blog">Technical Blog</a></li>
+          <li><a href="/resources">Toolkit &amp; ASTM</a></li>
+          <li><a href="/opportunities">Opportunities</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-title">Society</div>
+        <ul class="footer-links">
+          <li><a href="/about">About PMS</a></li>
+          <li><a href="/team">Our Council</a></li>
+          <li><a href="/alumni">Alumni Network</a></li>
+          <li><a href="/sponsors">Sponsors</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-title">Contact &amp; Location</div>
+        <p style="font-size:.85rem">pms@pieas.edu.pk<br>DMME Block, PIEAS, Nilore, Islamabad</p>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>© 2026 PIEAS Materials Society (PMS). Department of Metallurgy &amp; Materials Engineering.</p>
+    </div>
+  </div>
+</footer>
+
 <script src="/assets/app.js"></script>
 <script>
-(async () => {
+let allResources = [];
+
+async function loadResources() {
   const grid = document.getElementById('resources-grid');
+  grid.innerHTML = '<div class="spinner"></div>';
   try {
-    const resources = await PMS.apiFetch('/api/resources');
-    grid.innerHTML = resources.length ? resources.map(PMS.resourceCard).join('') : '<p style="color:var(--text-muted);grid-column:1/-1">No resources listed.</p>';
-  } catch(e) { grid.innerHTML = '<p style="color:var(--danger)">Could not load resources.</p>'; }
-})();
+    allResources = await PMS.apiFetch('/api/resources');
+    renderFilteredResources('');
+  } catch (e) {
+    grid.innerHTML = '<p style="color:var(--danger);grid-column:1/-1">Failed to load resources.</p>';
+  }
+}
+
+function renderFilteredResources(category) {
+  const grid = document.getElementById('resources-grid');
+  const filtered = category
+    ? allResources.filter(r => r.category && r.category.toLowerCase() === category.toLowerCase())
+    : allResources;
+
+  grid.innerHTML = filtered.length
+    ? filtered.map(PMS.resourceCard).join('')
+    : '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No resources found in this category.</p>';
+}
+
+// Category filter buttons
+document.querySelectorAll('.res-filter').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.res-filter').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderFilteredResources(btn.dataset.cat);
+  });
+});
+
+// Load ASTM standards strip from site_sections
+async function loadAstmStrip() {
+  const strip = document.getElementById('astm-strip');
+  try {
+    const sections = await PMS.apiFetch('/api/sections');
+    const sec = sections.find(s => s.section_key === 'resources_standards');
+    if (sec) {
+      if (sec.badge) document.getElementById('astm-badge').textContent = sec.badge;
+      if (sec.title) document.getElementById('astm-title').textContent = sec.title;
+      if (sec.subtitle) document.getElementById('astm-desc').textContent = sec.subtitle;
+
+      if (sec.extra_json) {
+        const protocols = JSON.parse(sec.extra_json);
+        strip.innerHTML = protocols.map(p => `
+          <div class="card" style="padding:1.25rem;border-left:3px solid var(--primary)">
+            <span class="tag" style="margin-bottom:.5rem;font-weight:700">${PMS.escHtml(p.code)}</span>
+            <h3 style="font-size:.95rem;margin-bottom:.35rem;color:var(--text)">${PMS.escHtml(p.title)}</h3>
+            <p style="font-size:.8rem;color:var(--text-muted);line-height:1.5">${PMS.escHtml(p.detail)}</p>
+          </div>
+        `).join('');
+        return;
+      }
+    }
+    strip.innerHTML = '';
+  } catch (_) {
+    strip.innerHTML = '';
+  }
+}
+
+loadResources();
+loadAstmStrip();
 </script>
-</body></html>
+</body>
+</html>

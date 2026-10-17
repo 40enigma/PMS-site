@@ -99,9 +99,6 @@ pub struct EventRegistration {
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateEventRegistration {
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub event_id: Option<i64>,
     pub student_name: String,
     pub roll_number: String,
     pub batch: String,

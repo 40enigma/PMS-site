@@ -1,39 +1,42 @@
-# PIEAS Materials Society (PMS) — Platform Overview & Codebase Guide
+# PIEAS Materials Society (PMS) — Platform Overview & Architecture Guide
 
-This document provides a comprehensive technical overview of the PIEAS Materials Society (PMS) web platform, including system architecture, database design, API endpoints, frontend organization, and instructions for managing dynamic site sections via the Admin Panel.
+This document provides a comprehensive technical guide to the PIEAS Materials Society (PMS) web platform, including system architecture, database schema, security mechanisms, API endpoints, frontend organization, and administration workflows.
 
 ---
 
 ## 1. System Architecture
 
-The PMS platform is built as a monolithic, single-binary full-stack application:
+The PMS platform is engineered as a self-contained, single-binary full-stack service in Rust (Axum 0.8) with an embedded SQLite 3 database and zero-bundler static frontend:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                      Client Browser                         │
-│   React 19 + Vite SPA (Tailwind CSS, Glassmorphic UI)       │
+│     Vanilla HTML5 / Modern CSS / ES6 JavaScript Static UI   │
+│             (Served directly from frontend/static/)         │
 └──────────────────────────────▲──────────────────────────────┘
-                               │ HTTP / JSON API
+                               │ HTTP / REST / JSON (httpOnly Cookie or Bearer)
 ┌──────────────────────────────▼──────────────────────────────┐
 │                  Rust Axum Web Server (Port 3000)           │
 │                                                             │
-│   ├── /api/auth/*         (JWT Bearer Authentication)       │
+│   ├── /api/auth/*         (Rate-limited login, logout, me)  │
 │   ├── /api/admin/*        (Secured CRUD Management)         │
-│   ├── /api/*              (Public Endpoints & Search)       │
-│   ├── /uploads/*          (Static PDF & Media Assets)       │
+│   ├── /api/*              (Public Endpoints & Forms)        │
+│   ├── /uploads/*          (Non-executable user media)       │
 │   ├── /swagger-ui         (Interactive OpenAPI Docs)        │
-│   └── /*                  (SPA Fallback -> frontend/dist)   │
+│   ├── /assets/*           (Static CSS & JS stylesheets)     │
+│   └── /*                  (Static HTML pages: /about, etc.) │
+│       └── Fallback        (HTTP 404 with 404.html)          │
 └──────────────────────────────▲──────────────────────────────┘
-                               │ SQLite Connection Pool (sqlx)
+                               │ SQLite Connection Pool (sqlx WAL Mode)
 ┌──────────────────────────────▼──────────────────────────────┐
-│                      SQLite Database                        │
-│                         (pms.db)                            │
+│                    SQLite 3 Embedded Engine                 │
+│                 (pms.db with foreign keys enabled)          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-- **Backend**: Rust 2021 edition using **Axum 0.8**, **SQLx 0.8 (SQLite)**, **Argon2** password hashing, **jsonwebtoken (JWT)** for admin sessions, **tower-http** for CORS, tracing, and static file serving, and **utoipa / utoipa-swagger-ui** for OpenAPI documentation.
-- **Frontend**: **React 19**, **Vite 6**, **React Router v7**, **Tailwind CSS**, and **Lucide React** icons.
-- **Single Deployment Artifact**: When running `cargo run`, Axum serves both the REST API and the compiled React production bundle from `frontend/dist/` with automated SPA routing fallback.
+- **Backend**: Rust 2021 edition using **Axum 0.8**, **SQLx 0.8 (SQLite)**, **Argon2** password hashing, **jsonwebtoken (JWT)** for administrative sessions, **tower-http** for CORS, tracing, compression, and static file serving, **governor** for IP-safe rate limiting, and **utoipa / utoipa-swagger-ui** for interactive API documentation at `/swagger-ui`.
+- **Frontend**: High-performance, responsive static HTML5, vanilla modern CSS with design tokens, glassmorphism, responsive navigation, and lightweight modular ES6 JavaScript (`frontend/static/assets/app.js`). **Zero Node.js build step, bundler, or npm dependencies required.**
+- **Single Deployment Artifact**: Axum serves the REST API, the interactive Swagger UI, and the static HTML/CSS/JS frontend with automated routing and 404 fallback.
 
 ---
 
@@ -42,162 +45,99 @@ The PMS platform is built as a monolithic, single-binary full-stack application:
 ```
 PMS-site/
 ├── src/
-│   ├── main.rs              # Application entrypoint, server routing, and OpenAPI config
-│   ├── models.rs            # Data structures, serialization schemas, and request payloads
-│   ├── db.rs                # SQLite migration runner, default seeds, and pool init
-│   ├── auth.rs              # JWT token generation, verification, and AuthUser extractor
+│   ├── main.rs              # Entrypoint, TCP listener, ConnectInfo injection, tracing init
+│   ├── lib.rs               # Application router, CORS, modern security headers, 404 fallback, ApiDoc
+│   ├── models.rs            # Data structures, serialization schemas, ToSchema derives
+│   ├── db.rs                # SQLite connection pool, single-source migration runner, seed logic
+│   ├── auth.rs              # Cached JWT secret/cookie OnceLock, token generation & extractor
+│   ├── rate_limit.rs        # In-memory IP rate limiter (TRUST_PROXY aware, DashMap pruning)
 │   └── routes/
-│       ├── public.rs        # Public read endpoints, searches, and form submissions
-│       ├── admin.rs         # Protected admin CRUD, stats editor, and file uploader
-│       └── auth.rs          # Admin login and session verification
+│       ├── mod.rs           # Module exports (public, admin)
+│       ├── public.rs        # Public read endpoints, filter queries, rate-limited submissions
+│       └── admin.rs         # Protected admin CRUD, stats editor, file uploader, session verification
+├── migrations/
+│   └── 0001_initial_schema.sql # Canonical single source of truth for all 16 SQLite tables
 ├── frontend/
-│   ├── src/
-│   │   ├── api.js           # Central API client and fetch wrapper
-│   │   ├── hooks/
-│   │   │   └── index.js     # Custom hooks: useSections, useFetch, useCountUp, useTheme
-│   │   ├── components/      # Reusable components (Navbar, Footer, Modal, Visualizer)
-│   │   ├── pages/           # Page views (Home, About, Team, Events, Admin, etc.)
-│   │   ├── App.jsx          # Top-level router with 404 fallback
-│   │   └── index.css        # Tailwind directives and custom dark glassmorphism styling
-│   ├── package.json         # Frontend dependencies and Vite scripts
-│   └── vite.config.js       # Vite configuration with proxy to localhost:3000
-├── uploads/                 # Static user uploads and constitution PDFs
-├── pms.db                   # SQLite database file
-├── Cargo.toml               # Rust dependencies and compiler configuration
-└── SITE_OVERVIEW.md         # This technical documentation
+│   └── static/
+│       ├── index.html       # Homepage with dynamic hero & activities
+│       ├── about.html       # Society mission, vision, history, and FAQs
+│       ├── team.html        # Executive council, faculty advisors, past councils
+│       ├── events.html      # Technical seminars, workshops, registration modal
+│       ├── resources.html   # ASTM standards, metallurgy software guides, categorized toolkit
+│       ├── blog.html        # Materials explainers with full technical article reader modal
+│       ├── opportunities.html # Internships, graduate scholarships, industry jobs
+│       ├── alumni.html      # DMME alumni network and career profiles
+│       ├── projects.html    # Final Year Projects (FYP) and student research archive
+│       ├── gallery.html     # High-resolution micrographs and event photography
+│       ├── sponsors.html    # Industrial sponsors and collaboration pitch
+│       ├── join.html        # Membership application form
+│       ├── admin.html       # Full Admin Console with Create/Edit modal, tabs, status toggle
+│       ├── 404.html         # Responsive 404 page with complete navbar and footer
+│       └── assets/
+│           ├── style.css    # Premium design system tokens, components, responsive layout
+│           └── app.js       # PMS namespace, safeUrl XSS sanitizer, API clients, helpers
+├── uploads/                 # Storage for uploaded media assets (non-executable permissions)
+├── tests/
+│   └── smoke_test.rs        # Integration test suite (auth, rate limits, upload sniff, CRUD, 404)
+├── Cargo.toml               # Rust dependencies and package configuration
+├── .env.example             # Documented environment variables template
+└── README.md                # Developer onboarding and production deployment manual
 ```
 
 ---
 
-## 3. Database Schema
+## 3. Database Schema (16 SQLite Tables)
 
-The SQLite database (`pms.db`) consists of 14 core relational tables:
+The database schema is defined in `migrations/0001_initial_schema.sql` and initialized automatically on startup:
 
-| Table Name | Description | Key Columns |
-| :--- | :--- | :--- |
-| `admin_users` | Administrators authorized to access `/admin` | `id, email, password_hash, name, created_at` |
-| `events` | Workshops, technical seminars, and symposia | `id, title, date, venue, category, is_past, image_url` |
-| `event_registrations` | Student attendees registered for events | `id, event_id, student_name, roll_number, certificate_code` |
-| `team_members` | Council officers and faculty patrons | `id, name, role, batch, tenure_year, is_faculty_advisor` |
-| `gallery_images` | High-res photos of workshops and tours | `id, image_url, caption, category, event_id` |
-| `blog_posts` | Technical articles & Material of the Month | `id, title, slug, content, material_formula, published` |
-| `faqs` | Frequently asked questions | `id, question, answer, category, display_order` |
-| `resources` | Student study guides, software, ASTM notes | `id, title, category, software_tag, url, is_pinned` |
-| `announcements` | Urgent banners and recruitment notices | `id, title, content, is_active, priority` |
-| `opportunities` | Internships, scholarships, and jobs | `id, title, organization, type, deadline, is_active` |
-| `projects` | Departmental research and FYP showcases | `id, title, abstract, supervisor, student_lead, year` |
-| `sponsors` | Strategic partners (PAEC, NESCOM, HMC, etc.) | `id, name, tier, website_url, is_active` |
-| `site_stats` | Singleton table for homepage impact counters | `id, active_members, events_held, industrial_partners` |
-| `site_sections` | Dynamic text content for frontend pages | `id, section_key, title, subtitle, content, badge, extra_json` |
+1. **`admin_users`**: Administrative credentials (`id`, `email` UNIQUE, `password_hash` via Argon2, `name`).
+2. **`announcements`**: Top notification banners (`id`, `message`, `link_text`, `link_url`, `priority`, `is_active`, `created_at`).
+3. **`site_stats`**: Departmental metrics (`id` PRIMARY KEY, `active_members`, `events_held`, `years_active`, `industrial_partners`, `constitution_pdf_url`, `office_location`, `contact_email`).
+4. **`events`**: Technical workshops and seminars (`id`, `title`, `slug`, `date`, `time_range`, `venue`, `category`, `short_description`, `full_summary`, `poster_url`, `registration_link`, `speaker_or_organizer`, `is_past`, `is_featured`).
+5. **`event_registrations`**: Participant registrations (`id`, `event_id` REFERENCES events, `student_name`, `roll_number`, `batch`, `department`, `email`, `phone`, `certificate_code`, `created_at`).
+6. **`team_members`**: Executive council & faculty advisors (`id`, `name`, `role`, `role_responsibility`, `photo_url`, `batch`, `tenure_year`, `is_current`, `is_faculty_advisor`, `bio`, `linkedin_url`, `display_order`).
+7. **`gallery_items`**: Micrograph repository and event photos (`id`, `image_url`, `caption`, `event_name`, `year`, `created_at`).
+8. **`posts`**: Technical explainers and blog articles (`id`, `title`, `slug` UNIQUE, `category`, `excerpt`, `body_markdown`, `material_formula`, `crystal_structure`, `cover_image_url`, `author_name`, `author_role`, `published_at`, `read_time_minutes`, `is_featured`).
+9. **`resources`**: Undergraduate toolkit, ASTM standards, software links (`id`, `title`, `category`, `description`, `url`, `software_tag`, `created_at`).
+10. **`opportunities`**: Internships, scholarships, research postings (`id`, `title`, `organization`, `opportunity_type`, `location`, `deadline`, `description`, `apply_url`, `is_active`, `created_at`).
+11. **`alumni`**: Departmental alumni directory (`id`, `name`, `graduating_batch`, `current_role`, `current_organization`, `industry_sector`, `linkedin_url`, `photo_url`).
+12. **`projects`**: FYP and student research archive (`id`, `title`, `project_type`, `batch`, `supervisors`, `abstract`, `students`, `paper_or_repo_url`, `created_at`).
+13. **`sponsors`**: Corporate and industrial partners (`id`, `name`, `tier`, `logo_url`, `website_url`, `since_year`, `display_order`).
+14. **`faqs`**: Frequently asked questions (`id`, `question`, `answer`, `category`, `display_order`).
+15. **`membership_applications`**: Student society membership submissions (`id`, `full_name`, `roll_number`, `batch`, `department`, `email`, `phone`, `interests`, `why_join`, `status`, `created_at`).
+16. **`site_sections`**: Dynamic editable page content and portfolio blocks (`id`, `section_key` UNIQUE, `title`, `subtitle`, `content`, `badge`, `extra_json`, `updated_at`).
 
----
-
-## 4. Dynamic Content Management (Site Sections)
-
-Every primary text block, mission statement, portfolio strip, and collaborative pitch on the frontend is completely dynamic and editable via the Admin Panel without modifying code.
-
-### Registered Section Keys
-
-| Section Key | Frontend Page | Purpose |
-| :--- | :--- | :--- |
-| `home_hero` | `/` (Home) | Hero main headline, subtitle, and department badge |
-| `home_activities` | `/` (Home) | Society portfolios grid (title, subtitle, and 4 activity cards) |
-| `about_mission` | `/about` | Society mission card |
-| `about_vision` | `/about` | Society vision card |
-| `about_story` | `/about` | Detailed narrative on PMS founding & DMME heritage |
-| `team_guidance` | `/team` | Executive council portfolios explainer & duties |
-| `resources_standards`| `/resources` | Metallurgy ASTM testing cheatsheet strip |
-| `sponsors_pitch` | `/sponsors` | Industry partnership benefits & collaboration proposal |
-
-### How It Works in React
-Pages use the `useSections()` hook from `src/hooks/index.js`:
-```javascript
-const { getSection } = useSections();
-const hero = getSection('home_hero', {
-  badge: 'DMME • PIEAS Islamabad',
-  title: 'Engineering Matter from Atomic Lattices to Extreme Frontiers.',
-  subtitle: 'The official student academic platform at DMME, PIEAS.'
-});
-```
-- If the section exists in the backend database, its database values render seamlessly.
-- If the network request is loading or the database is uninitialized, graceful hardcoded metallurgical fallbacks are displayed.
+*(Plus auxiliary tracking tables: `contact_messages`, `newsletter_subscribers`).*
 
 ---
 
-## 5. API Reference
+## 4. Security & Hardening Architecture
 
-### Public API Endpoints (`/api/*`)
-All public endpoints support SQL-parameterized filtering:
-- `GET /api/sections` — List all dynamic text sections
-- `GET /api/stats` — Retrieve society impact metrics
-- `GET /api/events?search=&category=&is_past=` — Filter events
-- `POST /api/events/{id}/register` — Register for an event & receive instant certificate code
-- `GET /api/certificates/verify?code=PMS-1-XXXXXX` — Case-insensitive certificate verification
-- `GET /api/team?tenure_year=&batch=&search=` — Council and advisor list
-- `GET /api/posts?category=&search=` — Technical blog articles & Material of the Month
-- `GET /api/resources?category=&search=` — Software guides, phase diagrams, and ASTM standards
-- `GET /api/opportunities?type=` — Scholarships and internships
-- `GET /api/projects?search=&year=` — Department research projects
-- `GET /api/sponsors` — Active industry and strategic partners
-- `GET /api/gallery?category=` — Event photos
-- `POST /api/membership` — Submit undergraduate society membership application
-- `POST /api/contact` — Submit general inquiry
-
-### Admin API Endpoints (`/api/admin/*`)
-Requires HTTP Header: `Authorization: Bearer <JWT_TOKEN>`
-- `GET / POST /api/admin/sections` — List or create dynamic content sections
-- `GET / PUT / DELETE /api/admin/sections/{id}` — Retrieve, update, or remove a section
-- `GET / PUT /api/admin/stats` — Update homepage metrics
-- `POST /api/admin/upload` — Secure file uploader (Path-traversal sanitized, 20MB limit)
-- Full CRUD endpoints for `/api/admin/events`, `/api/admin/team`, `/api/admin/posts`, `/api/admin/resources`, `/api/admin/opportunities`, `/api/admin/projects`, `/api/admin/sponsors`, `/api/admin/announcements`, `/api/admin/faqs`, `/api/admin/gallery`, `/api/admin/membership`.
+1. **IP Rate Limiting & Anti-Spoofing**:
+   - `X-Forwarded-For` and `X-Real-IP` are strictly untrusted unless `TRUST_PROXY=true` is explicitly set in production behind Nginx/Caddy.
+   - When `TRUST_PROXY=true`, the rightmost proxy hop is extracted.
+   - For direct TCP connections, `ConnectInfo<SocketAddr>` is extracted from the socket.
+   - Governor's in-memory `DashMapStateStore` is automatically pruned every 5 minutes (`retain_recent()` and `shrink_to_fit()`) to prevent memory exhaustion attacks.
+2. **CORS & Origin Isolation**:
+   - Allowed origins are enforced via `ALLOWED_ORIGINS`. In production mode (`RUST_ENV=production`), missing origins result in an immediate fail-fast exit.
+   - `x-forwarded-for` and `x-real-ip` headers are stripped from CORS `allow_headers`.
+3. **Modern Security Headers**:
+   - `Content-Security-Policy`: Restricts scripts, styles, Google Fonts (`https://fonts.googleapis.com`, `https://fonts.gstatic.com`), and approved image hosts (`https://images.unsplash.com`, `'self'`, `data:`).
+   - `Referrer-Policy: strict-origin-when-cross-origin`.
+   - `X-Content-Type-Options: nosniff`.
+   - `X-Frame-Options: SAMEORIGIN`.
+4. **XSS URL Sanitization**:
+   - Dynamic URLs placed into HTML `href` or `src` attributes are sanitized with `PMS.safeUrl(url)` which strictly permits `https://`, `http://`, `mailto:`, and relative `/` paths, disarming `javascript:` and malicious `data:` URIs.
+5. **Admin Seeding Security**:
+   - Default credentials are never committed or seeded by default. An admin user is only created when `SEED_ADMIN=true` is explicitly passed along with `ADMIN_INITIAL_EMAIL` and `ADMIN_INITIAL_PASSWORD`.
 
 ---
 
-## 6. Admin Credentials & Access
+## 5. API Reference & Swagger Documentation
 
-To access the administrative dashboard:
-1. Navigate to: **`http://localhost:3000/admin`**
-2. Login with credentials:
-   - **Email**: `admin@pms.pieas.edu.pk`
-   - **Password**: `PMS@Admin2026`
-3. Use the navigation sidebar to:
-   - **Sections**: Edit any headline, subtitle, or card across the entire website.
-   - **Site Stats**: Update live numbers for active members, workshops held, and partners.
-   - **Events & Registrations**: Manage events, view registered attendees, and review verification codes.
-   - **Content Hub**: Create blog posts, student toolkit resources, opportunities, and sponsors.
-
----
-
-## 7. Development & Production Commands
-
-### Prerequisites
-- **Rust & Cargo** (1.75+ or 1.99.1+)
-- **Node.js** (v18+ or v24.22.0) and **npm**
-
-### Building the Frontend
-```bash
-cd frontend
-npm install
-npm run build
+An interactive OpenAPI Swagger UI is mounted at:
 ```
-*(Compiles the optimized React bundle into `frontend/dist/`)*
-
-### Running the Backend Server
-```bash
-cargo run
+http://localhost:3000/swagger-ui
 ```
-The Axum server starts on `http://0.0.0.0:3000`:
-- Website: `http://localhost:3000/`
-- Admin Dashboard: `http://localhost:3000/admin`
-- Swagger UI (OpenAPI Docs): `http://localhost:3000/swagger-ui`
-
-### Running Full Automated Quality Verification
-```bash
-# Verify Rust Backend
-cargo check
-cargo clippy -- -D warnings
-
-# Verify Frontend Build
-cd frontend
-npm run build
-```
+Raw OpenAPI 3.0 specification JSON is served at `/api-docs/openapi.json`.
+All public, authentication, and administrative endpoints are registered with complete schemas and response definitions.

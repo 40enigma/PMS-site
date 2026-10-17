@@ -1,18 +1,93 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Alumni – PIEAS Materials Society</title>
-  <meta name="description" content="Meet DMME PIEAS alumni making an impact in materials science and engineering globally.">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alumni Network &amp; Profiles – PIEAS Materials Society</title>
+  <meta name="description" content="Meet DMME PIEAS alumni making an impact in materials science, metallurgy, nuclear engineering, and advanced manufacturing globally.">
   <link rel="stylesheet" href="/assets/style.css">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 </head>
 <body>
 <div id="announcement-banner" class="banner" style="display:none"></div>
-<nav class="navbar"><div class="container nav-inner"><a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a><button class="hamburger" aria-label="Toggle navigation" aria-expanded="false"><span></span><span></span><span></span></button><ul class="nav-links" role="list"><li><a href="/">Home</a></li><li><a href="/about">About</a></li><li><a href="/team">Team</a></li><li><a href="/events">Events</a></li><li><a href="/blog">Blog</a></li><li><a href="/resources">Resources</a></li><li><a href="/opportunities">Opportunities</a></li><li><a href="/alumni">Alumni</a></li><li><a href="/projects">Projects</a></li><li><a href="/gallery">Gallery</a></li><li><a href="/sponsors">Sponsors</a></li><li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li></ul></div></nav>
-<section class="hero" style="padding:3.5rem 0 2.5rem"><div class="container hero-content"><span class="badge">Alumni Network</span><h1 class="fade-up">Our Alumni</h1><p class="hero-desc fade-up fade-up-delay-1">DMME PIEAS graduates making an impact in materials science, industry, and academia globally.</p></div></section>
-<section class="section"><div class="container"><div id="alumni-grid" class="grid grid-2"><div class="spinner"></div></div></div></section>
-<footer><div class="container footer-bottom"><p>© 2026 PIEAS Materials Society</p></div></footer>
+
+<!-- Navbar -->
+<nav class="navbar" role="navigation" aria-label="Main navigation">
+  <div class="container nav-inner">
+    <a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a>
+    <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <ul class="nav-links" id="nav-links" role="list">
+      <li><a href="/">Home</a></li>
+      <li><a href="/about">About</a></li>
+      <li><a href="/team">Team</a></li>
+      <li><a href="/events">Events</a></li>
+      <li><a href="/blog">Blog</a></li>
+      <li><a href="/resources">Resources</a></li>
+      <li><a href="/opportunities">Opportunities</a></li>
+      <li><a href="/alumni">Alumni</a></li>
+      <li><a href="/projects">Projects</a></li>
+      <li><a href="/gallery">Gallery</a></li>
+      <li><a href="/sponsors">Sponsors</a></li>
+      <li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li>
+    </ul>
+  </div>
+</nav>
+
+<section class="hero" style="padding:3.5rem 0 2.5rem">
+  <div class="container hero-content">
+    <span class="badge">Alumni Network</span>
+    <h1 class="fade-up">DMME Alumni Directory</h1>
+    <p class="hero-desc fade-up fade-up-delay-1">Graduates of the Department of Metallurgy &amp; Materials Engineering driving research, aerospace, nuclear, and steel sectors worldwide.</p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div id="alumni-grid" class="grid grid-2">
+      <div class="spinner"></div>
+    </div>
+  </div>
+</section>
+
+<!-- Unified Footer -->
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <div class="footer-title">⚛️ PMS PIEAS</div>
+        <p style="font-size:.85rem">Official academic society of the Department of Metallurgy &amp; Materials Engineering (DMME), PIEAS Islamabad.</p>
+      </div>
+      <div>
+        <div class="footer-title">Quick Links</div>
+        <ul class="footer-links">
+          <li><a href="/events">Events</a></li>
+          <li><a href="/blog">Technical Blog</a></li>
+          <li><a href="/resources">Toolkit &amp; ASTM</a></li>
+          <li><a href="/opportunities">Opportunities</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-title">Society</div>
+        <ul class="footer-links">
+          <li><a href="/about">About PMS</a></li>
+          <li><a href="/team">Our Council</a></li>
+          <li><a href="/alumni">Alumni Network</a></li>
+          <li><a href="/sponsors">Sponsors</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-title">Contact &amp; Location</div>
+        <p style="font-size:.85rem">pms@pieas.edu.pk<br>DMME Block, PIEAS, Nilore, Islamabad</p>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>© 2026 PIEAS Materials Society (PMS). Department of Metallurgy &amp; Materials Engineering.</p>
+    </div>
+  </div>
+</footer>
+
 <script src="/assets/app.js"></script>
 <script>
 (async () => {
@@ -20,18 +95,24 @@
   try {
     const alumni = await PMS.apiFetch('/api/alumni');
     grid.innerHTML = alumni.length ? alumni.map(a => `
-      <article class="card fade-up" style="display:flex;gap:1rem">
-        ${a.photo_url ? `<img src="${PMS.escHtml(a.photo_url)}" alt="" style="width:72px;height:72px;border-radius:50%;object-fit:cover;flex-shrink:0">` : `<div style="width:72px;height:72px;border-radius:50%;background:var(--gradient-card);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.5rem">🎓</div>`}
-        <div>
-          <h2 style="font-size:1rem;margin-bottom:.2rem">${PMS.escHtml(a.name)}</h2>
-          <p style="color:var(--primary-light);font-size:.85rem;font-weight:600;margin-bottom:.25rem">${PMS.escHtml(a.current_position || '')} ${a.organization ? '· ' + PMS.escHtml(a.organization) : ''}</p>
-          <span class="badge" style="margin-bottom:.5rem">Batch ${PMS.escHtml(a.batch)}</span>
-          ${a.quote_testimonial ? `<p style="color:var(--text-muted);font-size:.85rem;font-style:italic">"${PMS.escHtml(a.quote_testimonial)}"</p>` : ''}
-          ${a.research_domain ? `<p style="margin-top:.5rem;font-size:.78rem;color:var(--text-dim)">🔬 ${PMS.escHtml(a.research_domain)}</p>` : ''}
-          ${a.linkedin_url ? `<a href="${PMS.escHtml(a.linkedin_url)}" target="_blank" rel="noopener" style="font-size:.8rem;margin-top:.35rem;display:inline-block">LinkedIn →</a>` : ''}
+      <article class="card fade-up" style="display:flex;gap:1.25rem;align-items:flex-start">
+        ${a.photo_url
+          ? `<img src="${PMS.safeUrl(a.photo_url)}" alt="${PMS.escHtml(a.name)}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid var(--primary)">`
+          : `<div style="width:72px;height:72px;border-radius:50%;background:var(--gradient-card);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.75rem">🎓</div>`}
+        <div style="flex:1">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:.5rem">
+            <h2 style="font-size:1.05rem;margin:0">${PMS.escHtml(a.name)}</h2>
+            <span class="badge" style="font-size:.72rem">Batch ${PMS.escHtml(a.graduating_batch)}</span>
+          </div>
+          <p style="color:var(--primary-light);font-size:.85rem;font-weight:600;margin:.25rem 0">${PMS.escHtml(a.current_role || '')} ${a.current_organization ? '· ' + PMS.escHtml(a.current_organization) : ''}</p>
+          ${a.industry_sector ? `<p style="color:var(--text-dim);font-size:.78rem;margin-bottom:.5rem">🏭 Sector: ${PMS.escHtml(a.industry_sector)}</p>` : ''}
+          ${a.linkedin_url ? `<a href="${PMS.safeUrl(a.linkedin_url)}" target="_blank" rel="noopener" style="font-size:.8rem;color:var(--secondary);font-weight:500;display:inline-block">LinkedIn Profile →</a>` : ''}
         </div>
-      </article>`).join('') : '<p style="color:var(--text-muted);grid-column:1/-1">No alumni listed.</p>';
-  } catch(e) { grid.innerHTML = '<p style="color:var(--danger)">Could not load alumni.</p>'; }
+      </article>`).join('') : '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No alumni profiles listed.</p>';
+  } catch(e) {
+    grid.innerHTML = '<p style="color:var(--danger);grid-column:1/-1;text-align:center">Could not load alumni.</p>';
+  }
 })();
 </script>
-</body></html>
+</body>
+</html>

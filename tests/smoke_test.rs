@@ -256,3 +256,186 @@ async fn test_input_validation_rejections() {
     let res = app.oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn test_404_fallback_returns_not_found_status_and_page() {
+    let app = setup_test_app().await;
+
+    // Test nonexistent route returns 404 status code (not 200) and contains 404 page content
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/nonexistent-page-path-12345")
+        .body(Body::empty())
+        .unwrap();
+
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+    let body = res.into_body().collect().await.unwrap().to_bytes();
+    let html = String::from_utf8_lossy(&body);
+    assert!(
+        html.contains("404") || html.contains("Page Not Found"),
+        "Expected 404 error page content in fallback response"
+    );
+}
+
+#[tokio::test]
+async fn test_admin_put_and_delete_nonexistent_returns_404() {
+    let app = setup_test_app().await;
+    let token = create_token(1, "admin@pieas.edu.pk").unwrap();
+
+    // 1. PUT nonexistent announcement id 999999 -> 404
+    let update_payload = serde_json::json!({
+        "message": "Nonexistent announcement",
+        "priority": "normal",
+        "is_active": false
+    });
+
+    let req_put = Request::builder()
+        .method(Method::PUT)
+        .uri("/api/admin/announcements/999999")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&update_payload).unwrap()))
+        .unwrap();
+
+    let res_put = app.clone().oneshot(req_put).await.unwrap();
+    assert_eq!(res_put.status(), StatusCode::NOT_FOUND);
+
+    // 2. DELETE nonexistent announcement id 999999 -> 404
+    let req_del = Request::builder()
+        .method(Method::DELETE)
+        .uri("/api/admin/announcements/999999")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+
+    let res_del = app.oneshot(req_del).await.unwrap();
+    assert_eq!(res_del.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_admin_crud_workflow() {
+    let app = setup_test_app().await;
+    let token = create_token(1, "admin@pieas.edu.pk").unwrap();
+
+    // 1. Create FAQ via POST /api/admin/faqs
+    let create_payload = serde_json::json!({
+        "question": "What is PIEAS Materials Society?",
+        "answer": "PMS is the official student chapter of Materials Engineering at PIEAS.",
+        "display_order": 1
+    });
+
+    let req_post = Request::builder()
+        .method(Method::POST)
+        .uri("/api/admin/faqs")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&create_payload).unwrap()))
+        .unwrap();
+
+    let res_post = app.clone().oneshot(req_post).await.unwrap();
+    assert_eq!(res_post.status(), StatusCode::OK);
+
+    // 2. Read back via GET /api/faqs
+    let req_get = Request::builder()
+        .method(Method::GET)
+        .uri("/api/faqs")
+        .body(Body::empty())
+        .unwrap();
+
+    let res_get = app.clone().oneshot(req_get).await.unwrap();
+    assert_eq!(res_get.status(), StatusCode::OK);
+    let body = res_get.into_body().collect().await.unwrap().to_bytes();
+    let faqs: Vec<serde_json::Value> = serde_json::from_slice(&body).unwrap();
+    let created = faqs
+        .iter()
+        .find(|f| f["question"] == "What is PIEAS Materials Society?")
+        .expect("Newly created FAQ should exist in list");
+    let faq_id = created["id"].as_i64().unwrap();
+
+    // 3. Update via PUT /api/admin/faqs/{id}
+    let update_payload = serde_json::json!({
+        "question": "What is PMS?",
+        "answer": "Updated Answer for PIEAS Materials Society.",
+        "display_order": 2
+    });
+
+    let req_put = Request::builder()
+        .method(Method::PUT)
+        .uri(format!("/api/admin/faqs/{}", faq_id))
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&update_payload).unwrap()))
+        .unwrap();
+
+    let res_put = app.clone().oneshot(req_put).await.unwrap();
+    assert_eq!(res_put.status(), StatusCode::OK);
+
+    // 4. Delete via DELETE /api/admin/faqs/{id}
+    let req_del = Request::builder()
+        .method(Method::DELETE)
+        .uri(format!("/api/admin/faqs/{}", faq_id))
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+
+    let res_del = app.clone().oneshot(req_del).await.unwrap();
+    assert_eq!(res_del.status(), StatusCode::OK);
+
+    // 5. Deleting again returns 404
+    let req_del_again = Request::builder()
+        .method(Method::DELETE)
+        .uri(format!("/api/admin/faqs/{}", faq_id))
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+
+    let res_del_again = app.oneshot(req_del_again).await.unwrap();
+    assert_eq!(res_del_again.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_rate_limiting_ip_spoofing_prevention() {
+    use pms_platform::rate_limit::{client_ip_from_headers, client_ip_from_request_parts};
+
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert("X-Forwarded-For", "203.0.113.195".parse().unwrap());
+    headers.insert("X-Real-IP", "198.51.100.17".parse().unwrap());
+
+    // Without TRUST_PROXY, header values are ignored to prevent spoofing
+    std::env::remove_var("TRUST_PROXY");
+    let ip = client_ip_from_headers(&headers);
+    assert_eq!(
+        ip,
+        std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
+        "X-Forwarded-For should be ignored when TRUST_PROXY is not enabled"
+    );
+
+    // With TRUST_PROXY=true, rightmost hop is extracted
+    std::env::set_var("TRUST_PROXY", "true");
+    let ip_trusted = client_ip_from_headers(&headers);
+    assert_eq!(
+        ip_trusted,
+        std::net::IpAddr::V4(std::net::Ipv4Addr::new(203, 0, 113, 195)),
+        "X-Forwarded-For should be respected when TRUST_PROXY=true"
+    );
+    std::env::remove_var("TRUST_PROXY");
+
+    // ConnectInfo extraction test
+    let mut parts = Request::builder()
+        .uri("/")
+        .body(())
+        .unwrap()
+        .into_parts()
+        .0;
+    let socket: std::net::SocketAddr = "192.0.2.1:8080".parse().unwrap();
+    parts.extensions.insert(axum::extract::ConnectInfo(socket));
+
+    let resolved_ip = client_ip_from_request_parts(&parts);
+    assert_eq!(
+        resolved_ip,
+        std::net::IpAddr::V4(std::net::Ipv4Addr::new(192, 0, 2, 1)),
+        "Should resolve IP from ConnectInfo when available"
+    );
+}

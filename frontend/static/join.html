@@ -1,48 +1,164 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Join PMS – PIEAS Materials Society</title>
-  <meta name="description" content="Apply to join PIEAS Materials Society and become part of the DMME student community.">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Join PMS &amp; Contact Society – PIEAS Materials Society</title>
+  <meta name="description" content="Apply to join PIEAS Materials Society (PMS) or send inquiries to the DMME executive council.">
   <link rel="stylesheet" href="/assets/style.css">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 </head>
 <body>
 <div id="announcement-banner" class="banner" style="display:none"></div>
-<nav class="navbar"><div class="container nav-inner"><a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a><button class="hamburger" aria-label="Toggle navigation" aria-expanded="false"><span></span><span></span><span></span></button><ul class="nav-links" role="list"><li><a href="/">Home</a></li><li><a href="/about">About</a></li><li><a href="/team">Team</a></li><li><a href="/events">Events</a></li><li><a href="/blog">Blog</a></li><li><a href="/resources">Resources</a></li><li><a href="/opportunities">Opportunities</a></li><li><a href="/alumni">Alumni</a></li><li><a href="/projects">Projects</a></li><li><a href="/gallery">Gallery</a></li><li><a href="/sponsors">Sponsors</a></li><li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li></ul></div></nav>
-<section class="hero" style="padding:3.5rem 0 2.5rem"><div class="container hero-content"><span class="badge">Membership</span><h1 class="fade-up">Join PMS</h1><p class="hero-desc fade-up fade-up-delay-1">Become a member of PIEAS Materials Society. Membership is completely free and open to all PIEAS students.</p></div></section>
-<section class="section"><div class="container" style="max-width:680px">
-  <div class="card">
-    <h2 style="margin-bottom:1.5rem">Membership Application</h2>
-    <form id="join-form" novalidate>
-      <div class="form-group"><label class="form-label" for="join-name">Full Name *</label><input id="join-name" class="form-control" required placeholder="Your full name"></div>
-      <div class="form-group"><label class="form-label" for="join-roll">Roll Number *</label><input id="join-roll" class="form-control" required placeholder="e.g. 2022-DMME-01"></div>
-      <div class="form-group"><label class="form-label" for="join-batch">Batch *</label><input id="join-batch" class="form-control" required placeholder="e.g. 2022"></div>
-      <div class="form-group"><label class="form-label" for="join-dept">Department *</label><input id="join-dept" class="form-control" required placeholder="e.g. DMME, DME, DPAM"></div>
-      <div class="form-group"><label class="form-label" for="join-email">Email *</label><input id="join-email" type="email" class="form-control" required placeholder="student@pieas.edu.pk"></div>
-      <div class="form-group"><label class="form-label" for="join-phone">Phone</label><input id="join-phone" class="form-control" placeholder="Optional"></div>
-      <div class="form-group"><label class="form-label" for="join-interests">Areas of Interest</label><textarea id="join-interests" class="form-control" placeholder="Materials characterization, welding, computational, etc."></textarea></div>
-      <div class="form-group"><label class="form-label" for="join-why">Why do you want to join PMS?</label><textarea id="join-why" class="form-control" placeholder="Tell us your motivation..."></textarea></div>
-      <div id="join-msg"></div>
-      <button type="submit" class="btn btn-primary" style="width:100%;margin-top:.5rem" id="join-submit">Submit Application</button>
-    </form>
+
+<!-- Navbar -->
+<nav class="navbar" role="navigation" aria-label="Main navigation">
+  <div class="container nav-inner">
+    <a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a>
+    <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <ul class="nav-links" id="nav-links" role="list">
+      <li><a href="/">Home</a></li>
+      <li><a href="/about">About</a></li>
+      <li><a href="/team">Team</a></li>
+      <li><a href="/events">Events</a></li>
+      <li><a href="/blog">Blog</a></li>
+      <li><a href="/resources">Resources</a></li>
+      <li><a href="/opportunities">Opportunities</a></li>
+      <li><a href="/alumni">Alumni</a></li>
+      <li><a href="/projects">Projects</a></li>
+      <li><a href="/gallery">Gallery</a></li>
+      <li><a href="/sponsors">Sponsors</a></li>
+      <li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li>
+    </ul>
   </div>
-  <div class="card" style="margin-top:2rem">
-    <h2 style="margin-bottom:1.5rem">Contact PMS</h2>
-    <p style="color:var(--text-muted);font-size:.875rem;margin-bottom:1.5rem">
-      Have a question for the PMS executive council, workshop suggestions, or collaboration inquiries? Send us a message.
-    </p>
-    <form id="contact-form" novalidate>
-      <div class="form-group"><label class="form-label" for="contact-name">Name *</label><input id="contact-name" class="form-control" required placeholder="Your full name"></div>
-      <div class="form-group"><label class="form-label" for="contact-email">Email *</label><input id="contact-email" type="email" class="form-control" required placeholder="your@email.com"></div>
-      <div class="form-group"><label class="form-label" for="contact-subject">Subject</label><input id="contact-subject" class="form-control" placeholder="Inquiry subject"></div>
-      <div class="form-group"><label class="form-label" for="contact-message">Message *</label><textarea id="contact-message" class="form-control" required placeholder="Your message..."></textarea></div>
-      <div id="contact-msg"></div>
-      <button type="submit" class="btn btn-primary" style="width:100%;margin-top:.5rem" id="contact-submit">Send Message</button>
-    </form>
+</nav>
+
+<section class="hero" style="padding:3.5rem 0 2.5rem">
+  <div class="container hero-content">
+    <span class="badge">Student Membership</span>
+    <h1 class="fade-up">Join PIEAS Materials Society</h1>
+    <p class="hero-desc fade-up fade-up-delay-1">Membership is free and open to all undergraduate and graduate students at PIEAS passionate about materials science.</p>
   </div>
-</div></section>
-<footer><div class="container footer-bottom"><p>© 2026 PIEAS Materials Society</p></div></footer>
+</section>
+
+<section class="section">
+  <div class="container" style="max-width:720px">
+    <div class="card fade-up">
+      <h2 style="font-size:1.4rem;margin-bottom:.5rem">Membership Application Form</h2>
+      <p style="color:var(--text-muted);font-size:.875rem;margin-bottom:1.5rem">Gain access to exclusive technical workshops, industrial tour privileges, and executive council elections.</p>
+      <form id="join-form" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="join-name">Full Name *</label>
+          <input id="join-name" class="form-control" required placeholder="e.g. Muhammad Ahmed">
+        </div>
+        <div class="grid grid-2" style="gap:1rem">
+          <div class="form-group">
+            <label class="form-label" for="join-roll">Roll Number *</label>
+            <input id="join-roll" class="form-control" required placeholder="e.g. 22-DMME-15">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="join-batch">Batch *</label>
+            <input id="join-batch" class="form-control" required placeholder="e.g. 2022-2026">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="join-dept">Department *</label>
+          <input id="join-dept" class="form-control" required placeholder="e.g. Metallurgy &amp; Materials Engineering (DMME)">
+        </div>
+        <div class="grid grid-2" style="gap:1rem">
+          <div class="form-group">
+            <label class="form-label" for="join-email">Email Address *</label>
+            <input id="join-email" type="email" class="form-control" required placeholder="student@pieas.edu.pk">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="join-phone">Contact Phone</label>
+            <input id="join-phone" class="form-control" placeholder="+92 300 1234567">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="join-interests">Areas of Metallurgical / Research Interest</label>
+          <textarea id="join-interests" class="form-control" rows="2" placeholder="e.g. Mechanical testing, phase transformations, corrosion engineering, computational thermodynamics"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="join-why">Why would you like to join PMS?</label>
+          <textarea id="join-why" class="form-control" rows="2" placeholder="Tell us your motivation and how you would like to contribute..."></textarea>
+        </div>
+        <div id="join-msg"></div>
+        <button type="submit" class="btn btn-primary" style="width:100%;margin-top:.75rem" id="join-submit">Submit Membership Application</button>
+      </form>
+    </div>
+
+    <!-- Direct Contact Form -->
+    <div class="card fade-up" style="margin-top:2.5rem">
+      <h2 style="font-size:1.4rem;margin-bottom:.5rem">Send Message to Executive Council</h2>
+      <p style="color:var(--text-muted);font-size:.875rem;margin-bottom:1.5rem">
+        Have workshop suggestions, industrial collaboration proposals, or general inquiries? Contact our council directly.
+      </p>
+      <form id="contact-form" novalidate>
+        <div class="grid grid-2" style="gap:1rem">
+          <div class="form-group">
+            <label class="form-label" for="contact-name">Your Name *</label>
+            <input id="contact-name" class="form-control" required placeholder="Your full name">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="contact-email">Your Email *</label>
+            <input id="contact-email" type="email" class="form-control" required placeholder="your.name@domain.com">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="contact-subject">Subject</label>
+          <input id="contact-subject" class="form-control" placeholder="e.g. Workshop Suggestion / Industrial Visit Proposal">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="contact-message">Message *</label>
+          <textarea id="contact-message" class="form-control" rows="4" required placeholder="Write your message here..."></textarea>
+        </div>
+        <div id="contact-msg"></div>
+        <button type="submit" class="btn btn-outline" style="width:100%;margin-top:.75rem" id="contact-submit">Dispatch Message →</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- Unified Footer -->
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <div class="footer-title">⚛️ PMS PIEAS</div>
+        <p style="font-size:.85rem">Official academic society of the Department of Metallurgy &amp; Materials Engineering (DMME), PIEAS Islamabad.</p>
+      </div>
+      <div>
+        <div class="footer-title">Quick Links</div>
+        <ul class="footer-links">
+          <li><a href="/events">Events</a></li>
+          <li><a href="/blog">Technical Blog</a></li>
+          <li><a href="/resources">Toolkit &amp; ASTM</a></li>
+          <li><a href="/opportunities">Opportunities</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-title">Society</div>
+        <ul class="footer-links">
+          <li><a href="/about">About PMS</a></li>
+          <li><a href="/team">Our Council</a></li>
+          <li><a href="/alumni">Alumni Network</a></li>
+          <li><a href="/sponsors">Sponsors</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-title">Contact &amp; Location</div>
+        <p style="font-size:.85rem">pms@pieas.edu.pk<br>DMME Block, PIEAS, Nilore, Islamabad</p>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>© 2026 PIEAS Materials Society (PMS). Department of Metallurgy &amp; Materials Engineering.</p>
+    </div>
+  </div>
+</footer>
+
 <script src="/assets/app.js"></script>
 <script>
 document.getElementById('join-form').addEventListener('submit', async ev => {
@@ -52,16 +168,16 @@ document.getElementById('join-form').addEventListener('submit', async ev => {
   PMS.setLoading(btn, true);
   try {
     await PMS.apiPost('/api/membership', {
-      full_name:   document.getElementById('join-name').value,
-      roll_number: document.getElementById('join-roll').value,
-      batch:       document.getElementById('join-batch').value,
-      department:  document.getElementById('join-dept').value,
-      email:       document.getElementById('join-email').value,
-      phone:       document.getElementById('join-phone').value || null,
-      interests:   document.getElementById('join-interests').value || null,
-      why_join:    document.getElementById('join-why').value || null,
+      full_name:   document.getElementById('join-name').value.trim(),
+      roll_number: document.getElementById('join-roll').value.trim(),
+      batch:       document.getElementById('join-batch').value.trim(),
+      department:  document.getElementById('join-dept').value.trim(),
+      email:       document.getElementById('join-email').value.trim(),
+      phone:       document.getElementById('join-phone').value.trim() || null,
+      interests:   document.getElementById('join-interests').value.trim() || null,
+      why_join:    document.getElementById('join-why').value.trim() || null,
     });
-    PMS.showAlert(msg, '🎉 Application submitted! We will review it shortly.', 'success');
+    PMS.showAlert(msg, '🎉 Application submitted successfully! The executive council will review your submission.', 'success');
     document.getElementById('join-form').reset();
   } catch(e) {
     PMS.showAlert(msg, e.message || 'Submission failed. Please try again.');
@@ -77,12 +193,12 @@ document.getElementById('contact-form').addEventListener('submit', async ev => {
   PMS.setLoading(btn, true);
   try {
     await PMS.apiPost('/api/contact', {
-      name:    document.getElementById('contact-name').value,
-      email:   document.getElementById('contact-email').value,
-      subject: document.getElementById('contact-subject').value || null,
-      message: document.getElementById('contact-message').value,
+      name:    document.getElementById('contact-name').value.trim(),
+      email:   document.getElementById('contact-email').value.trim(),
+      subject: document.getElementById('contact-subject').value.trim() || null,
+      message: document.getElementById('contact-message').value.trim(),
     });
-    PMS.showAlert(msg, '✉️ Message sent! We will get back to you soon.', 'success');
+    PMS.showAlert(msg, '✉️ Your message has been sent to PMS administration.', 'success');
     document.getElementById('contact-form').reset();
   } catch(e) {
     PMS.showAlert(msg, e.message || 'Message could not be sent. Please try again.');
@@ -91,4 +207,5 @@ document.getElementById('contact-form').addEventListener('submit', async ev => {
   }
 });
 </script>
-</body></html>
+</body>
+</html>

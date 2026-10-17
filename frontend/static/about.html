@@ -1,27 +1,41 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>About – PIEAS Materials Society</title>
-  <meta name="description" content="Learn about PMS PIEAS, our mission, vision, and the Department of Metallurgy & Materials Engineering at PIEAS.">
+  <meta name="description" content="Learn about PMS PIEAS, our mission, vision, history, and FAQs about metallurgy and materials engineering at PIEAS.">
   <link rel="stylesheet" href="/assets/style.css">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 </head>
 <body>
 <div id="announcement-banner" class="banner" style="display:none"></div>
+
+<!-- Navbar -->
 <nav class="navbar" role="navigation" aria-label="Main navigation">
   <div class="container nav-inner">
     <a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a>
-    <button class="hamburger" aria-label="Toggle navigation" aria-expanded="false"><span></span><span></span><span></span></button>
-    <ul class="nav-links" role="list">
-      <li><a href="/">Home</a></li><li><a href="/about">About</a></li><li><a href="/team">Team</a></li>
-      <li><a href="/events">Events</a></li><li><a href="/blog">Blog</a></li><li><a href="/resources">Resources</a></li>
-      <li><a href="/opportunities">Opportunities</a></li><li><a href="/alumni">Alumni</a></li>
-      <li><a href="/projects">Projects</a></li><li><a href="/gallery">Gallery</a></li><li><a href="/sponsors">Sponsors</a></li>
+    <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <ul class="nav-links" id="nav-links" role="list">
+      <li><a href="/">Home</a></li>
+      <li><a href="/about">About</a></li>
+      <li><a href="/team">Team</a></li>
+      <li><a href="/events">Events</a></li>
+      <li><a href="/blog">Blog</a></li>
+      <li><a href="/resources">Resources</a></li>
+      <li><a href="/opportunities">Opportunities</a></li>
+      <li><a href="/alumni">Alumni</a></li>
+      <li><a href="/projects">Projects</a></li>
+      <li><a href="/gallery">Gallery</a></li>
+      <li><a href="/sponsors">Sponsors</a></li>
       <li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li>
     </ul>
   </div>
 </nav>
+
+<!-- Hero -->
 <section class="hero" style="padding:3.5rem 0 2.5rem">
   <div class="container hero-content">
     <span class="badge">About PMS</span>
@@ -29,29 +43,109 @@
     <p class="hero-desc fade-up fade-up-delay-1">Bridging academic metallurgical theory with practical industry applications since our founding at PIEAS.</p>
   </div>
 </section>
+
+<!-- Dynamic About Sections -->
 <section class="section">
   <div class="container">
-    <div id="sections-content" class="grid grid-3"><div class="spinner"></div></div>
+    <div id="sections-content" class="grid grid-3">
+      <div class="spinner"></div>
+    </div>
   </div>
 </section>
-<footer><div class="container footer-bottom"><p>© 2026 PIEAS Materials Society</p></div></footer>
+
+<!-- Frequently Asked Questions (FAQs) -->
+<section class="section" style="background:rgba(255,255,255,.01);border-top:1px solid var(--border)">
+  <div class="container" style="max-width:800px">
+    <div class="section-header" style="text-align:center;margin-bottom:2.5rem">
+      <span class="badge">Common Inquiries</span>
+      <h2>Frequently Asked Questions</h2>
+      <p>Questions regarding PMS membership, events, ASTM testing standards, and DMME student initiatives.</p>
+    </div>
+    <div id="faqs-container">
+      <div class="spinner"></div>
+    </div>
+  </div>
+</section>
+
+<!-- Unified Footer -->
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <div class="footer-title">⚛️ PMS PIEAS</div>
+        <p style="font-size:.85rem">Official academic society of the Department of Metallurgy &amp; Materials Engineering (DMME), PIEAS Islamabad.</p>
+      </div>
+      <div>
+        <div class="footer-title">Quick Links</div>
+        <ul class="footer-links">
+          <li><a href="/events">Events</a></li>
+          <li><a href="/blog">Technical Blog</a></li>
+          <li><a href="/resources">Toolkit &amp; ASTM</a></li>
+          <li><a href="/opportunities">Opportunities</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-title">Society</div>
+        <ul class="footer-links">
+          <li><a href="/about">About PMS</a></li>
+          <li><a href="/team">Our Council</a></li>
+          <li><a href="/alumni">Alumni Network</a></li>
+          <li><a href="/sponsors">Sponsors</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-title">Contact &amp; Location</div>
+        <p style="font-size:.85rem">pms@pieas.edu.pk<br>DMME Block, PIEAS, Nilore, Islamabad</p>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>© 2026 PIEAS Materials Society (PMS). Department of Metallurgy &amp; Materials Engineering.</p>
+    </div>
+  </div>
+</footer>
+
 <script src="/assets/app.js"></script>
 <script>
 (async () => {
+  // 1. Load Dynamic About Sections
   const container = document.getElementById('sections-content');
   try {
     const secs = await PMS.apiFetch('/api/sections');
     const aboutSecs = secs.filter(s => s.section_key.startsWith('about'));
     container.innerHTML = aboutSecs.length
       ? aboutSecs.map(s => `
-        <div class="card fade-up">
+        <article class="card fade-up">
           <span class="badge" style="margin-bottom:.75rem">${PMS.escHtml(s.badge || s.section_key)}</span>
           <h2 style="font-size:1.3rem;margin-bottom:.5rem">${PMS.escHtml(s.title)}</h2>
           ${s.subtitle ? `<p style="color:var(--primary-light);font-weight:600;margin-bottom:.75rem">${PMS.escHtml(s.subtitle)}</p>` : ''}
-          <p style="color:var(--text-muted)">${PMS.escHtml(s.content)}</p>
-        </div>`).join('')
-      : '<p style="color:var(--text-muted)">About information not available.</p>';
-  } catch(e) { container.innerHTML = '<p style="color:var(--danger)">Could not load content.</p>'; }
+          <p style="color:var(--text-muted);line-height:1.7">${PMS.escHtml(s.content)}</p>
+        </article>`).join('')
+      : '<p style="color:var(--text-muted);grid-column:1/-1">About information not available.</p>';
+  } catch (e) {
+    container.innerHTML = '<p style="color:var(--danger);grid-column:1/-1">Could not load about sections.</p>';
+  }
+
+  // 2. Load FAQs Section
+  const faqsEl = document.getElementById('faqs-container');
+  try {
+    const faqs = await PMS.apiFetch('/api/faqs');
+    faqsEl.innerHTML = faqs.length
+      ? faqs.map(f => `
+        <details class="card" style="margin-bottom:1rem;cursor:pointer">
+          <summary style="font-weight:600;font-size:1.05rem;color:var(--text);display:flex;justify-content:space-between;align-items:center">
+            <span>❓ ${PMS.escHtml(f.question)}</span>
+            <span class="badge" style="font-size:.72rem">${PMS.escHtml(f.category)}</span>
+          </summary>
+          <div style="padding-top:1rem;margin-top:.75rem;border-top:1px solid var(--border);color:var(--text-muted);line-height:1.7">
+            ${PMS.escHtml(f.answer)}
+          </div>
+        </details>
+      `).join('')
+      : '<p style="color:var(--text-muted);text-align:center">No frequently asked questions published yet.</p>';
+  } catch (e) {
+    faqsEl.innerHTML = '<p style="color:var(--danger);text-align:center">Failed to load FAQs.</p>';
+  }
 })();
 </script>
-</body></html>
+</body>
+</html>

@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use axum::{
     extract::FromRequestParts,
     http::{header, request::Parts},
@@ -8,40 +10,52 @@ use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation}
 use crate::error::AppError;
 use crate::models::AdminClaims;
 
-/// Cookie name used to store the admin JWT token in the browser.
+/// Default cookie name used to store the admin JWT token in the browser.
 pub const JWT_COOKIE_NAME: &str = "pms_admin_token";
 
-/// Retrieve the JWT secret from the environment.
+static RESOLVED_JWT_SECRET: OnceLock<String> = OnceLock::new();
+static RESOLVED_COOKIE_NAME: OnceLock<String> = OnceLock::new();
+
+/// Retrieve the cached JWT secret from the environment (read once at startup).
 ///
 /// Behaviour:
 /// - If `RUST_ENV=production` and `JWT_SECRET` is unset → panic immediately (fail-fast).
-/// - In any other environment, fall back to an insecure placeholder and emit a prominent warning.
-pub fn jwt_secret() -> String {
-    let is_production =
-        std::env::var("RUST_ENV").unwrap_or_default().to_lowercase() == "production";
+/// - In any other environment, fall back to an insecure placeholder and emit a single warning.
+pub fn jwt_secret() -> &'static str {
+    RESOLVED_JWT_SECRET.get_or_init(|| {
+        let is_production =
+            std::env::var("RUST_ENV").unwrap_or_default().to_lowercase() == "production";
 
-    match std::env::var("JWT_SECRET") {
-        Ok(secret) if !secret.is_empty() => secret,
-        _ => {
-            if is_production {
-                eprintln!(
-                    "\n\
-                    ╔══════════════════════════════════════════════════════════╗\n\
-                    ║  FATAL: JWT_SECRET is not set in production mode.        ║\n\
-                    ║  Set JWT_SECRET to a cryptographically random value:     ║\n\
-                    ║      openssl rand -hex 32                                ║\n\
-                    ╚══════════════════════════════════════════════════════════╝\n"
-                );
-                std::process::exit(1);
-            } else {
-                tracing::warn!(
-                    "⚠️  JWT_SECRET is not set. Using insecure placeholder for development. \
-                     DO NOT use in production!"
-                );
-                "pms-dev-insecure-placeholder-do-not-use-in-production".to_string()
+        match std::env::var("JWT_SECRET") {
+            Ok(secret) if !secret.is_empty() => secret,
+            _ => {
+                if is_production {
+                    eprintln!(
+                        "\n\
+                        ╔══════════════════════════════════════════════════════════╗\n\
+                        ║  FATAL: JWT_SECRET is not set in production mode.        ║\n\
+                        ║  Set JWT_SECRET to a cryptographically random value:     ║\n\
+                        ║      openssl rand -hex 32                                ║\n\
+                        ╚══════════════════════════════════════════════════════════╝\n"
+                    );
+                    std::process::exit(1);
+                } else {
+                    tracing::warn!(
+                        "⚠️  JWT_SECRET is not set. Using insecure placeholder for development. \
+                         DO NOT use in production!"
+                    );
+                    "pms-dev-insecure-placeholder-do-not-use-in-production".to_string()
+                }
             }
         }
-    }
+    })
+}
+
+/// Retrieve the cached cookie name from the environment (read once at startup).
+pub fn jwt_cookie_name() -> &'static str {
+    RESOLVED_COOKIE_NAME.get_or_init(|| {
+        std::env::var("JWT_COOKIE_NAME").unwrap_or_else(|_| JWT_COOKIE_NAME.to_string())
+    })
 }
 
 /// Create a short-lived (24 h) JWT access token for an authenticated admin user.
@@ -100,11 +114,9 @@ where
             }
         }
 
-        // 2. Fall back to the httpOnly cookie for browser clients.
-        let cookie_name =
-            std::env::var("JWT_COOKIE_NAME").unwrap_or_else(|_| JWT_COOKIE_NAME.to_string());
+        // 2. Fall back to the cached httpOnly cookie name for browser clients.
         let jar = CookieJar::from_headers(&parts.headers);
-        if let Some(cookie) = jar.get(&cookie_name) {
+        if let Some(cookie) = jar.get(jwt_cookie_name()) {
             return verify_token(cookie.value());
         }
 

@@ -1,19 +1,25 @@
 //! In-memory rate-limiter backed by `governor`.
 //!
 //! Provides per-IP rate limiting for sensitive endpoints (login, registration,
-//! contact, newsletter).  Configuration is via environment variables:
+//! contact, newsletter). Configuration is via environment variables:
 //!
-//! - `RATE_LIMIT_LOGIN_RPM`   — requests per minute for `/api/auth/login` (default 10)
-//! - `RATE_LIMIT_SUBMIT_RPM`  — requests per minute for submit endpoints (default 30)
+//! - `RATE_LIMIT_LOGIN_RPM`  — requests per minute for `/api/auth/login` (default 10)
+//! - `RATE_LIMIT_SUBMIT_RPM` — requests per minute for submit endpoints (default 30)
+//! - `TRUST_PROXY` — when set to "true" or "1", trust rightmost `X-Forwarded-For`
+//!   or `X-Real-IP` set by a reverse proxy. Defaults to false.
 
 use std::{
-    net::IpAddr,
+    net::{IpAddr, SocketAddr},
     num::NonZeroU32,
     str::FromStr,
     sync::{Arc, OnceLock},
     time::Duration,
 };
 
+use axum::{
+    extract::{connect_info::ConnectInfo, FromRequestParts},
+    http::request::Parts,
+};
 use governor::{
     clock::DefaultClock, middleware::NoOpMiddleware, state::keyed::DashMapStateStore, Quota,
     RateLimiter,
@@ -58,10 +64,27 @@ impl RateLimitState {
             .unwrap()
             .allow_burst(submit_rpm);
 
-        Self {
+        let state = Self {
             login: Arc::new(RateLimiter::keyed(login_quota)),
             submit: Arc::new(RateLimiter::keyed(submit_quota)),
-        }
+        };
+
+        // Periodic background task to prune stale entries and shrink DashMap,
+        // preventing unbounded memory growth under unique IP load.
+        let login_limiter = Arc::clone(&state.login);
+        let submit_limiter = Arc::clone(&state.submit);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(300));
+            loop {
+                interval.tick().await;
+                login_limiter.retain_recent();
+                login_limiter.shrink_to_fit();
+                submit_limiter.retain_recent();
+                submit_limiter.shrink_to_fit();
+            }
+        });
+
+        state
     }
 
     /// Access the global shared instance.
@@ -82,6 +105,14 @@ impl RateLimitState {
             .check_key(&ip)
             .map_err(|_| AppError::TooManyRequests)
     }
+
+    /// Manually prune recent entries and shrink memory allocations (useful for testing or ad-hoc cleanup).
+    pub fn cleanup(&self) {
+        self.login.retain_recent();
+        self.login.shrink_to_fit();
+        self.submit.retain_recent();
+        self.submit.shrink_to_fit();
+    }
 }
 
 impl Default for RateLimitState {
@@ -90,26 +121,68 @@ impl Default for RateLimitState {
     }
 }
 
-/// Extract the real client IP from HTTP headers, checking `X-Forwarded-For` and `X-Real-IP`.
+/// Check if TRUST_PROXY is enabled.
+pub fn is_trust_proxy() -> bool {
+    std::env::var("TRUST_PROXY")
+        .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+        .unwrap_or(false)
+}
+
+/// Extract client IP from HTTP headers ONLY if `TRUST_PROXY=true` is set in the environment.
+///
+/// When `TRUST_PROXY` is enabled, reads the rightmost hop in `X-Forwarded-For` or `X-Real-IP`.
+/// When `TRUST_PROXY` is NOT enabled, header values are strictly ignored to prevent IP spoofing.
 pub fn client_ip_from_headers(headers: &axum::http::HeaderMap) -> IpAddr {
-    if let Some(xff) = headers.get("X-Forwarded-For").and_then(|v| v.to_str().ok()) {
-        if let Some(first) = xff.split(',').next() {
-            if let Ok(ip) = IpAddr::from_str(first.trim()) {
+    if is_trust_proxy() {
+        if let Some(xff) = headers.get("X-Forwarded-For").and_then(|v| v.to_str().ok()) {
+            if let Some(rightmost) = xff.split(',').next_back() {
+                if let Ok(ip) = IpAddr::from_str(rightmost.trim()) {
+                    return ip;
+                }
+            }
+        }
+        if let Some(xri) = headers.get("X-Real-IP").and_then(|v| v.to_str().ok()) {
+            if let Ok(ip) = IpAddr::from_str(xri.trim()) {
                 return ip;
             }
         }
     }
-    if let Some(xri) = headers.get("X-Real-IP").and_then(|v| v.to_str().ok()) {
-        if let Ok(ip) = IpAddr::from_str(xri.trim()) {
-            return ip;
-        }
-    }
-    // Fall back to loopback address for local testing / direct connections
+    // Fall back to loopback address when headers are untrusted or absent
     "127.0.0.1".parse().unwrap()
 }
 
-/// Extract the real client IP from a request Parts.
-#[allow(dead_code)]
-pub fn client_ip(parts: &axum::http::request::Parts) -> IpAddr {
-    client_ip_from_headers(&parts.headers)
+/// Extract the client IP from request parts.
+///
+/// Priority:
+/// 1. If `TRUST_PROXY=true`: parse rightmost IP from `X-Forwarded-For` or `X-Real-IP`.
+/// 2. Extract TCP socket address from `ConnectInfo<SocketAddr>` extension.
+/// 3. Fallback to `127.0.0.1` (e.g. for in-memory oneshot tests without ConnectInfo).
+pub fn client_ip_from_request_parts(parts: &Parts) -> IpAddr {
+    if is_trust_proxy() {
+        let header_ip = client_ip_from_headers(&parts.headers);
+        if header_ip != IpAddr::from([127, 0, 0, 1]) {
+            return header_ip;
+        }
+    }
+
+    if let Some(ConnectInfo(addr)) = parts.extensions.get::<ConnectInfo<SocketAddr>>() {
+        return addr.ip();
+    }
+
+    "127.0.0.1".parse().unwrap()
+}
+
+/// Type-safe Axum extractor for resolving the client's verified IP address.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClientIp(pub IpAddr);
+
+impl<S> FromRequestParts<S> for ClientIp
+where
+    S: Send + Sync,
+{
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        Ok(ClientIp(client_ip_from_request_parts(parts)))
+    }
 }

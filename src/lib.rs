@@ -7,9 +7,9 @@ pub mod routes;
 
 use axum::{
     extract::Request,
-    http::{HeaderValue, Method},
+    http::{HeaderValue, Method, StatusCode},
     middleware::{self, Next},
-    response::Response,
+    response::{IntoResponse, Response},
     Router,
 };
 use sqlx::SqlitePool;
@@ -22,11 +22,82 @@ use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
 #[derive(OpenApi)]
-#[openapi(info(
-    title = "PIEAS Materials Society (PMS) API",
-    version = "1.0.0",
-    description = "Official REST API for PIEAS Materials Society (DMME, PIEAS Islamabad)."
-))]
+#[openapi(
+    paths(
+        routes::public::get_announcements,
+        routes::public::get_stats,
+        routes::public::get_events,
+        routes::public::get_event,
+        routes::public::register_for_event,
+        routes::public::verify_certificate,
+        routes::public::get_team,
+        routes::public::get_gallery,
+        routes::public::get_posts,
+        routes::public::get_post_by_slug,
+        routes::public::get_resources,
+        routes::public::get_opportunities,
+        routes::public::get_alumni,
+        routes::public::get_projects,
+        routes::public::get_sponsors,
+        routes::public::get_faqs,
+        routes::public::submit_membership,
+        routes::public::submit_contact,
+        routes::public::subscribe_newsletter,
+        routes::public::get_sections,
+        routes::admin::login,
+        routes::admin::logout,
+        routes::admin::verify_session,
+    ),
+    components(
+        schemas(
+            models::Announcement,
+            models::CreateAnnouncement,
+            models::SiteStats,
+            models::UpdateSiteStats,
+            models::Event,
+            models::CreateEvent,
+            models::EventRegistration,
+            models::CreateEventRegistration,
+            models::CertificateVerification,
+            models::TeamMember,
+            models::CreateTeamMember,
+            models::GalleryImage,
+            models::CreateGalleryImage,
+            models::Post,
+            models::CreatePost,
+            models::Resource,
+            models::CreateResource,
+            models::Opportunity,
+            models::CreateOpportunity,
+            models::Alumnus,
+            models::CreateAlumnus,
+            models::Project,
+            models::CreateProject,
+            models::Sponsor,
+            models::CreateSponsor,
+            models::Faq,
+            models::CreateFaq,
+            models::MembershipApplication,
+            models::CreateMembershipApplication,
+            models::ContactMessage,
+            models::CreateContactMessage,
+            models::NewsletterSubscriber,
+            models::CreateNewsletterSubscriber,
+            models::SiteSection,
+            models::CreateSiteSection,
+            models::UpdateSiteSection,
+            models::LoginRequest,
+            models::LoginResponse,
+            models::DeleteResponse,
+            models::UploadResponse,
+        )
+    ),
+    info(
+        title = "PIEAS Materials Society (PMS) API",
+        version = "1.0.0",
+        description = "Official REST API for PIEAS Materials Society (DMME, PIEAS Islamabad)."
+    )
+)]
 pub struct ApiDoc;
 
 /// Build the CORS layer from ALLOWED_ORIGINS env var.
@@ -73,8 +144,6 @@ pub fn build_cors() -> CorsLayer {
                 axum::http::header::CONTENT_TYPE,
                 axum::http::header::ACCEPT,
                 axum::http::header::COOKIE,
-                axum::http::HeaderName::from_static("x-forwarded-for"),
-                axum::http::HeaderName::from_static("x-real-ip"),
                 axum::http::HeaderName::from_static("x-correlation-id"),
             ])
             .allow_credentials(true);
@@ -108,14 +177,12 @@ pub fn build_cors() -> CorsLayer {
             axum::http::header::CONTENT_TYPE,
             axum::http::header::ACCEPT,
             axum::http::header::COOKIE,
-            axum::http::HeaderName::from_static("x-forwarded-for"),
-            axum::http::HeaderName::from_static("x-real-ip"),
             axum::http::HeaderName::from_static("x-correlation-id"),
         ])
         .allow_credentials(true)
 }
 
-/// Middleware that adds security headers to every response.
+/// Middleware that adds modernized security headers to every response.
 pub async fn security_headers(req: Request, next: Next) -> Response {
     let mut res = next.run(req).await;
     let headers = res.headers_mut();
@@ -125,20 +192,37 @@ pub async fn security_headers(req: Request, next: Next) -> Response {
     );
     headers.insert("X-Frame-Options", HeaderValue::from_static("SAMEORIGIN"));
     headers.insert(
-        "X-XSS-Protection",
-        HeaderValue::from_static("1; mode=block"),
+        "Referrer-Policy",
+        HeaderValue::from_static("strict-origin-when-cross-origin"),
+    );
+    headers.insert(
+        "Content-Security-Policy",
+        HeaderValue::from_static(
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https://images.unsplash.com; connect-src 'self'; frame-ancestors 'self';"
+        ),
     );
     res
+}
+
+/// Fallback handler for unmatched routes: returns HTTP 404 with frontend/static/404.html.
+async fn not_found_fallback() -> Response {
+    let not_found_html = tokio::fs::read_to_string("frontend/static/404.html")
+        .await
+        .unwrap_or_else(|_| {
+            "<!DOCTYPE html><html><head><title>404 Not Found</title></head><body><h1>404 Not Found</h1></body></html>".to_string()
+        });
+
+    (
+        StatusCode::NOT_FOUND,
+        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        not_found_html,
+    )
+        .into_response()
 }
 
 /// Construct the complete Axum application router.
 pub fn create_app(pool: SqlitePool) -> Router {
     let cors = build_cors();
-
-    // Static file service — serves frontend/static for non-API routes.
-    // Falls back to index.html for unknown paths (pretty-URL support).
-    let static_service =
-        ServeDir::new("frontend/static").fallback(ServeFile::new("frontend/static/index.html"));
 
     Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
@@ -146,7 +230,10 @@ pub fn create_app(pool: SqlitePool) -> Router {
         .merge(routes::admin::admin_routes())
         // uploads served as raw files (no execution)
         .nest_service("/uploads", ServeDir::new("uploads"))
-        // Explicit static page routes for pretty URLs (e.g. /about → about.html)
+        // Static assets served under /assets
+        .nest_service("/assets", ServeDir::new("frontend/static/assets"))
+        // Explicit static page routes for pretty URLs
+        .route_service("/", ServeFile::new("frontend/static/index.html"))
         .route_service("/about", ServeFile::new("frontend/static/about.html"))
         .route_service("/team", ServeFile::new("frontend/static/team.html"))
         .route_service("/events", ServeFile::new("frontend/static/events.html"))
@@ -166,8 +253,8 @@ pub fn create_app(pool: SqlitePool) -> Router {
         .route_service("/join", ServeFile::new("frontend/static/join.html"))
         .route_service("/admin", ServeFile::new("frontend/static/admin.html"))
         .route_service("/404", ServeFile::new("frontend/static/404.html"))
-        // Everything else → static directory (serves assets, or index.html fallback)
-        .fallback_service(static_service)
+        // Any unknown route serves 404.html with StatusCode::NOT_FOUND (404)
+        .fallback(not_found_fallback)
         .layer(middleware::from_fn(security_headers))
         .layer(cors)
         .layer(TraceLayer::new_for_http())

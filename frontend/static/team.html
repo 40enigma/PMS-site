@@ -1,26 +1,184 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Our Team – PIEAS Materials Society</title>
-  <meta name="description" content="Meet the PMS PIEAS executive council – the students driving the society forward.">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Our Team &amp; Council – PIEAS Materials Society</title>
+  <meta name="description" content="Meet the PMS PIEAS executive council, faculty advisors, and departmental leaders driving materials engineering initiatives.">
   <link rel="stylesheet" href="/assets/style.css">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 </head>
 <body>
 <div id="announcement-banner" class="banner" style="display:none"></div>
-<nav class="navbar"><div class="container nav-inner"><a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a><button class="hamburger" aria-label="Toggle navigation" aria-expanded="false"><span></span><span></span><span></span></button><ul class="nav-links" role="list"><li><a href="/">Home</a></li><li><a href="/about">About</a></li><li><a href="/team">Team</a></li><li><a href="/events">Events</a></li><li><a href="/blog">Blog</a></li><li><a href="/resources">Resources</a></li><li><a href="/opportunities">Opportunities</a></li><li><a href="/alumni">Alumni</a></li><li><a href="/projects">Projects</a></li><li><a href="/gallery">Gallery</a></li><li><a href="/sponsors">Sponsors</a></li><li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li></ul></div></nav>
-<section class="hero" style="padding:3.5rem 0 2.5rem"><div class="container hero-content"><span class="badge">2025-2026 Council</span><h1 class="fade-up">Our Executive Team</h1><p class="hero-desc fade-up fade-up-delay-1">The dedicated students driving PMS forward in the current academic year.</p></div></section>
-<section class="section"><div class="container"><div id="team-grid" class="grid grid-4"><div class="spinner"></div></div></div></section>
-<footer><div class="container footer-bottom"><p>© 2026 PIEAS Materials Society</p></div></footer>
+
+<!-- Navbar -->
+<nav class="navbar" role="navigation" aria-label="Main navigation">
+  <div class="container nav-inner">
+    <a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a>
+    <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <ul class="nav-links" id="nav-links" role="list">
+      <li><a href="/">Home</a></li>
+      <li><a href="/about">About</a></li>
+      <li><a href="/team">Team</a></li>
+      <li><a href="/events">Events</a></li>
+      <li><a href="/blog">Blog</a></li>
+      <li><a href="/resources">Resources</a></li>
+      <li><a href="/opportunities">Opportunities</a></li>
+      <li><a href="/alumni">Alumni</a></li>
+      <li><a href="/projects">Projects</a></li>
+      <li><a href="/gallery">Gallery</a></li>
+      <li><a href="/sponsors">Sponsors</a></li>
+      <li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- Hero with Filter Toggles -->
+<section class="hero" style="padding:3.5rem 0 2.5rem">
+  <div class="container hero-content">
+    <span class="badge">Society Leadership</span>
+    <h1 class="fade-up">Our Executive Council &amp; Advisors</h1>
+    <p class="hero-desc fade-up fade-up-delay-1">Dedicated undergraduate, graduate students and DMME faculty advisors advancing materials engineering at PIEAS.</p>
+    <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1.5rem">
+      <button class="btn btn-outline btn-sm team-toggle active" data-filter="current" id="btn-toggle-current">Current Council</button>
+      <button class="btn btn-outline btn-sm team-toggle" data-filter="faculty" id="btn-toggle-faculty">Faculty Advisors</button>
+      <button class="btn btn-outline btn-sm team-toggle" data-filter="past" id="btn-toggle-past">Past Councils</button>
+    </div>
+  </div>
+</section>
+
+<!-- Team Grid -->
+<section class="section">
+  <div class="container">
+    <div id="team-grid" class="grid grid-4">
+      <div class="spinner"></div>
+    </div>
+  </div>
+</section>
+
+<!-- Council Portfolios & Guidance (Dynamic from site_sections) -->
+<section class="section" style="background:rgba(255,255,255,.01);border-top:1px solid var(--border)">
+  <div class="container">
+    <div class="section-header" style="text-align:center">
+      <span class="badge" id="guidance-badge">Governance</span>
+      <h2 id="guidance-title">Council Portfolios &amp; Responsibilities</h2>
+      <p id="guidance-desc">Structured executive responsibilities ensuring transparent operational and academic leadership.</p>
+    </div>
+    <div id="guidance-grid" class="grid grid-3">
+      <div class="spinner"></div>
+    </div>
+  </div>
+</section>
+
+<!-- Unified Footer -->
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <div class="footer-title">⚛️ PMS PIEAS</div>
+        <p style="font-size:.85rem">Official academic society of the Department of Metallurgy &amp; Materials Engineering (DMME), PIEAS Islamabad.</p>
+      </div>
+      <div>
+        <div class="footer-title">Quick Links</div>
+        <ul class="footer-links">
+          <li><a href="/events">Events</a></li>
+          <li><a href="/blog">Technical Blog</a></li>
+          <li><a href="/resources">Toolkit &amp; ASTM</a></li>
+          <li><a href="/opportunities">Opportunities</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-title">Society</div>
+        <ul class="footer-links">
+          <li><a href="/about">About PMS</a></li>
+          <li><a href="/team">Our Council</a></li>
+          <li><a href="/alumni">Alumni Network</a></li>
+          <li><a href="/sponsors">Sponsors</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-title">Contact &amp; Location</div>
+        <p style="font-size:.85rem">pms@pieas.edu.pk<br>DMME Block, PIEAS, Nilore, Islamabad</p>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>© 2026 PIEAS Materials Society (PMS). Department of Metallurgy &amp; Materials Engineering.</p>
+    </div>
+  </div>
+</footer>
+
 <script src="/assets/app.js"></script>
 <script>
-(async () => {
+let allMembers = [];
+
+async function loadTeamData() {
   const grid = document.getElementById('team-grid');
+  grid.innerHTML = '<div class="spinner"></div>';
   try {
-    const team = await PMS.apiFetch('/api/team?is_current=true');
-    grid.innerHTML = team.length ? team.map(PMS.teamCard).join('') : '<p style="color:var(--text-muted);grid-column:1/-1">No team members listed.</p>';
-  } catch(e) { grid.innerHTML = '<p style="color:var(--danger)">Could not load team.</p>'; }
-})();
+    allMembers = await PMS.apiFetch('/api/team');
+    renderFilteredTeam('current');
+  } catch (e) {
+    grid.innerHTML = '<p style="color:var(--danger);grid-column:1/-1">Failed to load team directory.</p>';
+  }
+}
+
+function renderFilteredTeam(mode) {
+  const grid = document.getElementById('team-grid');
+  let filtered = [];
+  if (mode === 'current') {
+    filtered = allMembers.filter(m => m.is_current && !m.is_faculty_advisor);
+  } else if (mode === 'faculty') {
+    filtered = allMembers.filter(m => m.is_faculty_advisor);
+  } else if (mode === 'past') {
+    filtered = allMembers.filter(m => !m.is_current);
+  }
+  grid.innerHTML = filtered.length
+    ? filtered.map(PMS.teamCard).join('')
+    : '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No members listed in this category.</p>';
+}
+
+// Button toggles
+document.querySelectorAll('.team-toggle').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.team-toggle').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderFilteredTeam(btn.dataset.filter);
+  });
+});
+
+// Load team guidance portfolios from site_sections
+async function loadTeamGuidance() {
+  const grid = document.getElementById('guidance-grid');
+  try {
+    const sections = await PMS.apiFetch('/api/sections');
+    const sec = sections.find(s => s.section_key === 'team_guidance');
+    if (sec) {
+      if (sec.badge) document.getElementById('guidance-badge').textContent = sec.badge;
+      if (sec.title) document.getElementById('guidance-title').textContent = sec.title;
+      if (sec.subtitle) document.getElementById('guidance-desc').textContent = sec.subtitle;
+
+      if (sec.extra_json) {
+        const portfolios = JSON.parse(sec.extra_json);
+        grid.innerHTML = portfolios.map(p => `
+          <article class="card fade-up">
+            <span class="badge" style="margin-bottom:.5rem">${PMS.escHtml(p.scope)}</span>
+            <h3 style="font-size:1.15rem;margin-bottom:.5rem;color:var(--text)">${PMS.escHtml(p.title)}</h3>
+            <p style="color:var(--text-muted);font-size:.875rem;line-height:1.6">${PMS.escHtml(p.desc)}</p>
+          </article>
+        `).join('');
+        return;
+      }
+    }
+    grid.innerHTML = '<p style="color:var(--text-muted);grid-column:1/-1">Portfolios configured in administration.</p>';
+  } catch (_) {
+    grid.innerHTML = '';
+  }
+}
+
+loadTeamData();
+loadTeamGuidance();
 </script>
-</body></html>
+</body>
+</html>

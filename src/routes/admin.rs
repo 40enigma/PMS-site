@@ -1,4 +1,3 @@
-use std::os::unix::fs::PermissionsExt;
 
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use axum::{
@@ -10,10 +9,10 @@ use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use sqlx::SqlitePool;
 use time::Duration;
 
-use crate::auth::{create_token, JWT_COOKIE_NAME};
+use crate::auth::{create_token, jwt_cookie_name};
 use crate::error::AppError;
 use crate::models::*;
-use crate::rate_limit::{client_ip_from_headers, RateLimitState};
+use crate::rate_limit::{ClientIp, RateLimitState};
 
 // ---------------------------------------------------------------------------
 // Allowed MIME types for file uploads
@@ -38,6 +37,7 @@ pub fn admin_routes() -> Router<SqlitePool> {
         // Auth
         .route("/api/auth/login", post(login))
         .route("/api/auth/logout", post(logout))
+        .route("/api/auth/me", get(verify_session))
         // Upload
         .route("/api/admin/upload", post(upload_file))
         // Generic CRUD for all models
@@ -50,7 +50,6 @@ pub fn admin_routes() -> Router<SqlitePool> {
             put(update_announcement).delete(delete_announcement),
         )
         .route("/api/admin/stats", get(get_stats).put(update_stats))
-        .route("/api/admin/stats/{id}", put(update_stats_by_id))
         .route("/api/admin/events", get(list_events).post(create_event))
         .route(
             "/api/admin/events/{id}",
@@ -152,10 +151,7 @@ fn build_auth_cookie(token: String) -> Cookie<'static> {
         .map(|v| v.to_lowercase() != "false")
         .unwrap_or(is_production());
 
-    let cookie_name =
-        std::env::var("JWT_COOKIE_NAME").unwrap_or_else(|_| JWT_COOKIE_NAME.to_string());
-
-    let mut cookie = Cookie::new(cookie_name, token);
+    let mut cookie = Cookie::new(jwt_cookie_name(), token);
     cookie.set_http_only(true);
     cookie.set_secure(secure);
     cookie.set_same_site(SameSite::Lax);
@@ -164,15 +160,24 @@ fn build_auth_cookie(token: String) -> Cookie<'static> {
     cookie
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/auth/login",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "Admin logged in successfully", body = LoginResponse),
+        (status = 401, description = "Invalid credentials"),
+        (status = 429, description = "Too many login attempts")
+    )
+)]
 #[axum::debug_handler]
-async fn login(
+pub async fn login(
     State(pool): State<SqlitePool>,
     jar: CookieJar,
-    headers: axum::http::HeaderMap,
+    ClientIp(ip): ClientIp,
     Json(payload): Json<LoginRequest>,
 ) -> Result<(CookieJar, Json<LoginResponse>), AppError> {
     // Enforce rate limiting per client IP
-    let ip = client_ip_from_headers(&headers);
     RateLimitState::global().check_login(ip)?;
 
     // Basic input validation
@@ -217,12 +222,16 @@ async fn login(
     ))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/auth/logout",
+    responses(
+        (status = 200, description = "Admin logged out successfully")
+    )
+)]
 #[axum::debug_handler]
-async fn logout(jar: CookieJar) -> (CookieJar, Json<serde_json::Value>) {
-    let cookie_name =
-        std::env::var("JWT_COOKIE_NAME").unwrap_or_else(|_| JWT_COOKIE_NAME.to_string());
-
-    let removal = Cookie::build((cookie_name, ""))
+pub async fn logout(jar: CookieJar) -> (CookieJar, Json<serde_json::Value>) {
+    let removal = Cookie::build((jwt_cookie_name(), ""))
         .path("/")
         .max_age(Duration::seconds(0))
         .build();
@@ -233,6 +242,35 @@ async fn logout(jar: CookieJar) -> (CookieJar, Json<serde_json::Value>) {
         Json(serde_json::json!({"message": "Logged out successfully"})),
     )
 }
+
+#[utoipa::path(
+    get,
+    path = "/api/auth/me",
+    responses(
+        (status = 200, description = "Current authenticated admin session", body = LoginResponse),
+        (status = 401, description = "Not authenticated")
+    )
+)]
+#[axum::debug_handler]
+pub async fn verify_session(
+    claims: AdminClaims,
+    State(pool): State<SqlitePool>,
+) -> Result<Json<LoginResponse>, AppError> {
+    let user = sqlx::query_as::<_, AdminUser>(
+        "SELECT id, email, password_hash, name FROM admin_users WHERE id = ?1",
+    )
+    .bind(claims.sub)
+    .fetch_optional(&pool)
+    .await?
+    .ok_or(AppError::Unauthorized)?;
+
+    Ok(Json(LoginResponse {
+        token: String::new(),
+        name: user.name,
+        email: user.email,
+    }))
+}
+
 
 // ---------------------------------------------------------------------------
 // File Upload (hardened)
@@ -315,10 +353,14 @@ async fn upload_file(
             .await
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
-        // Set permissions to rw-r--r-- (0o644) — non-executable.
-        tokio::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644))
-            .await
-            .map_err(|e| AppError::Internal(e.to_string()))?;
+        // Set permissions to rw-r--r-- (0o644) — non-executable on Unix platforms.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            tokio::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644))
+                .await
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+        }
 
         tracing::info!(
             filename = %safe_name,
@@ -387,12 +429,15 @@ async fn update_announcement(
     if p.message.trim().is_empty() {
         return Err(AppError::BadRequest("message is required".into()));
     }
-    sqlx::query("UPDATE announcements SET message=?1, link_text=?2, link_url=?3, priority=?4, is_active=?5 WHERE id=?6")
+    let res = sqlx::query("UPDATE announcements SET message=?1, link_text=?2, link_url=?3, priority=?4, is_active=?5 WHERE id=?6")
         .bind(&p.message).bind(&p.link_text).bind(&p.link_url)
         .bind(p.priority.as_deref().unwrap_or("info"))
         .bind(p.is_active.unwrap_or(true))
         .bind(id)
         .execute(&pool).await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Updated".into(),
     }))
@@ -404,10 +449,13 @@ async fn delete_announcement(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    sqlx::query("DELETE FROM announcements WHERE id=?1")
+    let res = sqlx::query("DELETE FROM announcements WHERE id=?1")
         .bind(id)
         .execute(&pool)
         .await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Deleted".into(),
     }))
@@ -434,30 +482,18 @@ async fn update_stats(
     State(pool): State<SqlitePool>,
     Json(p): Json<UpdateSiteStats>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    sqlx::query("UPDATE site_stats SET active_members=COALESCE(?1,active_members), events_held=COALESCE(?2,events_held), years_active=COALESCE(?3,years_active), industrial_partners=COALESCE(?4,industrial_partners), constitution_pdf_url=COALESCE(?5,constitution_pdf_url), office_location=COALESCE(?6,office_location), contact_email=COALESCE(?7,contact_email) WHERE id=1")
+    let res = sqlx::query("UPDATE site_stats SET active_members=COALESCE(?1,active_members), events_held=COALESCE(?2,events_held), years_active=COALESCE(?3,years_active), industrial_partners=COALESCE(?4,industrial_partners), constitution_pdf_url=COALESCE(?5,constitution_pdf_url), office_location=COALESCE(?6,office_location), contact_email=COALESCE(?7,contact_email) WHERE id=1")
         .bind(p.active_members).bind(p.events_held).bind(p.years_active).bind(p.industrial_partners)
         .bind(&p.constitution_pdf_url).bind(&p.office_location).bind(&p.contact_email)
         .execute(&pool).await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Updated".into(),
     }))
 }
 
-#[axum::debug_handler]
-async fn update_stats_by_id(
-    _claims: AdminClaims,
-    State(pool): State<SqlitePool>,
-    Path(_id): Path<i64>,
-    Json(p): Json<UpdateSiteStats>,
-) -> Result<Json<DeleteResponse>, AppError> {
-    sqlx::query("UPDATE site_stats SET active_members=COALESCE(?1,active_members), events_held=COALESCE(?2,events_held), years_active=COALESCE(?3,years_active), industrial_partners=COALESCE(?4,industrial_partners), constitution_pdf_url=COALESCE(?5,constitution_pdf_url), office_location=COALESCE(?6,office_location), contact_email=COALESCE(?7,contact_email) WHERE id=1")
-        .bind(p.active_members).bind(p.events_held).bind(p.years_active).bind(p.industrial_partners)
-        .bind(&p.constitution_pdf_url).bind(&p.office_location).bind(&p.contact_email)
-        .execute(&pool).await?;
-    Ok(Json(DeleteResponse {
-        message: "Updated".into(),
-    }))
-}
 
 // ---------------------------------------------------------------------------
 // Events CRUD
@@ -517,7 +553,7 @@ async fn update_event(
         return Err(AppError::BadRequest("title is required".into()));
     }
     let slug = p.slug.unwrap_or_else(|| slugify(&p.title));
-    sqlx::query("UPDATE events SET title=?1,slug=?2,date=?3,time_range=?4,venue=?5,category=?6,short_description=?7,full_summary=?8,poster_url=?9,registration_link=?10,speaker_or_organizer=?11,is_past=?12,is_featured=?13 WHERE id=?14")
+    let res = sqlx::query("UPDATE events SET title=?1,slug=?2,date=?3,time_range=?4,venue=?5,category=?6,short_description=?7,full_summary=?8,poster_url=?9,registration_link=?10,speaker_or_organizer=?11,is_past=?12,is_featured=?13 WHERE id=?14")
         .bind(&p.title).bind(&slug).bind(&p.date).bind(&p.time_range).bind(&p.venue)
         .bind(p.category.as_deref().unwrap_or("Seminar"))
         .bind(&p.short_description).bind(&p.full_summary).bind(&p.poster_url)
@@ -525,6 +561,9 @@ async fn update_event(
         .bind(p.is_past.unwrap_or(false)).bind(p.is_featured.unwrap_or(false))
         .bind(id)
         .execute(&pool).await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Updated".into(),
     }))
@@ -536,10 +575,13 @@ async fn delete_event(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    sqlx::query("DELETE FROM events WHERE id=?1")
+    let res = sqlx::query("DELETE FROM events WHERE id=?1")
         .bind(id)
         .execute(&pool)
         .await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Deleted".into(),
     }))
@@ -566,10 +608,13 @@ async fn delete_registration(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    sqlx::query("DELETE FROM event_registrations WHERE id=?1")
+    let res = sqlx::query("DELETE FROM event_registrations WHERE id=?1")
         .bind(id)
         .execute(&pool)
         .await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Deleted".into(),
     }))
@@ -623,13 +668,16 @@ async fn update_team_member(
     if p.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".into()));
     }
-    sqlx::query("UPDATE team_members SET name=?1,role=?2,role_responsibility=?3,photo_url=?4,batch=?5,tenure_year=?6,is_current=?7,is_faculty_advisor=?8,bio=?9,linkedin_url=?10,email=?11,display_order=?12 WHERE id=?13")
+    let res = sqlx::query("UPDATE team_members SET name=?1,role=?2,role_responsibility=?3,photo_url=?4,batch=?5,tenure_year=?6,is_current=?7,is_faculty_advisor=?8,bio=?9,linkedin_url=?10,email=?11,display_order=?12 WHERE id=?13")
         .bind(&p.name).bind(&p.role).bind(&p.role_responsibility).bind(&p.photo_url)
         .bind(&p.batch).bind(p.tenure_year.as_deref().unwrap_or("2025-2026"))
         .bind(p.is_current.unwrap_or(true)).bind(p.is_faculty_advisor.unwrap_or(false))
         .bind(&p.bio).bind(&p.linkedin_url).bind(&p.email).bind(p.display_order.unwrap_or(99))
         .bind(id)
         .execute(&pool).await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Updated".into(),
     }))
@@ -641,10 +689,13 @@ async fn delete_team_member(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    sqlx::query("DELETE FROM team_members WHERE id=?1")
+    let res = sqlx::query("DELETE FROM team_members WHERE id=?1")
         .bind(id)
         .execute(&pool)
         .await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Deleted".into(),
     }))
@@ -689,9 +740,12 @@ async fn update_gallery_image(
     Path(id): Path<i64>,
     Json(p): Json<CreateGalleryImage>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    sqlx::query("UPDATE gallery_images SET image_url=?1,caption=?2,event_id=?3,event_name=?4,year=?5 WHERE id=?6")
+    let res = sqlx::query("UPDATE gallery_images SET image_url=?1,caption=?2,event_id=?3,event_name=?4,year=?5 WHERE id=?6")
         .bind(&p.image_url).bind(&p.caption).bind(p.event_id).bind(&p.event_name).bind(&p.year).bind(id)
         .execute(&pool).await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Updated".into(),
     }))
@@ -703,10 +757,13 @@ async fn delete_gallery_image(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    sqlx::query("DELETE FROM gallery_images WHERE id=?1")
+    let res = sqlx::query("DELETE FROM gallery_images WHERE id=?1")
         .bind(id)
         .execute(&pool)
         .await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Deleted".into(),
     }))
@@ -764,13 +821,16 @@ async fn update_post(
         return Err(AppError::BadRequest("title is required".into()));
     }
     let slug = p.slug.unwrap_or_else(|| slugify(&p.title));
-    sqlx::query("UPDATE posts SET title=?1,slug=?2,excerpt=?3,body_markdown=?4,author_name=?5,author_batch=?6,cover_image_url=?7,category=?8,material_formula=?9,crystal_structure=?10 WHERE id=?11")
+    let res = sqlx::query("UPDATE posts SET title=?1,slug=?2,excerpt=?3,body_markdown=?4,author_name=?5,author_batch=?6,cover_image_url=?7,category=?8,material_formula=?9,crystal_structure=?10 WHERE id=?11")
         .bind(&p.title).bind(&slug).bind(&p.excerpt).bind(&p.body_markdown)
         .bind(&p.author_name).bind(&p.author_batch).bind(&p.cover_image_url)
         .bind(p.category.as_deref().unwrap_or("Explainer"))
         .bind(&p.material_formula).bind(&p.crystal_structure)
         .bind(id)
         .execute(&pool).await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Updated".into(),
     }))
@@ -782,10 +842,13 @@ async fn delete_post(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    sqlx::query("DELETE FROM posts WHERE id=?1")
+    let res = sqlx::query("DELETE FROM posts WHERE id=?1")
         .bind(id)
         .execute(&pool)
         .await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Deleted".into(),
     }))
@@ -837,10 +900,13 @@ async fn update_resource(
     if p.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".into()));
     }
-    sqlx::query("UPDATE resources SET title=?1,url=?2,category=?3,software_tag=?4,description=?5,is_pinned=?6 WHERE id=?7")
+    let res = sqlx::query("UPDATE resources SET title=?1,url=?2,category=?3,software_tag=?4,description=?5,is_pinned=?6 WHERE id=?7")
         .bind(&p.title).bind(&p.url).bind(p.category.as_deref().unwrap_or("Software Guides"))
         .bind(&p.software_tag).bind(&p.description).bind(p.is_pinned.unwrap_or(false)).bind(id)
         .execute(&pool).await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Updated".into(),
     }))
@@ -852,10 +918,13 @@ async fn delete_resource(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    sqlx::query("DELETE FROM resources WHERE id=?1")
+    let res = sqlx::query("DELETE FROM resources WHERE id=?1")
         .bind(id)
         .execute(&pool)
         .await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Deleted".into(),
     }))
@@ -907,11 +976,14 @@ async fn update_opportunity(
     if p.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".into()));
     }
-    sqlx::query("UPDATE opportunities SET title=?1,organization=?2,opportunity_type=?3,location=?4,deadline=?5,apply_url=?6,description=?7,posted_by_alumnus=?8 WHERE id=?9")
+    let res = sqlx::query("UPDATE opportunities SET title=?1,organization=?2,opportunity_type=?3,location=?4,deadline=?5,apply_url=?6,description=?7,posted_by_alumnus=?8 WHERE id=?9")
         .bind(&p.title).bind(&p.organization).bind(p.opportunity_type.as_deref().unwrap_or("Internship"))
         .bind(&p.location).bind(&p.deadline).bind(&p.apply_url).bind(&p.description).bind(&p.posted_by_alumnus)
         .bind(id)
         .execute(&pool).await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Updated".into(),
     }))
@@ -923,10 +995,13 @@ async fn delete_opportunity(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    sqlx::query("DELETE FROM opportunities WHERE id=?1")
+    let res = sqlx::query("DELETE FROM opportunities WHERE id=?1")
         .bind(id)
         .execute(&pool)
         .await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Deleted".into(),
     }))
@@ -979,11 +1054,14 @@ async fn update_alumnus(
     if p.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".into()));
     }
-    sqlx::query("UPDATE alumni SET name=?1,batch=?2,current_position=?3,organization=?4,location=?5,photo_url=?6,quote_testimonial=?7,linkedin_url=?8,research_domain=?9 WHERE id=?10")
+    let res = sqlx::query("UPDATE alumni SET name=?1,batch=?2,current_position=?3,organization=?4,location=?5,photo_url=?6,quote_testimonial=?7,linkedin_url=?8,research_domain=?9 WHERE id=?10")
         .bind(&p.name).bind(&p.batch).bind(&p.current_position).bind(&p.organization)
         .bind(&p.location).bind(&p.photo_url).bind(&p.quote_testimonial)
         .bind(&p.linkedin_url).bind(&p.research_domain).bind(id)
         .execute(&pool).await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Updated".into(),
     }))
@@ -995,10 +1073,13 @@ async fn delete_alumnus(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    sqlx::query("DELETE FROM alumni WHERE id=?1")
+    let res = sqlx::query("DELETE FROM alumni WHERE id=?1")
         .bind(id)
         .execute(&pool)
         .await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Deleted".into(),
     }))
@@ -1054,12 +1135,15 @@ async fn update_project(
     if p.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".into()));
     }
-    sqlx::query("UPDATE projects SET title=?1,student_names=?2,batch=?3,supervisor_name=?4,project_type=?5,abstract_summary=?6,image_url=?7,paper_or_repo_url=?8,tags=?9 WHERE id=?10")
+    let res = sqlx::query("UPDATE projects SET title=?1,student_names=?2,batch=?3,supervisor_name=?4,project_type=?5,abstract_summary=?6,image_url=?7,paper_or_repo_url=?8,tags=?9 WHERE id=?10")
         .bind(&p.title).bind(&p.student_names).bind(&p.batch).bind(&p.supervisor_name)
         .bind(p.project_type.as_deref().unwrap_or("FYP Highlight"))
         .bind(&p.abstract_summary).bind(&p.image_url).bind(&p.paper_or_repo_url).bind(&p.tags)
         .bind(id)
         .execute(&pool).await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Updated".into(),
     }))
@@ -1071,10 +1155,13 @@ async fn delete_project(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    sqlx::query("DELETE FROM projects WHERE id=?1")
+    let res = sqlx::query("DELETE FROM projects WHERE id=?1")
         .bind(id)
         .execute(&pool)
         .await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Deleted".into(),
     }))
@@ -1126,7 +1213,7 @@ async fn update_sponsor(
     if p.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".into()));
     }
-    sqlx::query("UPDATE sponsors SET name=?1,logo_url=?2,website_url=?3,tier=?4 WHERE id=?5")
+    let res = sqlx::query("UPDATE sponsors SET name=?1,logo_url=?2,website_url=?3,tier=?4 WHERE id=?5")
         .bind(&p.name)
         .bind(&p.logo_url)
         .bind(&p.website_url)
@@ -1134,6 +1221,9 @@ async fn update_sponsor(
         .bind(id)
         .execute(&pool)
         .await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Updated".into(),
     }))
@@ -1145,10 +1235,13 @@ async fn delete_sponsor(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    sqlx::query("DELETE FROM sponsors WHERE id=?1")
+    let res = sqlx::query("DELETE FROM sponsors WHERE id=?1")
         .bind(id)
         .execute(&pool)
         .await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Deleted".into(),
     }))
@@ -1204,13 +1297,16 @@ async fn update_faq(
     if p.question.trim().is_empty() {
         return Err(AppError::BadRequest("question is required".into()));
     }
-    sqlx::query("UPDATE faqs SET question=?1,answer=?2,display_order=?3 WHERE id=?4")
+    let res = sqlx::query("UPDATE faqs SET question=?1,answer=?2,display_order=?3 WHERE id=?4")
         .bind(&p.question)
         .bind(&p.answer)
         .bind(p.display_order.unwrap_or(99))
         .bind(id)
         .execute(&pool)
         .await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Updated".into(),
     }))
@@ -1222,10 +1318,13 @@ async fn delete_faq(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    sqlx::query("DELETE FROM faqs WHERE id=?1")
+    let res = sqlx::query("DELETE FROM faqs WHERE id=?1")
         .bind(id)
         .execute(&pool)
         .await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Deleted".into(),
     }))
@@ -1257,11 +1356,14 @@ async fn update_membership_status(
         .get("status")
         .and_then(|s| s.as_str())
         .unwrap_or("Pending");
-    sqlx::query("UPDATE membership_applications SET status=?1 WHERE id=?2")
+    let res = sqlx::query("UPDATE membership_applications SET status=?1 WHERE id=?2")
         .bind(status)
         .bind(id)
         .execute(&pool)
         .await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Updated".into(),
     }))
@@ -1273,10 +1375,13 @@ async fn delete_membership(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    sqlx::query("DELETE FROM membership_applications WHERE id=?1")
+    let res = sqlx::query("DELETE FROM membership_applications WHERE id=?1")
         .bind(id)
         .execute(&pool)
         .await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Deleted".into(),
     }))
@@ -1303,10 +1408,13 @@ async fn delete_contact(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    sqlx::query("DELETE FROM contact_messages WHERE id=?1")
+    let res = sqlx::query("DELETE FROM contact_messages WHERE id=?1")
         .bind(id)
         .execute(&pool)
         .await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Deleted".into(),
     }))
@@ -1335,10 +1443,13 @@ async fn delete_subscriber(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    sqlx::query("DELETE FROM newsletter_subscribers WHERE id=?1")
+    let res = sqlx::query("DELETE FROM newsletter_subscribers WHERE id=?1")
         .bind(id)
         .execute(&pool)
         .await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Deleted".into(),
     }))
@@ -1418,7 +1529,7 @@ async fn update_section(
     Path(id): Path<i64>,
     Json(p): Json<UpdateSiteSection>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    sqlx::query(
+    let res = sqlx::query(
         "UPDATE site_sections SET title=COALESCE(?1,title), subtitle=COALESCE(?2,subtitle), content=COALESCE(?3,content), badge=COALESCE(?4,badge), extra_json=COALESCE(?5,extra_json), updated_at=datetime('now') WHERE id=?6"
     )
     .bind(&p.title)
@@ -1428,6 +1539,9 @@ async fn update_section(
     .bind(&p.extra_json)
     .bind(id)
     .execute(&pool).await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Updated section".into(),
     }))
@@ -1439,10 +1553,13 @@ async fn delete_section(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    sqlx::query("DELETE FROM site_sections WHERE id=?1")
+    let res = sqlx::query("DELETE FROM site_sections WHERE id=?1")
         .bind(id)
         .execute(&pool)
         .await?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
     Ok(Json(DeleteResponse {
         message: "Deleted section".into(),
     }))

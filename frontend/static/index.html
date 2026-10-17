@@ -39,21 +39,21 @@
   </div>
 </nav>
 
-<!-- Hero -->
-<section class="hero" aria-labelledby="hero-heading">
+<!-- Dynamic Hero Section -->
+<section class="hero" aria-labelledby="hero-heading" id="hero-section">
   <div class="container">
     <div class="hero-content">
       <div class="hero-badge">
-        <span class="badge">DMME • PIEAS Islamabad</span>
+        <span class="badge" id="hero-badge">DMME • PIEAS Islamabad</span>
       </div>
       <h1 id="hero-heading" class="fade-up">
         Advancing Materials Science &amp; Metallurgy at PIEAS
       </h1>
-      <p class="hero-desc fade-up fade-up-delay-1">
+      <p class="hero-desc fade-up fade-up-delay-1" id="hero-desc">
         The official academic society of the Department of Metallurgy &amp; Materials Engineering.
         Connecting students with research, practical engineering, and career development.
       </p>
-      <div class="hero-actions fade-up fade-up-delay-2">
+      <div class="hero-actions fade-up fade-up-delay-2" id="hero-actions">
         <a href="/join" class="btn btn-primary" id="hero-join-btn">Join PMS →</a>
         <a href="/resources" class="btn btn-outline" id="hero-resources-btn">Student Resources</a>
       </div>
@@ -85,19 +85,33 @@
   </div>
 </section>
 
-<!-- Upcoming Events -->
+<!-- Dynamic Society Activities / Portfolios -->
+<section class="section" style="background:rgba(255,255,255,.01)" aria-labelledby="activities-heading">
+  <div class="container">
+    <div class="section-header">
+      <span class="badge" id="activities-badge">Portfolios &amp; Initiatives</span>
+      <h2 id="activities-heading">Bridging Theory &amp; Materials Practice</h2>
+      <p id="activities-desc">PMS organizes structured academic and industrial initiatives to support undergraduate and graduate materials engineering students.</p>
+    </div>
+    <div id="activities-grid" class="grid grid-4">
+      <div class="spinner"></div>
+    </div>
+  </div>
+</section>
+
+<!-- Upcoming Featured Events -->
 <section class="section" aria-labelledby="events-heading">
   <div class="container">
     <div class="section-header">
       <span class="badge">Upcoming</span>
-      <h2 id="events-heading">Featured Events</h2>
-      <p>Workshops, seminars, competitions, and industrial visits organized by PMS.</p>
+      <h2 id="events-heading">Featured Events &amp; Workshops</h2>
+      <p>Technical seminars, hands-on software workshops, competitions, and industrial tours.</p>
     </div>
     <div id="events-grid" class="grid grid-3">
       <div class="spinner"></div>
     </div>
     <div style="text-align:center;margin-top:2rem">
-      <a href="/events" class="btn btn-outline" id="view-all-events">View All Events →</a>
+      <a href="/events" class="btn btn-outline" id="view-all-events">View All Events &amp; Register →</a>
     </div>
   </div>
 </section>
@@ -106,28 +120,28 @@
 <section class="section" style="background:rgba(255,255,255,.01)" aria-labelledby="blog-heading">
   <div class="container">
     <div class="section-header">
-      <span class="badge">Knowledge Hub</span>
-      <h2 id="blog-heading">Material of the Month &amp; Blog</h2>
-      <p>Deep-dives into materials science, metallurgy, and engineering by DMME students.</p>
+      <span class="badge">Technical Publications</span>
+      <h2 id="blog-heading">Material of the Month &amp; Articles</h2>
+      <p>Deep-dives into advanced alloys, phase transformations, and materials characterization by DMME researchers.</p>
     </div>
     <div id="posts-grid" class="grid grid-3">
       <div class="spinner"></div>
     </div>
     <div style="text-align:center;margin-top:2rem">
-      <a href="/blog" class="btn btn-outline" id="view-all-posts">Read All Articles →</a>
+      <a href="/blog" class="btn btn-outline" id="view-all-posts">Explore Full Technical Library →</a>
     </div>
   </div>
 </section>
 
-<!-- Newsletter -->
+<!-- Newsletter Subscription -->
 <section class="section" aria-labelledby="newsletter-heading">
-  <div class="container" style="max-width:560px;text-align:center">
-    <span class="badge">Stay Updated</span>
-    <h2 id="newsletter-heading" style="margin:.75rem 0">Subscribe to PMS Newsletter</h2>
-    <p style="color:var(--text-muted);margin-bottom:1.5rem">Get announcements, event updates, and materials science articles.</p>
+  <div class="container" style="max-width:580px;text-align:center">
+    <span class="badge">Stay Informed</span>
+    <h2 id="newsletter-heading" style="margin:.75rem 0">Subscribe to the PMS Bulletin</h2>
+    <p style="color:var(--text-muted);margin-bottom:1.5rem">Receive notifications on technical webinars, ASTM testing workshops, scholarship postings, and research updates.</p>
     <form id="newsletter-form" novalidate>
       <div style="display:flex;gap:.75rem;flex-wrap:wrap;justify-content:center">
-        <input id="newsletter-email" type="email" class="form-control" placeholder="your@email.com" required style="flex:1;min-width:200px" aria-label="Email address">
+        <input id="newsletter-email" type="email" class="form-control" placeholder="student@pieas.edu.pk" required style="flex:1;min-width:220px" aria-label="Email address">
         <button type="submit" class="btn btn-primary" id="newsletter-submit">Subscribe</button>
       </div>
       <div id="newsletter-msg" style="margin-top:.75rem"></div>
@@ -135,20 +149,20 @@
   </div>
 </section>
 
-<!-- Footer -->
+<!-- Unified Footer -->
 <footer>
   <div class="container">
     <div class="footer-grid">
       <div>
         <div class="footer-title">⚛️ PMS PIEAS</div>
-        <p style="font-size:.85rem">Official society of DMME, PIEAS Islamabad. Advancing materials science education.</p>
+        <p style="font-size:.85rem">Official academic society of the Department of Metallurgy &amp; Materials Engineering (DMME), PIEAS Islamabad.</p>
       </div>
       <div>
         <div class="footer-title">Quick Links</div>
         <ul class="footer-links">
           <li><a href="/events">Events</a></li>
-          <li><a href="/blog">Blog</a></li>
-          <li><a href="/resources">Resources</a></li>
+          <li><a href="/blog">Technical Blog</a></li>
+          <li><a href="/resources">Toolkit &amp; ASTM</a></li>
           <li><a href="/opportunities">Opportunities</a></li>
         </ul>
       </div>
@@ -156,18 +170,18 @@
         <div class="footer-title">Society</div>
         <ul class="footer-links">
           <li><a href="/about">About PMS</a></li>
-          <li><a href="/team">Our Team</a></li>
-          <li><a href="/alumni">Alumni</a></li>
+          <li><a href="/team">Our Council</a></li>
+          <li><a href="/alumni">Alumni Network</a></li>
           <li><a href="/sponsors">Sponsors</a></li>
         </ul>
       </div>
       <div>
-        <div class="footer-title">Contact</div>
+        <div class="footer-title">Contact &amp; Location</div>
         <p style="font-size:.85rem">pms@pieas.edu.pk<br>DMME Block, PIEAS, Nilore, Islamabad</p>
       </div>
     </div>
     <div class="footer-bottom">
-      <p>© 2026 PIEAS Materials Society (PMS). All rights reserved.</p>
+      <p>© 2026 PIEAS Materials Society (PMS). Department of Metallurgy &amp; Materials Engineering.</p>
     </div>
   </div>
 </footer>
@@ -175,42 +189,91 @@
 <script src="/assets/app.js"></script>
 <script>
 (async () => {
-  // Load featured events
+  // 1. Fetch Dynamic Site Sections (home_hero, home_activities)
+  try {
+    const sections = await PMS.apiFetch('/api/sections');
+    const heroSec = sections.find(s => s.section_key === 'home_hero');
+    if (heroSec) {
+      if (heroSec.badge) document.getElementById('hero-badge').textContent = heroSec.badge;
+      if (heroSec.title) document.getElementById('hero-heading').textContent = heroSec.title;
+      if (heroSec.subtitle || heroSec.content) {
+        document.getElementById('hero-desc').textContent = heroSec.subtitle || heroSec.content;
+      }
+      if (heroSec.extra_json) {
+        try {
+          const cfg = JSON.parse(heroSec.extra_json);
+          const actionsEl = document.getElementById('hero-actions');
+          actionsEl.innerHTML = `
+            ${cfg.cta_primary_url ? `<a href="${PMS.safeUrl(cfg.cta_primary_url)}" class="btn btn-primary">${PMS.escHtml(cfg.cta_primary_text || 'Join PMS →')}</a>` : ''}
+            ${cfg.cta_secondary_url ? `<a href="${PMS.safeUrl(cfg.cta_secondary_url)}" class="btn btn-outline">${PMS.escHtml(cfg.cta_secondary_text || 'Student Resources')}</a>` : ''}
+          `;
+        } catch (_) {}
+      }
+    }
+
+    const actSec = sections.find(s => s.section_key === 'home_activities');
+    const actGrid = document.getElementById('activities-grid');
+    if (actSec) {
+      if (actSec.badge) document.getElementById('activities-badge').textContent = actSec.badge;
+      if (actSec.title) document.getElementById('activities-heading').textContent = actSec.title;
+      if (actSec.subtitle) document.getElementById('activities-desc').textContent = actSec.subtitle;
+
+      if (actSec.extra_json) {
+        try {
+          const cards = JSON.parse(actSec.extra_json);
+          const icons = { Atom: '⚛️', Cpu: '🔬', Award: '🏆', Building: '🏭' };
+          actGrid.innerHTML = cards.map(c => `
+            <article class="card fade-up">
+              <div style="font-size:2rem;margin-bottom:.75rem">${icons[c.icon] || '✨'}</div>
+              <h3 style="font-size:1.1rem;margin-bottom:.5rem">${PMS.escHtml(c.title)}</h3>
+              <p style="color:var(--text-muted);font-size:.875rem;line-height:1.6">${PMS.escHtml(c.desc)}</p>
+            </article>
+          `).join('');
+        } catch (_) {
+          actGrid.innerHTML = '<p style="color:var(--text-muted);grid-column:1/-1">Activities configured in site sections.</p>';
+        }
+      }
+    }
+  } catch (_) {
+    // Fallback to initial HTML content
+  }
+
+  // 2. Load featured events
   const eventsGrid = document.getElementById('events-grid');
   try {
     const events = await PMS.apiFetch('/api/events?is_featured=true&is_past=false');
     eventsGrid.innerHTML = events.length
-      ? events.slice(0,3).map(PMS.eventCard).join('')
-      : '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No upcoming featured events.</p>';
+      ? events.slice(0, 3).map(PMS.eventCard).join('')
+      : '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No upcoming featured events listed at this time.</p>';
   } catch(e) {
     eventsGrid.innerHTML = `<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">Could not load events.</p>`;
   }
 
-  // Load latest posts
+  // 3. Load latest technical posts
   const postsGrid = document.getElementById('posts-grid');
   try {
     const posts = await PMS.apiFetch('/api/posts');
     postsGrid.innerHTML = posts.length
-      ? posts.slice(0,3).map(PMS.postCard).join('')
-      : '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No posts yet.</p>';
+      ? posts.slice(0, 3).map(PMS.postCard).join('')
+      : '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No articles published yet.</p>';
   } catch(e) {
     postsGrid.innerHTML = `<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">Could not load posts.</p>`;
   }
 
-  // Newsletter form
+  // 4. Newsletter form
   document.getElementById('newsletter-form').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const btn = document.getElementById('newsletter-submit');
     const msgEl = document.getElementById('newsletter-msg');
     const email = document.getElementById('newsletter-email').value.trim();
-    if (!email) { PMS.showAlert(msgEl, 'Please enter your email.'); return; }
+    if (!email) { PMS.showAlert(msgEl, 'Please enter a valid email address.'); return; }
     PMS.setLoading(btn, true);
     try {
       await PMS.apiPost('/api/newsletter', { email });
-      PMS.showAlert(msgEl, '🎉 Subscribed successfully!', 'success');
+      PMS.showAlert(msgEl, '🎉 Thank you for subscribing to the PMS Bulletin!', 'success');
       document.getElementById('newsletter-email').value = '';
     } catch(e) {
-      PMS.showAlert(msgEl, e.message || 'Could not subscribe. Try again.');
+      PMS.showAlert(msgEl, e.message || 'Could not subscribe. Please try again.');
     } finally {
       PMS.setLoading(btn, false);
     }

@@ -4,97 +4,372 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin Console – PIEAS Materials Society</title>
-  <meta name="description" content="Admin console for PMS PIEAS. Requires authentication.">
+  <meta name="description" content="Secured management dashboard for PIEAS Materials Society administrators.">
   <link rel="stylesheet" href="/assets/style.css">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <style>
     .admin-nav { display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:1.5rem; }
-    .admin-nav button { background:rgba(255,255,255,.06); border:1px solid var(--border); color:var(--text-muted); padding:.5rem 1rem; border-radius:8px; cursor:pointer; font-size:.85rem; transition:var(--transition); }
+    .admin-nav button { background:rgba(255,255,255,.05); border:1px solid var(--border); color:var(--text-muted); padding:.5rem .85rem; border-radius:8px; cursor:pointer; font-size:.825rem; transition:var(--transition); display:flex; align-items:center; gap:.4rem; }
     .admin-nav button.active, .admin-nav button:hover { background:var(--primary); color:#fff; border-color:var(--primary); }
     #admin-content table { width:100%; border-collapse:collapse; font-size:.85rem; }
-    #admin-content th, #admin-content td { padding:.65rem 1rem; border-bottom:1px solid var(--border); text-align:left; }
-    #admin-content th { color:var(--text-muted); font-weight:600; font-size:.78rem; text-transform:uppercase; }
-    #admin-content td { color:var(--text); }
-    #admin-content tr:hover td { background:rgba(255,255,255,.02); }
-    .delete-btn { background:transparent; border:none; color:var(--danger); cursor:pointer; font-size:.85rem; }
-    .delete-btn:hover { text-decoration:underline; }
-    #login-section { max-width:420px; margin:0 auto; }
+    #admin-content th, #admin-content td { padding:.75rem 1rem; border-bottom:1px solid var(--border); text-align:left; vertical-align:middle; }
+    #admin-content th { color:var(--text-muted); font-weight:600; font-size:.78rem; text-transform:uppercase; letter-spacing:.05em; background:rgba(255,255,255,.02); }
+    #admin-content tr:hover td { background:rgba(255,255,255,.03); }
+    .action-btn { padding:.3rem .6rem; border-radius:6px; font-size:.78rem; cursor:pointer; border:1px solid var(--border); background:rgba(255,255,255,.05); color:var(--text); transition:var(--transition); margin-right:.35rem; }
+    .action-btn:hover { background:rgba(255,255,255,.1); }
+    .action-btn.btn-danger { color:var(--danger); border-color:rgba(239,68,68,.3); }
+    .action-btn.btn-danger:hover { background:rgba(239,68,68,.15); }
+    .action-btn.btn-success { color:var(--success); border-color:rgba(16,185,129,.3); }
+    .action-btn.btn-success:hover { background:rgba(16,185,129,.15); }
+    .action-btn.btn-primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+    #login-section { max-width:440px; margin:2rem auto; }
+    .section-toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; flex-wrap:wrap; gap:1rem; }
+    dialog::backdrop { background:rgba(0,0,0,.75); backdrop-filter:blur(4px); }
+    .modal-dialog { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); color:var(--text); max-width:680px; width:95%; padding:2rem; max-height:90vh; overflow-y:auto; box-shadow:0 25px 50px -12px rgba(0,0,0,.7); }
+    .status-badge { display:inline-block; padding:.2rem .5rem; border-radius:4px; font-size:.75rem; font-weight:600; text-transform:uppercase; }
+    .status-pending { background:rgba(245,158,11,.15); color:#fbbf24; border:1px solid rgba(245,158,11,.3); }
+    .status-approved { background:rgba(16,185,129,.15); color:#6ee7b7; border:1px solid rgba(16,185,129,.3); }
+    .status-rejected { background:rgba(239,68,68,.15); color:#fca5a5; border:1px solid rgba(239,68,68,.3); }
   </style>
 </head>
 <body>
 <nav class="navbar" role="navigation" aria-label="Main navigation">
   <div class="container nav-inner">
-    <a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a>
+    <a href="/" class="nav-brand">⚛️ PMS <span>Admin</span></a>
     <ul class="nav-links" role="list">
-      <li><a href="/">← Back to Site</a></li>
-      <li><span id="nav-user" style="color:var(--text-muted);font-size:.85rem"></span></li>
+      <li><a href="/">← View Live Site</a></li>
+      <li><a href="/swagger-ui" target="_blank">📖 Swagger API Docs</a></li>
+      <li><span id="nav-user" style="color:var(--text-muted);font-size:.85rem;font-weight:600"></span></li>
       <li><button id="logout-btn" class="btn btn-outline btn-sm" style="display:none">Logout</button></li>
     </ul>
   </div>
 </nav>
 
-<div class="container section">
+<div class="container section" style="min-height:75vh">
   <!-- Login Section -->
   <div id="login-section">
-    <div class="card">
-      <h1 style="font-size:1.5rem;margin-bottom:1.5rem">🔐 Admin Login</h1>
+    <div class="card fade-up">
+      <div style="font-size:2.5rem;margin-bottom:1rem">🔐</div>
+      <h1 style="font-size:1.5rem;margin-bottom:.5rem">Admin Authentication</h1>
       <p style="color:var(--text-muted);font-size:.875rem;margin-bottom:1.5rem">
-        Authentication uses an httpOnly secure cookie. Do not store credentials in localStorage.
+        Sign in to manage society announcements, events, technical posts, ASTM toolkit resources, and member applications.
       </p>
       <form id="login-form" novalidate>
         <div class="form-group">
-          <label class="form-label" for="login-email">Email *</label>
-          <input id="login-email" type="email" class="form-control" required placeholder="admin@pms.pieas.edu.pk" autocomplete="username">
+          <label class="form-label" for="login-email">Administrator Email *</label>
+          <input id="login-email" type="email" class="form-control" required placeholder="admin@pieas.edu.pk" autocomplete="username">
         </div>
         <div class="form-group">
           <label class="form-label" for="login-password">Password *</label>
           <input id="login-password" type="password" class="form-control" required placeholder="••••••••" autocomplete="current-password">
         </div>
         <div id="login-msg"></div>
-        <button type="submit" class="btn btn-primary" style="width:100%;margin-top:.5rem" id="login-submit">Sign In</button>
+        <button type="submit" class="btn btn-primary" style="width:100%;margin-top:.75rem" id="login-submit">Sign In to Console</button>
       </form>
     </div>
   </div>
 
-  <!-- Admin Dashboard (shown after login) -->
+  <!-- Admin Dashboard -->
   <div id="admin-dashboard" style="display:none">
-    <h1 style="margin-bottom:1.5rem">Admin Dashboard</h1>
+    <div class="section-toolbar">
+      <div>
+        <h1 style="font-size:1.75rem;margin-bottom:.25rem">Society Control Center</h1>
+        <p style="color:var(--text-muted);font-size:.875rem">Manage content, portfolios, events, and credentials across the PMS platform.</p>
+      </div>
+      <div id="toolbar-actions"></div>
+    </div>
+
     <div class="admin-nav" role="tablist" aria-label="Admin sections">
       <button class="active" data-section="announcements" role="tab">📢 Announcements</button>
+      <button data-section="stats" role="tab">📊 Site Stats</button>
       <button data-section="events" role="tab">📅 Events</button>
       <button data-section="registrations" role="tab">🎟️ Registrations</button>
-      <button data-section="team" role="tab">👥 Team</button>
-      <button data-section="posts" role="tab">📝 Blog Posts</button>
-      <button data-section="resources" role="tab">📚 Resources</button>
+      <button data-section="team" role="tab">👥 Team &amp; Council</button>
+      <button data-section="posts" role="tab">📝 Technical Posts</button>
+      <button data-section="resources" role="tab">📚 Toolkit &amp; ASTM</button>
       <button data-section="opportunities" role="tab">💼 Opportunities</button>
-      <button data-section="alumni" role="tab">🎓 Alumni</button>
-      <button data-section="projects" role="tab">🔬 Projects</button>
+      <button data-section="alumni" role="tab">🎓 Alumni Directory</button>
+      <button data-section="projects" role="tab">🔬 FYP &amp; Research</button>
+      <button data-section="gallery" role="tab">🖼️ Gallery</button>
       <button data-section="sponsors" role="tab">🤝 Sponsors</button>
-      <button data-section="contacts" role="tab">📬 Contacts</button>
+      <button data-section="faqs" role="tab">❓ FAQs</button>
+      <button data-section="sections" role="tab">🧩 Site Sections</button>
+      <button data-section="membership" role="tab">📋 Membership Apps</button>
+      <button data-section="contacts" role="tab">📬 Contact Messages</button>
       <button data-section="newsletter" role="tab">📧 Newsletter</button>
-      <button data-section="membership" role="tab">📋 Membership</button>
-      <button data-section="upload" role="tab">📎 Upload File</button>
+      <button data-section="upload" role="tab">📎 File Upload</button>
     </div>
-    <div id="admin-content" class="card"></div>
+
+    <div id="admin-content" class="card">
+      <div class="spinner"></div>
+    </div>
   </div>
 </div>
 
+<!-- Schema-Driven Create / Edit Modal -->
+<dialog id="crud-modal" class="modal-dialog">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
+    <h2 id="modal-title" style="font-size:1.35rem;margin:0">Create Record</h2>
+    <button id="modal-cancel-btn" class="btn btn-outline btn-sm" style="padding:.25rem .5rem">✕</button>
+  </div>
+  <form id="crud-form" novalidate>
+    <div id="crud-fields"></div>
+    <div id="crud-msg" style="margin-top:1rem"></div>
+    <div style="display:flex;justify-content:flex-end;gap:.75rem;margin-top:1.5rem">
+      <button type="button" id="modal-cancel-footer-btn" class="btn btn-outline">Cancel</button>
+      <button type="submit" id="modal-save-btn" class="btn btn-primary">Save Changes</button>
+    </div>
+  </form>
+</dialog>
+
 <footer>
-  <div class="container footer-bottom"><p>© 2026 PIEAS Materials Society – Admin Console</p></div>
+  <div class="container footer-bottom">
+    <p>© 2026 PIEAS Materials Society (PMS) • Department of Metallurgy &amp; Materials Engineering (DMME)</p>
+  </div>
 </footer>
 
 <script src="/assets/app.js"></script>
 <script>
-/* ── State ── */
-let adminUser = null;
+let currentTab = 'announcements';
+let currentCache = [];
+let currentEditingId = null;
 
-/* ── Check if already logged in via cookie ── */
+/* ── Schemas for all collections ── */
+const SCHEMAS = {
+  announcements: {
+    title: 'Announcements',
+    api: '/api/admin/announcements',
+    singular: 'Announcement',
+    columns: ['id', 'message', 'priority', 'is_active', 'created_at'],
+    canCreate: true,
+    fields: [
+      { name: 'message', label: 'Message *', type: 'textarea', required: true },
+      { name: 'link_text', label: 'Link Text', type: 'text', placeholder: 'e.g. Read Guidelines →' },
+      { name: 'link_url', label: 'Link URL', type: 'text', placeholder: 'https:// or /events' },
+      { name: 'priority', label: 'Priority', type: 'select', options: ['info', 'warning', 'success'] },
+      { name: 'is_active', label: 'Is Active', type: 'checkbox', default: true }
+    ]
+  },
+  events: {
+    title: 'Events',
+    api: '/api/admin/events',
+    singular: 'Event',
+    columns: ['id', 'title', 'category', 'date', 'speaker_or_organizer', 'is_past'],
+    canCreate: true,
+    fields: [
+      { name: 'title', label: 'Event Title *', type: 'text', required: true },
+      { name: 'category', label: 'Category', type: 'select', options: ['Seminar', 'Workshop', 'Competition', 'Industrial Visit', 'Symposium'] },
+      { name: 'date', label: 'Event Date * (YYYY-MM-DD)', type: 'text', required: true, placeholder: '2026-10-25' },
+      { name: 'time_range', label: 'Time Range', type: 'text', placeholder: 'e.g. 10:00 AM – 1:00 PM' },
+      { name: 'venue', label: 'Venue', type: 'text', placeholder: 'e.g. DMME Block Lecture Hall A' },
+      { name: 'speaker_or_organizer', label: 'Speaker / Organizer', type: 'text', placeholder: 'e.g. Dr. Engr. Asim (NESCOM)' },
+      { name: 'short_description', label: 'Short Description', type: 'textarea' },
+      { name: 'full_summary', label: 'Full Agenda / Summary', type: 'textarea' },
+      { name: 'poster_url', label: 'Poster Image URL', type: 'text', placeholder: 'https:// or /uploads/...' },
+      { name: 'registration_link', label: 'External Registration Link', type: 'text', placeholder: 'Optional external form' },
+      { name: 'is_past', label: 'Mark as Past Event', type: 'checkbox', default: false },
+      { name: 'is_featured', label: 'Feature on Homepage', type: 'checkbox', default: false }
+    ]
+  },
+  registrations: {
+    title: 'Event Registrations',
+    api: '/api/admin/registrations',
+    singular: 'Registration',
+    columns: ['id', 'event_id', 'student_name', 'roll_number', 'batch', 'department', 'email', 'certificate_code', 'created_at'],
+    canCreate: false,
+    canEdit: false
+  },
+  team: {
+    title: 'Team & Council Members',
+    api: '/api/admin/team',
+    singular: 'Member',
+    columns: ['id', 'name', 'role', 'batch', 'tenure_year', 'is_current', 'is_faculty_advisor'],
+    canCreate: true,
+    fields: [
+      { name: 'name', label: 'Full Name *', type: 'text', required: true },
+      { name: 'role', label: 'Role / Designation *', type: 'text', required: true, placeholder: 'e.g. President, General Secretary' },
+      { name: 'role_responsibility', label: 'Key Responsibilities', type: 'text' },
+      { name: 'photo_url', label: 'Photo URL', type: 'text', placeholder: '/uploads/... or https://' },
+      { name: 'batch', label: 'Batch', type: 'text', placeholder: 'e.g. 2022-2026' },
+      { name: 'tenure_year', label: 'Tenure Year *', type: 'text', required: true, placeholder: 'e.g. 2025-2026' },
+      { name: 'is_current', label: 'Current Council Member', type: 'checkbox', default: true },
+      { name: 'is_faculty_advisor', label: 'Faculty Advisor', type: 'checkbox', default: false },
+      { name: 'bio', label: 'Short Bio', type: 'textarea' },
+      { name: 'linkedin_url', label: 'LinkedIn Profile URL', type: 'text' },
+      { name: 'display_order', label: 'Display Order', type: 'number', default: 0 }
+    ]
+  },
+  posts: {
+    title: 'Technical Posts & Articles',
+    api: '/api/admin/posts',
+    singular: 'Post',
+    columns: ['id', 'title', 'category', 'author_name', 'material_formula', 'published_at'],
+    canCreate: true,
+    fields: [
+      { name: 'title', label: 'Article Title *', type: 'text', required: true },
+      { name: 'category', label: 'Category', type: 'select', options: ['Technical', 'Alloy Highlight', 'Characterization', 'Additive Manufacturing', 'Student Research'] },
+      { name: 'excerpt', label: 'Excerpt Summary *', type: 'textarea', required: true },
+      { name: 'body_markdown', label: 'Full Article Markdown *', type: 'textarea', required: true, rows: 10 },
+      { name: 'material_formula', label: 'Chemical / Alloy Formula', type: 'text', placeholder: 'e.g. Zr-1.5Sn-0.2Fe or Inconel 718' },
+      { name: 'crystal_structure', label: 'Crystal Structure', type: 'text', placeholder: 'e.g. HCP (α), FCC (γ)' },
+      { name: 'cover_image_url', label: 'Cover Image URL', type: 'text' },
+      { name: 'author_name', label: 'Author Name', type: 'text', default: 'PIEAS Materials Society' },
+      { name: 'author_role', label: 'Author Title / Batch', type: 'text', placeholder: 'e.g. Technical Head (DMME ''26)' },
+      { name: 'read_time_minutes', label: 'Read Time (Minutes)', type: 'number', default: 5 },
+      { name: 'is_featured', label: 'Feature on Homepage', type: 'checkbox', default: false }
+    ]
+  },
+  resources: {
+    title: 'Toolkit Resources & ASTM Standards',
+    api: '/api/admin/resources',
+    singular: 'Resource',
+    columns: ['id', 'title', 'category', 'software_tag', 'url'],
+    canCreate: true,
+    fields: [
+      { name: 'title', label: 'Resource Title *', type: 'text', required: true },
+      { name: 'category', label: 'Category *', type: 'select', options: ['Standards', 'Software', 'Safety', 'Databases', 'Books', 'Tools'] },
+      { name: 'description', label: 'Description', type: 'textarea' },
+      { name: 'url', label: 'URL / Document Link *', type: 'text', required: true },
+      { name: 'software_tag', label: 'Software / Sub-Tag', type: 'text', placeholder: 'e.g. Thermo-Calc, ASTM E8, ImageJ' }
+    ]
+  },
+  opportunities: {
+    title: 'Opportunities & Scholarships',
+    api: '/api/admin/opportunities',
+    singular: 'Opportunity',
+    columns: ['id', 'title', 'organization', 'opportunity_type', 'deadline', 'is_active'],
+    canCreate: true,
+    fields: [
+      { name: 'title', label: 'Position / Program Title *', type: 'text', required: true },
+      { name: 'organization', label: 'Organization / University *', type: 'text', required: true },
+      { name: 'opportunity_type', label: 'Type *', type: 'select', options: ['Internship', 'Scholarship', 'Job', 'Research', 'Competition'] },
+      { name: 'location', label: 'Location', type: 'text', placeholder: 'e.g. Islamabad, Remote, Germany' },
+      { name: 'deadline', label: 'Application Deadline', type: 'text', placeholder: 'e.g. 2026-11-30' },
+      { name: 'description', label: 'Summary Details', type: 'textarea' },
+      { name: 'apply_url', label: 'Application Link', type: 'text' },
+      { name: 'is_active', label: 'Is Active', type: 'checkbox', default: true }
+    ]
+  },
+  alumni: {
+    title: 'DMME Alumni Directory',
+    api: '/api/admin/alumni',
+    singular: 'Alumnus',
+    columns: ['id', 'name', 'graduating_batch', 'current_role', 'current_organization'],
+    canCreate: true,
+    fields: [
+      { name: 'name', label: 'Full Name *', type: 'text', required: true },
+      { name: 'graduating_batch', label: 'Graduation Batch *', type: 'text', required: true, placeholder: 'e.g. 2018-2022' },
+      { name: 'current_role', label: 'Current Role / Job Title', type: 'text' },
+      { name: 'current_organization', label: 'Organization / Company', type: 'text' },
+      { name: 'industry_sector', label: 'Industry Sector', type: 'text', placeholder: 'e.g. Aerospace, Nuclear, Steel, Semiconductor' },
+      { name: 'linkedin_url', label: 'LinkedIn Profile URL', type: 'text' },
+      { name: 'photo_url', label: 'Photo URL', type: 'text' }
+    ]
+  },
+  projects: {
+    title: 'FYP & Student Projects',
+    api: '/api/admin/projects',
+    singular: 'Project',
+    columns: ['id', 'title', 'project_type', 'batch', 'supervisors'],
+    canCreate: true,
+    fields: [
+      { name: 'title', label: 'Project Title *', type: 'text', required: true },
+      { name: 'project_type', label: 'Project Type', type: 'select', options: ['FYP', 'Graduate Research', 'Term Project', 'Competition'] },
+      { name: 'batch', label: 'Batch *', type: 'text', required: true, placeholder: 'e.g. 2022-2026' },
+      { name: 'students', label: 'Student Investigators', type: 'text', placeholder: 'Names separated by commas' },
+      { name: 'supervisors', label: 'Faculty Supervisors', type: 'text', placeholder: 'Dr. ..., Engr. ...' },
+      { name: 'abstract', label: 'Abstract / Technical Summary', type: 'textarea' },
+      { name: 'paper_or_repo_url', label: 'Paper / Code Repository URL', type: 'text' }
+    ]
+  },
+  gallery: {
+    title: 'Gallery & Micrographs',
+    api: '/api/admin/gallery',
+    singular: 'Gallery Item',
+    columns: ['id', 'image_url', 'caption', 'event_name', 'year'],
+    canCreate: true,
+    fields: [
+      { name: 'image_url', label: 'Image URL *', type: 'text', required: true, placeholder: 'https:// or /uploads/...' },
+      { name: 'caption', label: 'Caption / Micrograph Spec', type: 'text', placeholder: 'e.g. Ti-6Al-4V SLM Microstructure (1000x)' },
+      { name: 'event_name', label: 'Event / Context', type: 'text' },
+      { name: 'year', label: 'Year *', type: 'text', required: true, default: '2026' }
+    ]
+  },
+  sponsors: {
+    title: 'Industry Partners & Sponsors',
+    api: '/api/admin/sponsors',
+    singular: 'Sponsor',
+    columns: ['id', 'name', 'tier', 'since_year', 'website_url'],
+    canCreate: true,
+    fields: [
+      { name: 'name', label: 'Partner / Company Name *', type: 'text', required: true },
+      { name: 'tier', label: 'Partnership Tier', type: 'select', options: ['Platinum', 'Gold', 'Silver', 'Bronze', 'Partner'] },
+      { name: 'logo_url', label: 'Logo URL *', type: 'text', required: true },
+      { name: 'website_url', label: 'Website URL', type: 'text' },
+      { name: 'since_year', label: 'Partner Since (Year)', type: 'text', placeholder: 'e.g. 2024' },
+      { name: 'display_order', label: 'Display Order', type: 'number', default: 0 }
+    ]
+  },
+  faqs: {
+    title: 'Frequently Asked Questions',
+    api: '/api/admin/faqs',
+    singular: 'FAQ',
+    columns: ['id', 'question', 'category', 'display_order'],
+    canCreate: true,
+    fields: [
+      { name: 'question', label: 'Question *', type: 'text', required: true },
+      { name: 'answer', label: 'Answer *', type: 'textarea', required: true },
+      { name: 'category', label: 'Category', type: 'select', options: ['General', 'Membership', 'Events', 'Academic', 'Careers'] },
+      { name: 'display_order', label: 'Display Order', type: 'number', default: 0 }
+    ]
+  },
+  sections: {
+    title: 'Dynamic Site Sections',
+    api: '/api/admin/sections',
+    singular: 'Site Section',
+    columns: ['id', 'section_key', 'title', 'badge', 'updated_at'],
+    canCreate: true,
+    fields: [
+      { name: 'section_key', label: 'Section Key * (Unique Identifier)', type: 'text', required: true, placeholder: 'e.g. home_hero, home_activities' },
+      { name: 'title', label: 'Section Headline *', type: 'text', required: true },
+      { name: 'subtitle', label: 'Subtitle', type: 'text' },
+      { name: 'badge', label: 'Badge Text', type: 'text' },
+      { name: 'content', label: 'Main Content Body *', type: 'textarea', required: true },
+      { name: 'extra_json', label: 'Extra JSON (Cards / Links config)', type: 'textarea', rows: 4, placeholder: 'Valid JSON array or object' }
+    ]
+  },
+  membership: {
+    title: 'Membership Applications',
+    api: '/api/admin/membership',
+    singular: 'Application',
+    columns: ['id', 'full_name', 'roll_number', 'batch', 'department', 'email', 'status', 'created_at'],
+    canCreate: false,
+    canEdit: false
+  },
+  contacts: {
+    title: 'Contact Messages',
+    api: '/api/admin/contacts',
+    singular: 'Message',
+    columns: ['id', 'name', 'email', 'subject', 'message', 'created_at'],
+    canCreate: false,
+    canEdit: false
+  },
+  newsletter: {
+    title: 'Newsletter Subscribers',
+    api: '/api/admin/newsletter',
+    singular: 'Subscriber',
+    columns: ['id', 'email', 'subscribed_at'],
+    canCreate: false,
+    canEdit: false
+  }
+};
+
+/* ── Authentication State ── */
 async function checkAuth() {
   try {
-    // Any admin endpoint will 401 if not authed
-    await PMS.apiFetch('/api/admin/stats');
-    showDashboard(null);
-  } catch(_) {
+    const user = await PMS.apiFetch('/api/auth/me');
+    showDashboard(user);
+  } catch (_) {
     showLogin();
   }
 }
@@ -103,17 +378,19 @@ function showLogin() {
   document.getElementById('login-section').style.display = '';
   document.getElementById('admin-dashboard').style.display = 'none';
   document.getElementById('logout-btn').style.display = 'none';
+  document.getElementById('nav-user').textContent = '';
 }
 
 function showDashboard(user) {
   document.getElementById('login-section').style.display = 'none';
   document.getElementById('admin-dashboard').style.display = '';
   document.getElementById('logout-btn').style.display = '';
-  if (user) document.getElementById('nav-user').textContent = `👤 ${PMS.escHtml(user.name)}`;
-  loadSection('announcements');
+  if (user && user.name) {
+    document.getElementById('nav-user').textContent = `👤 ${user.name}`;
+  }
+  loadSection(currentTab);
 }
 
-/* ── Login ── */
 document.getElementById('login-form').addEventListener('submit', async ev => {
   ev.preventDefault();
   const btn = document.getElementById('login-submit');
@@ -124,119 +401,242 @@ document.getElementById('login-form').addEventListener('submit', async ev => {
       email: document.getElementById('login-email').value,
       password: document.getElementById('login-password').value,
     });
-    adminUser = res;
     showDashboard(res);
-  } catch(e) {
-    PMS.showAlert(msg, e.message || 'Invalid credentials.');
+  } catch (e) {
+    PMS.showAlert(msg, e.message || 'Invalid administrator credentials.');
   } finally {
     PMS.setLoading(btn, false);
   }
 });
 
-/* ── Logout ── */
 document.getElementById('logout-btn').addEventListener('click', async () => {
-  try { await PMS.apiPost('/api/auth/logout', {}); } catch(_) {}
+  try { await PMS.apiPost('/api/auth/logout', {}); } catch (_) {}
   showLogin();
 });
 
-/* ── Section navigation ── */
+/* ── Tab Switcher ── */
 document.querySelectorAll('.admin-nav button').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.admin-nav button').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    loadSection(btn.dataset.section);
+    currentTab = btn.dataset.section;
+    loadSection(currentTab);
   });
 });
 
-/* ── Generic list section renderer ── */
-async function loadSection(name) {
+/* ── Section Loader ── */
+async function loadSection(tab) {
   const content = document.getElementById('admin-content');
+  const toolbar = document.getElementById('toolbar-actions');
   content.innerHTML = '<div class="spinner"></div>';
+  toolbar.innerHTML = '';
 
   try {
-    switch(name) {
-      case 'announcements': await renderList(content, '/api/admin/announcements', 'announcements', ['message','priority','is_active']); break;
-      case 'events':        await renderList(content, '/api/admin/events',        'events',        ['title','date','category','is_past']); break;
-      case 'registrations': await renderList(content, '/api/admin/registrations', 'registrations', ['student_name','event_id','roll_number','batch','department','certificate_code']); break;
-      case 'team':          await renderList(content, '/api/admin/team',           'team',          ['name','role','tenure_year','is_current']); break;
-      case 'posts':         await renderList(content, '/api/admin/posts',          'posts',         ['title','category','author_name','published_at']); break;
-      case 'resources':     await renderList(content, '/api/admin/resources',      'resources',     ['title','category','is_pinned']); break;
-      case 'opportunities': await renderList(content, '/api/admin/opportunities',  'opportunities', ['title','organization','opportunity_type','deadline']); break;
-      case 'alumni':        await renderList(content, '/api/admin/alumni',         'alumni',        ['name','batch','current_position','organization']); break;
-      case 'projects':      await renderList(content, '/api/admin/projects',       'projects',      ['title','batch','project_type']); break;
-      case 'sponsors':      await renderList(content, '/api/admin/sponsors',       'sponsors',      ['name','tier']); break;
-      case 'contacts':      await renderList(content, '/api/admin/contacts',       'contacts',      ['name','email','subject','created_at']); break;
-      case 'newsletter':    await renderList(content, '/api/admin/newsletter',     'newsletter',    ['email','subscribed_at']); break;
-      case 'membership':    await renderList(content, '/api/admin/membership',     'membership',    ['full_name','email','batch','status']); break;
-      case 'upload':        renderUpload(content); break;
+    if (tab === 'stats') {
+      await renderStatsEditor(content);
+      return;
     }
-  } catch(e) {
-    if (e.message.includes('401') || e.message.toLowerCase().includes('unauthorized')) {
+    if (tab === 'upload') {
+      renderUploadTool(content);
+      return;
+    }
+
+    const schema = SCHEMAS[tab];
+    if (!schema) return;
+
+    if (schema.canCreate) {
+      toolbar.innerHTML = `<button class="btn btn-primary btn-sm" id="btn-create-record">＋ New ${PMS.escHtml(schema.singular)}</button>`;
+      document.getElementById('btn-create-record').onclick = () => openCreateModal(tab);
+    }
+
+    const data = await PMS.apiFetch(schema.api);
+    currentCache = data;
+
+    if (!data.length) {
+      content.innerHTML = `<p style="color:var(--text-muted);padding:1.5rem 0">No records found in ${PMS.escHtml(schema.title)}.</p>`;
+      return;
+    }
+
+    const ths = schema.columns.map(c => `<th>${PMS.escHtml(c.replace(/_/g, ' '))}</th>`).join('');
+    const rows = data.map(item => {
+      const tds = schema.columns.map(c => {
+        let val = item[c];
+        if (c === 'status' && tab === 'membership') {
+          const s = String(val).toLowerCase();
+          const cls = s === 'approved' ? 'status-approved' : (s === 'rejected' ? 'status-rejected' : 'status-pending');
+          return `<td><span class="status-badge ${cls}">${PMS.escHtml(String(val))}</span></td>`;
+        }
+        if (typeof val === 'boolean') return `<td>${val ? '✅ Yes' : '—'}</td>`;
+        if (val === null || val === undefined) return `<td>—</td>`;
+        const str = String(val);
+        const display = str.length > 50 ? str.slice(0, 48) + '…' : str;
+        return `<td>${PMS.escHtml(display)}</td>`;
+      }).join('');
+
+      let actions = '';
+      if (tab === 'membership') {
+        actions = `
+          <button class="action-btn btn-success" data-action="status" data-id="${item.id}" data-status="Approved">Approve</button>
+          <button class="action-btn btn-danger" data-action="status" data-id="${item.id}" data-status="Rejected">Reject</button>
+          <button class="action-btn" data-action="status" data-id="${item.id}" data-status="Pending">Reset</button>
+          <button class="action-btn btn-danger" data-action="delete" data-id="${item.id}">Delete</button>
+        `;
+      } else {
+        if (schema.canEdit !== false) {
+          actions += `<button class="action-btn btn-primary" data-action="edit" data-id="${item.id}">Edit</button>`;
+        }
+        actions += `<button class="action-btn btn-danger" data-action="delete" data-id="${item.id}">Delete</button>`;
+      }
+
+      return `<tr>${tds}<td><div style="display:flex;flex-wrap:nowrap">${actions}</div></td></tr>`;
+    }).join('');
+
+    content.innerHTML = `
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr>${ths}<th>Actions</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  } catch (err) {
+    if (err.message.includes('401') || err.message.toLowerCase().includes('unauthorized')) {
       showLogin();
     } else {
-      content.innerHTML = `<div class="alert alert-error">${PMS.escHtml(e.message)}</div>`;
+      content.innerHTML = `<div class="alert alert-error">Error loading records: ${PMS.escHtml(err.message)}</div>`;
     }
   }
 }
 
-async function renderList(container, apiPath, endpointName, columns) {
-  const data = await PMS.apiFetch(apiPath);
-  if (!data.length) { container.innerHTML = '<p style="color:var(--text-muted)">No records found.</p>'; return; }
-  const headers = columns.map(c => `<th>${c.replace(/_/g,' ')}</th>`).join('');
-  const rows = data.map(row => {
-    const cells = columns.map(c => {
-      let val = row[c];
-      if (typeof val === 'boolean') val = val ? '✅' : '—';
-      return `<td>${PMS.escHtml(String(val ?? '—'))}</td>`;
-    }).join('');
-    return `<tr>${cells}<td><button class="delete-btn" onclick="deleteItem('${apiPath}/${row.id}','${endpointName}')">Delete</button></td></tr>`;
-  }).join('');
-  container.innerHTML = `
-    <div style="overflow-x:auto">
-      <table><thead><tr>${headers}<th>Actions</th></tr></thead><tbody>${rows}</tbody></table>
-    </div>`;
-}
+/* ── Event Delegation for Table Action Buttons ── */
+document.getElementById('admin-content').addEventListener('click', async ev => {
+  const btn = ev.target.closest('[data-action]');
+  if (!btn) return;
+  const action = btn.dataset.action;
+  const id = btn.dataset.id;
+  const schema = SCHEMAS[currentTab];
 
-async function deleteItem(path, sectionName) {
-  if (!confirm('Delete this record?')) return;
-  try {
-    await PMS.apiDelete(path);
-    loadSection(sectionName);
-  } catch(e) {
-    alert('Delete failed: ' + e.message);
+  if (action === 'delete') {
+    if (!confirm('Are you sure you want to permanently delete this record?')) return;
+    try {
+      await PMS.apiDelete(`${schema.api}/${id}`);
+      loadSection(currentTab);
+    } catch (err) {
+      alert('Delete failed: ' + err.message);
+    }
+  } else if (action === 'edit') {
+    openEditModal(currentTab, id);
+  } else if (action === 'status') {
+    const status = btn.dataset.status;
+    try {
+      await PMS.apiPut(`/api/admin/membership/${id}`, { status });
+      loadSection(currentTab);
+    } catch (err) {
+      alert('Status update failed: ' + err.message);
+    }
   }
+});
+
+/* ── Site Stats Editor ── */
+async function renderStatsEditor(container) {
+  const stats = await PMS.apiFetch('/api/admin/stats');
+  container.innerHTML = `
+    <h2 style="font-size:1.25rem;margin-bottom:.5rem">Edit Key Site Statistics &amp; Society Details</h2>
+    <p style="color:var(--text-muted);font-size:.875rem;margin-bottom:1.5rem">These metrics power the live counter strip and contact info on the homepage.</p>
+    <form id="stats-form">
+      <div class="grid grid-2" style="gap:1rem">
+        <div class="form-group">
+          <label class="form-label" for="stat-members">Active Members Count</label>
+          <input id="stat-members" type="number" class="form-control" value="${stats.active_members || 0}">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="stat-events">Total Events Held</label>
+          <input id="stat-events" type="number" class="form-control" value="${stats.events_held || 0}">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="stat-years">Years Active</label>
+          <input id="stat-years" type="number" class="form-control" value="${stats.years_active || 0}">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="stat-partners">Industrial Partners Count</label>
+          <input id="stat-partners" type="number" class="form-control" value="${stats.industrial_partners || 0}">
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label" for="stat-pdf">Constitution PDF URL</label>
+          <input id="stat-pdf" type="text" class="form-control" value="${PMS.escHtml(stats.constitution_pdf_url || '')}">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="stat-loc">Office Location</label>
+          <input id="stat-loc" type="text" class="form-control" value="${PMS.escHtml(stats.office_location || '')}">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="stat-email">Official Contact Email</label>
+          <input id="stat-email" type="email" class="form-control" value="${PMS.escHtml(stats.contact_email || '')}">
+        </div>
+      </div>
+      <div id="stats-msg" style="margin-top:1rem"></div>
+      <button type="submit" class="btn btn-primary" style="margin-top:1rem" id="stats-save-btn">Save Statistics</button>
+    </form>
+  `;
+
+  document.getElementById('stats-form').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const btn = document.getElementById('stats-save-btn');
+    const msg = document.getElementById('stats-msg');
+    PMS.setLoading(btn, true);
+    try {
+      await PMS.apiPut('/api/admin/stats', {
+        active_members: parseInt(document.getElementById('stat-members').value, 10) || 0,
+        events_held: parseInt(document.getElementById('stat-events').value, 10) || 0,
+        years_active: parseInt(document.getElementById('stat-years').value, 10) || 0,
+        industrial_partners: parseInt(document.getElementById('stat-partners').value, 10) || 0,
+        constitution_pdf_url: document.getElementById('stat-pdf').value.trim() || null,
+        office_location: document.getElementById('stat-loc').value.trim() || null,
+        contact_email: document.getElementById('stat-email').value.trim() || null,
+      });
+      PMS.showAlert(msg, '✅ Site statistics updated successfully!', 'success');
+    } catch (e) {
+      PMS.showAlert(msg, e.message || 'Failed to update stats.');
+    } finally {
+      PMS.setLoading(btn, false);
+    }
+  });
 }
 
-function renderUpload(container) {
+/* ── Upload Tool ── */
+function renderUploadTool(container) {
   container.innerHTML = `
-    <h2 style="margin-bottom:1.25rem">Upload File</h2>
-    <p style="color:var(--text-muted);font-size:.875rem;margin-bottom:1.25rem">
-      Allowed: PNG, JPEG, WebP, PDF, plain text. Max 20 MB. Files are validated by magic bytes.
+    <h2 style="font-size:1.25rem;margin-bottom:.5rem">Upload Static Media Asset</h2>
+    <p style="color:var(--text-muted);font-size:.875rem;margin-bottom:1.5rem">
+      Allowed formats: PNG, JPEG, WebP, PDF, text. Maximum 20 MB. Files are stored in <code>/uploads/</code> with strict non-executable permissions.
     </p>
     <form id="upload-form">
       <div class="form-group">
         <label class="form-label" for="upload-file">Select File</label>
         <input id="upload-file" type="file" class="form-control" accept="image/*,application/pdf,text/plain" required>
       </div>
-      <div id="upload-msg"></div>
-      <button type="submit" class="btn btn-primary" id="upload-submit">Upload</button>
-    </form>`;
+      <div id="upload-msg" style="margin-top:1rem"></div>
+      <button type="submit" class="btn btn-primary" style="margin-top:1rem" id="upload-submit">Upload Asset</button>
+    </form>
+  `;
 
   document.getElementById('upload-form').addEventListener('submit', async ev => {
     ev.preventDefault();
     const btn = document.getElementById('upload-submit');
     const msg = document.getElementById('upload-msg');
     const file = document.getElementById('upload-file').files[0];
-    if (!file) { PMS.showAlert(msg, 'Please select a file.'); return; }
+    if (!file) return;
     PMS.setLoading(btn, true);
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const res = await fetch('/api/admin/upload', { method:'POST', credentials:'include', body:fd });
-      if (!res.ok) { const b = await res.json(); throw new Error(b.error || 'Upload failed'); }
+      const res = await fetch('/api/admin/upload', { method: 'POST', credentials: 'include', body: fd });
+      if (!res.ok) {
+        const b = await res.json();
+        throw new Error(b.error || 'Upload rejected');
+      }
       const data = await res.json();
-      PMS.showAlert(msg, `✅ Uploaded! URL: <a href="${PMS.escHtml(data.url)}" target="_blank">${PMS.escHtml(data.url)}</a>`, 'success', true);
-    } catch(e) {
+      PMS.showAlert(msg, `✅ Asset uploaded: <a href="${PMS.safeUrl(data.url)}" target="_blank" style="color:var(--primary-light);font-weight:600">${PMS.escHtml(data.url)}</a>`, 'success', true);
+    } catch (e) {
       PMS.showAlert(msg, e.message);
     } finally {
       PMS.setLoading(btn, false);
@@ -244,6 +644,102 @@ function renderUpload(container) {
   });
 }
 
+/* ── Create & Edit Modal Operations ── */
+const modal = document.getElementById('crud-modal');
+document.getElementById('modal-cancel-btn').onclick = () => modal.close();
+document.getElementById('modal-cancel-footer-btn').onclick = () => modal.close();
+
+function openCreateModal(tab) {
+  const schema = SCHEMAS[tab];
+  currentEditingId = null;
+  document.getElementById('modal-title').textContent = `New ${schema.singular}`;
+  document.getElementById('crud-msg').innerHTML = '';
+  renderFields(schema.fields, {});
+  modal.showModal();
+}
+
+function openEditModal(tab, id) {
+  const schema = SCHEMAS[tab];
+  const item = currentCache.find(x => String(x.id) === String(id));
+  if (!item) return;
+  currentEditingId = id;
+  document.getElementById('modal-title').textContent = `Edit ${schema.singular} (#${id})`;
+  document.getElementById('crud-msg').innerHTML = '';
+  renderFields(schema.fields, item);
+  modal.showModal();
+}
+
+function renderFields(fields, currentData) {
+  const container = document.getElementById('crud-fields');
+  container.innerHTML = fields.map(f => {
+    const val = currentData[f.name] !== undefined ? currentData[f.name] : (f.default !== undefined ? f.default : '');
+    if (f.type === 'textarea') {
+      return `
+        <div class="form-group">
+          <label class="form-label" for="f-${f.name}">${PMS.escHtml(f.label)}</label>
+          <textarea id="f-${f.name}" class="form-control" rows="${f.rows || 3}" ${f.required ? 'required' : ''}>${PMS.escHtml(val)}</textarea>
+        </div>`;
+    }
+    if (f.type === 'checkbox') {
+      return `
+        <div class="form-group" style="display:flex;align-items:center;gap:.75rem">
+          <input type="checkbox" id="f-${f.name}" ${val ? 'checked' : ''} style="width:18px;height:18px">
+          <label class="form-label" for="f-${f.name}" style="margin:0;cursor:pointer">${PMS.escHtml(f.label)}</label>
+        </div>`;
+    }
+    if (f.type === 'select') {
+      const opts = f.options.map(o => `<option value="${PMS.escHtml(o)}" ${String(val) === String(o) ? 'selected' : ''}>${PMS.escHtml(o)}</option>`).join('');
+      return `
+        <div class="form-group">
+          <label class="form-label" for="f-${f.name}">${PMS.escHtml(f.label)}</label>
+          <select id="f-${f.name}" class="form-control">${opts}</select>
+        </div>`;
+    }
+    return `
+      <div class="form-group">
+        <label class="form-label" for="f-${f.name}">${PMS.escHtml(f.label)}</label>
+        <input type="${f.type || 'text'}" id="f-${f.name}" class="form-control" value="${PMS.escHtml(val)}" placeholder="${PMS.escHtml(f.placeholder || '')}" ${f.required ? 'required' : ''}>
+      </div>`;
+  }).join('');
+}
+
+document.getElementById('crud-form').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const btn = document.getElementById('modal-save-btn');
+  const msg = document.getElementById('crud-msg');
+  const schema = SCHEMAS[currentTab];
+  if (!schema) return;
+
+  const payload = {};
+  for (const f of schema.fields) {
+    const el = document.getElementById(`f-${f.name}`);
+    if (!el) continue;
+    if (f.type === 'checkbox') {
+      payload[f.name] = el.checked;
+    } else if (f.type === 'number') {
+      payload[f.name] = el.value === '' ? null : parseInt(el.value, 10);
+    } else {
+      payload[f.name] = el.value.trim() === '' ? null : el.value.trim();
+    }
+  }
+
+  PMS.setLoading(btn, true);
+  try {
+    if (currentEditingId) {
+      await PMS.apiPut(`${schema.api}/${currentEditingId}`, payload);
+    } else {
+      await PMS.apiPost(schema.api, payload);
+    }
+    modal.close();
+    loadSection(currentTab);
+  } catch (err) {
+    PMS.showAlert(msg, err.message || 'Operation failed.');
+  } finally {
+    PMS.setLoading(btn, false);
+  }
+});
+
+/* Initialize */
 checkAuth();
 </script>
 </body>
