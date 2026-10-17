@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sponsors – PIEAS Materials Society</title>
+  <meta name="description" content="Partners and sponsors of PIEAS Materials Society – industry leaders supporting materials engineering education.">
+  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<div id="announcement-banner" class="banner" style="display:none"></div>
+<nav class="navbar"><div class="container nav-inner"><a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a><button class="hamburger" aria-label="Toggle navigation" aria-expanded="false"><span></span><span></span><span></span></button><ul class="nav-links" role="list"><li><a href="/">Home</a></li><li><a href="/about">About</a></li><li><a href="/team">Team</a></li><li><a href="/events">Events</a></li><li><a href="/blog">Blog</a></li><li><a href="/resources">Resources</a></li><li><a href="/opportunities">Opportunities</a></li><li><a href="/alumni">Alumni</a></li><li><a href="/projects">Projects</a></li><li><a href="/gallery">Gallery</a></li><li><a href="/sponsors">Sponsors</a></li><li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li></ul></div></nav>
+<section class="hero" style="padding:3.5rem 0 2.5rem"><div class="container hero-content"><span class="badge">Industry Partners</span><h1 class="fade-up">Our Sponsors</h1><p class="hero-desc fade-up fade-up-delay-1">Industry leaders and organizations supporting materials science education at PIEAS.</p></div></section>
+<section class="section"><div class="container"><div id="sponsors-grid" class="grid grid-3"><div class="spinner"></div></div><div style="margin-top:3rem;text-align:center"><h2 style="margin-bottom:1rem">Become a Sponsor</h2><p style="color:var(--text-muted);max-width:50ch;margin:0 auto 1.5rem">Connect with DMME students and support the next generation of materials engineers.</p><a href="/join" class="btn btn-primary">Partner with PMS →</a></div></div></section>
+<footer><div class="container footer-bottom"><p>© 2026 PIEAS Materials Society</p></div></footer>
+<script src="/assets/app.js"></script>
+<script>
+(async () => {
+  const grid = document.getElementById('sponsors-grid');
+  const tierColor = { Platinum:'#e5e7eb', Gold:'#fbbf24', Silver:'#94a3b8', Partner:'var(--primary-light)' };
+  try {
+    const sponsors = await PMS.apiFetch('/api/sponsors');
+    grid.innerHTML = sponsors.length ? sponsors.map(s => `
+      <article class="card fade-up" style="text-align:center">
+        ${s.logo_url ? `<img src="${PMS.escHtml(s.logo_url)}" alt="${PMS.escHtml(s.name)}" style="max-height:80px;max-width:180px;margin:0 auto 1rem;object-fit:contain">` : `<div style="font-size:2.5rem;margin-bottom:.75rem">🤝</div>`}
+        <h2 style="font-size:1rem;margin-bottom:.5rem">${PMS.escHtml(s.name)}</h2>
+        <span class="badge" style="color:${tierColor[s.tier]||'var(--text-muted)'}">${PMS.escHtml(s.tier)}</span>
+        ${s.website_url ? `<br><a href="${PMS.escHtml(s.website_url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="margin-top:.75rem">Visit Website ↗</a>` : ''}
+      </article>`).join('') : '<p style="color:var(--text-muted);grid-column:1/-1">No sponsors listed.</p>';
+  } catch(e) { grid.innerHTML = '<p style="color:var(--danger)">Could not load sponsors.</p>'; }
+})();
+</script>
+</body></html>

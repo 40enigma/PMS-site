@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Join PMS – PIEAS Materials Society</title>
+  <meta name="description" content="Apply to join PIEAS Materials Society and become part of the DMME student community.">
+  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<div id="announcement-banner" class="banner" style="display:none"></div>
+<nav class="navbar"><div class="container nav-inner"><a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a><button class="hamburger" aria-label="Toggle navigation" aria-expanded="false"><span></span><span></span><span></span></button><ul class="nav-links" role="list"><li><a href="/">Home</a></li><li><a href="/about">About</a></li><li><a href="/team">Team</a></li><li><a href="/events">Events</a></li><li><a href="/blog">Blog</a></li><li><a href="/resources">Resources</a></li><li><a href="/opportunities">Opportunities</a></li><li><a href="/alumni">Alumni</a></li><li><a href="/projects">Projects</a></li><li><a href="/gallery">Gallery</a></li><li><a href="/sponsors">Sponsors</a></li><li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li></ul></div></nav>
+<section class="hero" style="padding:3.5rem 0 2.5rem"><div class="container hero-content"><span class="badge">Membership</span><h1 class="fade-up">Join PMS</h1><p class="hero-desc fade-up fade-up-delay-1">Become a member of PIEAS Materials Society. Membership is completely free and open to all PIEAS students.</p></div></section>
+<section class="section"><div class="container" style="max-width:680px">
+  <div class="card">
+    <h2 style="margin-bottom:1.5rem">Membership Application</h2>
+    <form id="join-form" novalidate>
+      <div class="form-group"><label class="form-label" for="join-name">Full Name *</label><input id="join-name" class="form-control" required placeholder="Your full name"></div>
+      <div class="form-group"><label class="form-label" for="join-roll">Roll Number *</label><input id="join-roll" class="form-control" required placeholder="e.g. 2022-DMME-01"></div>
+      <div class="form-group"><label class="form-label" for="join-batch">Batch *</label><input id="join-batch" class="form-control" required placeholder="e.g. 2022"></div>
+      <div class="form-group"><label class="form-label" for="join-dept">Department *</label><input id="join-dept" class="form-control" required placeholder="e.g. DMME, DME, DPAM"></div>
+      <div class="form-group"><label class="form-label" for="join-email">Email *</label><input id="join-email" type="email" class="form-control" required placeholder="student@pieas.edu.pk"></div>
+      <div class="form-group"><label class="form-label" for="join-phone">Phone</label><input id="join-phone" class="form-control" placeholder="Optional"></div>
+      <div class="form-group"><label class="form-label" for="join-interests">Areas of Interest</label><textarea id="join-interests" class="form-control" placeholder="Materials characterization, welding, computational, etc."></textarea></div>
+      <div class="form-group"><label class="form-label" for="join-why">Why do you want to join PMS?</label><textarea id="join-why" class="form-control" placeholder="Tell us your motivation..."></textarea></div>
+      <div id="join-msg"></div>
+      <button type="submit" class="btn btn-primary" style="width:100%;margin-top:.5rem" id="join-submit">Submit Application</button>
+    </form>
+  </div>
+  <div class="card" style="margin-top:2rem">
+    <h2 style="margin-bottom:1.5rem">Contact PMS</h2>
+    <p style="color:var(--text-muted);font-size:.875rem;margin-bottom:1.5rem">
+      Have a question for the PMS executive council, workshop suggestions, or collaboration inquiries? Send us a message.
+    </p>
+    <form id="contact-form" novalidate>
+      <div class="form-group"><label class="form-label" for="contact-name">Name *</label><input id="contact-name" class="form-control" required placeholder="Your full name"></div>
+      <div class="form-group"><label class="form-label" for="contact-email">Email *</label><input id="contact-email" type="email" class="form-control" required placeholder="your@email.com"></div>
+      <div class="form-group"><label class="form-label" for="contact-subject">Subject</label><input id="contact-subject" class="form-control" placeholder="Inquiry subject"></div>
+      <div class="form-group"><label class="form-label" for="contact-message">Message *</label><textarea id="contact-message" class="form-control" required placeholder="Your message..."></textarea></div>
+      <div id="contact-msg"></div>
+      <button type="submit" class="btn btn-primary" style="width:100%;margin-top:.5rem" id="contact-submit">Send Message</button>
+    </form>
+  </div>
+</div></section>
+<footer><div class="container footer-bottom"><p>© 2026 PIEAS Materials Society</p></div></footer>
+<script src="/assets/app.js"></script>
+<script>
+document.getElementById('join-form').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const btn = document.getElementById('join-submit');
+  const msg = document.getElementById('join-msg');
+  PMS.setLoading(btn, true);
+  try {
+    await PMS.apiPost('/api/membership', {
+      full_name:   document.getElementById('join-name').value,
+      roll_number: document.getElementById('join-roll').value,
+      batch:       document.getElementById('join-batch').value,
+      department:  document.getElementById('join-dept').value,
+      email:       document.getElementById('join-email').value,
+      phone:       document.getElementById('join-phone').value || null,
+      interests:   document.getElementById('join-interests').value || null,
+      why_join:    document.getElementById('join-why').value || null,
+    });
+    PMS.showAlert(msg, '🎉 Application submitted! We will review it shortly.', 'success');
+    document.getElementById('join-form').reset();
+  } catch(e) {
+    PMS.showAlert(msg, e.message || 'Submission failed. Please try again.');
+  } finally {
+    PMS.setLoading(btn, false);
+  }
+});
+
+document.getElementById('contact-form').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const btn = document.getElementById('contact-submit');
+  const msg = document.getElementById('contact-msg');
+  PMS.setLoading(btn, true);
+  try {
+    await PMS.apiPost('/api/contact', {
+      name:    document.getElementById('contact-name').value,
+      email:   document.getElementById('contact-email').value,
+      subject: document.getElementById('contact-subject').value || null,
+      message: document.getElementById('contact-message').value,
+    });
+    PMS.showAlert(msg, '✉️ Message sent! We will get back to you soon.', 'success');
+    document.getElementById('contact-form').reset();
+  } catch(e) {
+    PMS.showAlert(msg, e.message || 'Message could not be sent. Please try again.');
+  } finally {
+    PMS.setLoading(btn, false);
+  }
+});
+</script>
+</body></html>

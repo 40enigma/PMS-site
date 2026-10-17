@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Opportunities – PIEAS Materials Society</title>
+  <meta name="description" content="Internships, scholarships, conferences, and research positions for DMME students at PIEAS.">
+  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<div id="announcement-banner" class="banner" style="display:none"></div>
+<nav class="navbar"><div class="container nav-inner"><a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a><button class="hamburger" aria-label="Toggle navigation" aria-expanded="false"><span></span><span></span><span></span></button><ul class="nav-links" role="list"><li><a href="/">Home</a></li><li><a href="/about">About</a></li><li><a href="/team">Team</a></li><li><a href="/events">Events</a></li><li><a href="/blog">Blog</a></li><li><a href="/resources">Resources</a></li><li><a href="/opportunities">Opportunities</a></li><li><a href="/alumni">Alumni</a></li><li><a href="/projects">Projects</a></li><li><a href="/gallery">Gallery</a></li><li><a href="/sponsors">Sponsors</a></li><li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li></ul></div></nav>
+<section class="hero" style="padding:3.5rem 0 2.5rem"><div class="container hero-content"><span class="badge">Career &amp; Research</span><h1 class="fade-up">Opportunities</h1><p class="hero-desc fade-up fade-up-delay-1">Internships, scholarships, research positions, and conferences curated for DMME students.</p></div></section>
+<section class="section"><div class="container"><div id="opps-grid" class="grid grid-2"><div class="spinner"></div></div></div></section>
+<footer><div class="container footer-bottom"><p>© 2026 PIEAS Materials Society</p></div></footer>
+<script src="/assets/app.js"></script>
+<script>
+(async () => {
+  const grid = document.getElementById('opps-grid');
+  try {
+    const opps = await PMS.apiFetch('/api/opportunities');
+    grid.innerHTML = opps.length ? opps.map(o => `
+      <article class="card fade-up">
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem"><span class="badge">${PMS.escHtml(o.opportunity_type)}</span>${o.deadline ? `<span class="badge badge-accent">⏰ ${PMS.escHtml(o.deadline)}</span>` : ''}</div>
+        <h2 style="font-size:1.1rem;margin-bottom:.35rem">${PMS.escHtml(o.title)}</h2>
+        <p style="color:var(--primary-light);font-size:.875rem;font-weight:600;margin-bottom:.5rem">${PMS.escHtml(o.organization)}</p>
+        ${o.location ? `<p style="color:var(--text-dim);font-size:.8rem;margin-bottom:.5rem">📍 ${PMS.escHtml(o.location)}</p>` : ''}
+        <p style="color:var(--text-muted);font-size:.875rem;margin-bottom:.75rem">${PMS.escHtml(o.description || '')}</p>
+        ${o.posted_by_alumnus ? `<p style="font-size:.78rem;color:var(--text-dim);margin-bottom:.75rem">Shared by: ${PMS.escHtml(o.posted_by_alumnus)}</p>` : ''}
+        ${o.apply_url ? `<a href="${PMS.escHtml(o.apply_url)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">Apply Now ↗</a>` : ''}
+      </article>`).join('') : '<p style="color:var(--text-muted);grid-column:1/-1">No opportunities listed.</p>';
+  } catch(e) { grid.innerHTML = '<p style="color:var(--danger)">Could not load opportunities.</p>'; }
+})();
+</script>
+</body></html>

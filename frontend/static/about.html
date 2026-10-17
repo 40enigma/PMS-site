@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>About – PIEAS Materials Society</title>
+  <meta name="description" content="Learn about PMS PIEAS, our mission, vision, and the Department of Metallurgy & Materials Engineering at PIEAS.">
+  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<div id="announcement-banner" class="banner" style="display:none"></div>
+<nav class="navbar" role="navigation" aria-label="Main navigation">
+  <div class="container nav-inner">
+    <a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a>
+    <button class="hamburger" aria-label="Toggle navigation" aria-expanded="false"><span></span><span></span><span></span></button>
+    <ul class="nav-links" role="list">
+      <li><a href="/">Home</a></li><li><a href="/about">About</a></li><li><a href="/team">Team</a></li>
+      <li><a href="/events">Events</a></li><li><a href="/blog">Blog</a></li><li><a href="/resources">Resources</a></li>
+      <li><a href="/opportunities">Opportunities</a></li><li><a href="/alumni">Alumni</a></li>
+      <li><a href="/projects">Projects</a></li><li><a href="/gallery">Gallery</a></li><li><a href="/sponsors">Sponsors</a></li>
+      <li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li>
+    </ul>
+  </div>
+</nav>
+<section class="hero" style="padding:3.5rem 0 2.5rem">
+  <div class="container hero-content">
+    <span class="badge">About PMS</span>
+    <h1 class="fade-up">About PIEAS Materials Society</h1>
+    <p class="hero-desc fade-up fade-up-delay-1">Bridging academic metallurgical theory with practical industry applications since our founding at PIEAS.</p>
+  </div>
+</section>
+<section class="section">
+  <div class="container">
+    <div id="sections-content" class="grid grid-3"><div class="spinner"></div></div>
+  </div>
+</section>
+<footer><div class="container footer-bottom"><p>© 2026 PIEAS Materials Society</p></div></footer>
+<script src="/assets/app.js"></script>
+<script>
+(async () => {
+  const container = document.getElementById('sections-content');
+  try {
+    const secs = await PMS.apiFetch('/api/sections');
+    const aboutSecs = secs.filter(s => s.section_key.startsWith('about'));
+    container.innerHTML = aboutSecs.length
+      ? aboutSecs.map(s => `
+        <div class="card fade-up">
+          <span class="badge" style="margin-bottom:.75rem">${PMS.escHtml(s.badge || s.section_key)}</span>
+          <h2 style="font-size:1.3rem;margin-bottom:.5rem">${PMS.escHtml(s.title)}</h2>
+          ${s.subtitle ? `<p style="color:var(--primary-light);font-weight:600;margin-bottom:.75rem">${PMS.escHtml(s.subtitle)}</p>` : ''}
+          <p style="color:var(--text-muted)">${PMS.escHtml(s.content)}</p>
+        </div>`).join('')
+      : '<p style="color:var(--text-muted)">About information not available.</p>';
+  } catch(e) { container.innerHTML = '<p style="color:var(--danger)">Could not load content.</p>'; }
+})();
+</script>
+</body></html>

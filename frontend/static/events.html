@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Events – PIEAS Materials Society</title>
+  <meta name="description" content="Browse upcoming and past events organized by PMS PIEAS – seminars, workshops, competitions, industrial visits, and alumni talks.">
+  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<div id="announcement-banner" class="banner" style="display:none"></div>
+<nav class="navbar" role="navigation" aria-label="Main navigation">
+  <div class="container nav-inner">
+    <a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a>
+    <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false"><span></span><span></span><span></span></button>
+    <ul class="nav-links" id="nav-links" role="list">
+      <li><a href="/">Home</a></li><li><a href="/about">About</a></li><li><a href="/team">Team</a></li>
+      <li><a href="/events">Events</a></li><li><a href="/blog">Blog</a></li><li><a href="/resources">Resources</a></li>
+      <li><a href="/opportunities">Opportunities</a></li><li><a href="/alumni">Alumni</a></li>
+      <li><a href="/projects">Projects</a></li><li><a href="/gallery">Gallery</a></li><li><a href="/sponsors">Sponsors</a></li>
+      <li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li>
+    </ul>
+  </div>
+</nav>
+
+<section class="hero" style="padding:3.5rem 0 2.5rem" aria-labelledby="page-title">
+  <div class="container hero-content">
+    <span class="badge">Society Events</span>
+    <h1 id="page-title" class="fade-up">Events &amp; Programs</h1>
+    <p class="hero-desc fade-up fade-up-delay-1">Seminars, workshops, competitions, and industrial visits organized by PMS PIEAS.</p>
+    <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1.25rem">
+      <button class="btn btn-outline btn-sm filter-btn active" data-filter="" id="filter-all">All</button>
+      <button class="btn btn-outline btn-sm filter-btn" data-filter="false" id="filter-upcoming">Upcoming</button>
+      <button class="btn btn-outline btn-sm filter-btn" data-filter="true" id="filter-past">Past</button>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div id="events-grid" class="grid grid-3"><div class="spinner"></div></div>
+  </div>
+</section>
+
+<!-- Certificate Verification Section -->
+<section class="section" style="background:rgba(255,255,255,.01);border-top:1px solid var(--border)" aria-labelledby="verify-heading">
+  <div class="container" style="max-width:560px;text-align:center">
+    <span class="badge">Digital Credentials</span>
+    <h2 id="verify-heading" style="margin:.75rem 0">Verify Participation Certificate</h2>
+    <p style="color:var(--text-muted);margin-bottom:1.5rem">Enter your unique certificate code (e.g. PMS-1-XXXX) to authenticate event participation.</p>
+    <form id="verify-form" novalidate>
+      <div style="display:flex;gap:.75rem;flex-wrap:wrap;justify-content:center">
+        <input id="verify-code" class="form-control" placeholder="PMS-1-XXXXXXXX" required style="flex:1;min-width:200px" aria-label="Certificate Code">
+        <button type="submit" class="btn btn-primary" id="verify-submit">Verify</button>
+      </div>
+      <div id="verify-msg" style="margin-top:1rem"></div>
+    </form>
+  </div>
+</section>
+
+<!-- Event Registration Modal -->
+<dialog id="reg-modal" style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);color:var(--text);max-width:520px;width:90%;padding:2rem">
+  <h2 style="margin-bottom:1.25rem">Register for Event</h2>
+  <form id="reg-form" novalidate>
+    <input type="hidden" id="reg-event-id">
+    <div class="form-group"><label class="form-label" for="reg-name">Full Name *</label><input id="reg-name" class="form-control" required placeholder="Your full name"></div>
+    <div class="form-group"><label class="form-label" for="reg-roll">Roll Number *</label><input id="reg-roll" class="form-control" required placeholder="e.g. 2022-DMME-01"></div>
+    <div class="form-group"><label class="form-label" for="reg-batch">Batch *</label><input id="reg-batch" class="form-control" required placeholder="e.g. 2022"></div>
+    <div class="form-group"><label class="form-label" for="reg-dept">Department *</label><input id="reg-dept" class="form-control" required placeholder="e.g. DMME"></div>
+    <div class="form-group"><label class="form-label" for="reg-email">Email *</label><input id="reg-email" type="email" class="form-control" required placeholder="student@pieas.edu.pk"></div>
+    <div class="form-group"><label class="form-label" for="reg-phone">Phone</label><input id="reg-phone" class="form-control" placeholder="Optional"></div>
+    <div id="reg-msg"></div>
+    <div style="display:flex;gap:.75rem;margin-top:1rem">
+      <button type="submit" class="btn btn-primary" id="reg-submit">Register</button>
+      <button type="button" class="btn btn-outline" id="reg-close">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
+<footer>
+  <div class="container footer-bottom"><p>© 2026 PIEAS Materials Society (PMS)</p></div>
+</footer>
+
+<script src="/assets/app.js"></script>
+<script>
+let currentFilter = null;
+
+async function loadEvents(isPast) {
+  const grid = document.getElementById('events-grid');
+  grid.innerHTML = '<div class="spinner"></div>';
+  try {
+    const qs = isPast !== null ? `?is_past=${isPast}` : '';
+    const events = await PMS.apiFetch(`/api/events${qs}`);
+    grid.innerHTML = events.length
+      ? events.map(e => `
+        <article class="card fade-up">
+          ${e.poster_url ? `<img src="${PMS.escHtml(e.poster_url)}" alt="" style="width:100%;height:160px;object-fit:cover;border-radius:8px;margin-bottom:1rem">` : ''}
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">
+            <span class="badge">${PMS.escHtml(e.category)}</span>
+            ${e.is_past ? '<span class="badge" style="background:rgba(100,116,139,.2);color:#94a3b8">Past</span>' : '<span class="badge badge-success">Upcoming</span>'}
+          </div>
+          <h3 style="margin-bottom:.5rem">${PMS.escHtml(e.title)}</h3>
+          <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:.5rem">📅 ${PMS.escHtml(e.date)}${e.time_range ? ' · '+PMS.escHtml(e.time_range) : ''}</p>
+          ${e.venue ? `<p style="color:var(--text-dim);font-size:.8rem;margin-bottom:.75rem">📍 ${PMS.escHtml(e.venue)}</p>` : ''}
+          <p style="color:var(--text-muted);font-size:.875rem;margin-bottom:1rem">${PMS.escHtml(e.short_description || '')}</p>
+          ${!e.is_past ? `<button class="btn btn-primary btn-sm" onclick="openReg(${e.id})" id="reg-btn-${e.id}">Register →</button>` : ''}
+        </article>`).join('')
+      : '<p style="grid-column:1/-1;text-align:center;color:var(--text-muted)">No events found.</p>';
+  } catch(err) {
+    grid.innerHTML = `<p style="color:var(--danger)">Failed to load events.</p>`;
+  }
+}
+
+function openReg(eventId) {
+  document.getElementById('reg-event-id').value = eventId;
+  document.getElementById('reg-msg').innerHTML = '';
+  document.getElementById('reg-modal').showModal();
+}
+
+document.getElementById('reg-close').onclick = () => document.getElementById('reg-modal').close();
+
+document.getElementById('reg-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const btn = document.getElementById('reg-submit');
+  const msgEl = document.getElementById('reg-msg');
+  const eventId = document.getElementById('reg-event-id').value;
+  PMS.setLoading(btn, true);
+  try {
+    const result = await PMS.apiPost(`/api/events/${eventId}/register`, {
+      student_name: document.getElementById('reg-name').value,
+      roll_number:  document.getElementById('reg-roll').value,
+      batch:        document.getElementById('reg-batch').value,
+      department:   document.getElementById('reg-dept').value,
+      email:        document.getElementById('reg-email').value,
+      phone:        document.getElementById('reg-phone').value || null,
+    });
+    PMS.showAlert(msgEl, `✅ Registered! Certificate code: <strong>${PMS.escHtml(result.certificate_code)}</strong>`, 'success', true);
+  } catch(e) {
+    PMS.showAlert(msgEl, e.message || 'Registration failed.');
+  } finally {
+    PMS.setLoading(btn, false);
+  }
+});
+
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const f = btn.dataset.filter;
+    loadEvents(f === '' ? null : f === 'true');
+  });
+});
+
+document.getElementById('verify-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const btn = document.getElementById('verify-submit');
+  const msgEl = document.getElementById('verify-msg');
+  const code = document.getElementById('verify-code').value.trim();
+  if (!code) { PMS.showAlert(msgEl, 'Please enter a certificate code.'); return; }
+  PMS.setLoading(btn, true);
+  try {
+    const res = await PMS.apiFetch(`/api/certificates/verify?code=${encodeURIComponent(code)}`);
+    if (res.valid) {
+      PMS.showAlert(msgEl, `🎓 <strong>Verified!</strong> ${PMS.escHtml(res.student_name)} participated in <em>${PMS.escHtml(res.event_title)}</em> (Code: ${PMS.escHtml(res.certificate_code)}).`, 'success', true);
+    } else {
+      PMS.showAlert(msgEl, '❌ Invalid certificate code. Please verify the code and try again.', 'error');
+    }
+  } catch(e) {
+    PMS.showAlert(msgEl, e.message || 'Verification failed.');
+  } finally {
+    PMS.setLoading(btn, false);
+  }
+});
+
+loadEvents(null);
+</script>
+</body>
+</html>

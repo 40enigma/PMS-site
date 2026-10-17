@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blog – PIEAS Materials Society</title>
+  <meta name="description" content="Read material-of-the-month articles, explainers, and technical guides by DMME students at PIEAS.">
+  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<div id="announcement-banner" class="banner" style="display:none"></div>
+<nav class="navbar"><div class="container nav-inner"><a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a><button class="hamburger" aria-label="Toggle navigation" aria-expanded="false"><span></span><span></span><span></span></button><ul class="nav-links" role="list"><li><a href="/">Home</a></li><li><a href="/about">About</a></li><li><a href="/team">Team</a></li><li><a href="/events">Events</a></li><li><a href="/blog">Blog</a></li><li><a href="/resources">Resources</a></li><li><a href="/opportunities">Opportunities</a></li><li><a href="/alumni">Alumni</a></li><li><a href="/projects">Projects</a></li><li><a href="/gallery">Gallery</a></li><li><a href="/sponsors">Sponsors</a></li><li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li></ul></div></nav>
+<section class="hero" style="padding:3.5rem 0 2.5rem"><div class="container hero-content"><span class="badge">Knowledge Hub</span><h1 class="fade-up">Blog &amp; Articles</h1><p class="hero-desc fade-up fade-up-delay-1">Deep-dives into materials science, metallurgy, and engineering written by DMME students.</p></div></section>
+<section class="section"><div class="container"><div id="posts-grid" class="grid grid-3"><div class="spinner"></div></div></div></section>
+<footer><div class="container footer-bottom"><p>© 2026 PIEAS Materials Society</p></div></footer>
+<script src="/assets/app.js"></script>
+<script>
+(async () => {
+  const grid = document.getElementById('posts-grid');
+  try {
+    const posts = await PMS.apiFetch('/api/posts');
+    grid.innerHTML = posts.length ? posts.map(p => `
+      <article class="card fade-up">
+        ${p.cover_image_url ? `<img src="${PMS.escHtml(p.cover_image_url)}" alt="" style="width:100%;height:160px;object-fit:cover;border-radius:8px;margin-bottom:1rem">` : ''}
+        <span class="badge" style="margin-bottom:.75rem">${PMS.escHtml(p.category)}</span>
+        <h2 style="font-size:1.1rem;margin-bottom:.5rem">${PMS.escHtml(p.title)}</h2>
+        <p style="color:var(--text-muted);font-size:.875rem;margin-bottom:.75rem">${PMS.escHtml(p.excerpt || '')}</p>
+        ${p.material_formula ? `<span class="tag">🧪 ${PMS.escHtml(p.material_formula)}</span>` : ''}
+        <div style="display:flex;justify-content:space-between;margin-top:.75rem;font-size:.78rem;color:var(--text-dim)">
+          <span>${PMS.escHtml(p.author_name || 'PMS')}</span><span>${PMS.fmtDate(p.published_at)}</span>
+        </div>
+      </article>`).join('') : '<p style="color:var(--text-muted);grid-column:1/-1">No articles published yet.</p>';
+  } catch(e) { grid.innerHTML = '<p style="color:var(--danger)">Could not load posts.</p>'; }
+})();
+</script>
+</body></html>

@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Console – PIEAS Materials Society</title>
+  <meta name="description" content="Admin console for PMS PIEAS. Requires authentication.">
+  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <style>
+    .admin-nav { display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:1.5rem; }
+    .admin-nav button { background:rgba(255,255,255,.06); border:1px solid var(--border); color:var(--text-muted); padding:.5rem 1rem; border-radius:8px; cursor:pointer; font-size:.85rem; transition:var(--transition); }
+    .admin-nav button.active, .admin-nav button:hover { background:var(--primary); color:#fff; border-color:var(--primary); }
+    #admin-content table { width:100%; border-collapse:collapse; font-size:.85rem; }
+    #admin-content th, #admin-content td { padding:.65rem 1rem; border-bottom:1px solid var(--border); text-align:left; }
+    #admin-content th { color:var(--text-muted); font-weight:600; font-size:.78rem; text-transform:uppercase; }
+    #admin-content td { color:var(--text); }
+    #admin-content tr:hover td { background:rgba(255,255,255,.02); }
+    .delete-btn { background:transparent; border:none; color:var(--danger); cursor:pointer; font-size:.85rem; }
+    .delete-btn:hover { text-decoration:underline; }
+    #login-section { max-width:420px; margin:0 auto; }
+  </style>
+</head>
+<body>
+<nav class="navbar" role="navigation" aria-label="Main navigation">
+  <div class="container nav-inner">
+    <a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a>
+    <ul class="nav-links" role="list">
+      <li><a href="/">← Back to Site</a></li>
+      <li><span id="nav-user" style="color:var(--text-muted);font-size:.85rem"></span></li>
+      <li><button id="logout-btn" class="btn btn-outline btn-sm" style="display:none">Logout</button></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="container section">
+  <!-- Login Section -->
+  <div id="login-section">
+    <div class="card">
+      <h1 style="font-size:1.5rem;margin-bottom:1.5rem">🔐 Admin Login</h1>
+      <p style="color:var(--text-muted);font-size:.875rem;margin-bottom:1.5rem">
+        Authentication uses an httpOnly secure cookie. Do not store credentials in localStorage.
+      </p>
+      <form id="login-form" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="login-email">Email *</label>
+          <input id="login-email" type="email" class="form-control" required placeholder="admin@pms.pieas.edu.pk" autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="login-password">Password *</label>
+          <input id="login-password" type="password" class="form-control" required placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <div id="login-msg"></div>
+        <button type="submit" class="btn btn-primary" style="width:100%;margin-top:.5rem" id="login-submit">Sign In</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Admin Dashboard (shown after login) -->
+  <div id="admin-dashboard" style="display:none">
+    <h1 style="margin-bottom:1.5rem">Admin Dashboard</h1>
+    <div class="admin-nav" role="tablist" aria-label="Admin sections">
+      <button class="active" data-section="announcements" role="tab">📢 Announcements</button>
+      <button data-section="events" role="tab">📅 Events</button>
+      <button data-section="registrations" role="tab">🎟️ Registrations</button>
+      <button data-section="team" role="tab">👥 Team</button>
+      <button data-section="posts" role="tab">📝 Blog Posts</button>
+      <button data-section="resources" role="tab">📚 Resources</button>
+      <button data-section="opportunities" role="tab">💼 Opportunities</button>
+      <button data-section="alumni" role="tab">🎓 Alumni</button>
+      <button data-section="projects" role="tab">🔬 Projects</button>
+      <button data-section="sponsors" role="tab">🤝 Sponsors</button>
+      <button data-section="contacts" role="tab">📬 Contacts</button>
+      <button data-section="newsletter" role="tab">📧 Newsletter</button>
+      <button data-section="membership" role="tab">📋 Membership</button>
+      <button data-section="upload" role="tab">📎 Upload File</button>
+    </div>
+    <div id="admin-content" class="card"></div>
+  </div>
+</div>
+
+<footer>
+  <div class="container footer-bottom"><p>© 2026 PIEAS Materials Society – Admin Console</p></div>
+</footer>
+
+<script src="/assets/app.js"></script>
+<script>
+/* ── State ── */
+let adminUser = null;
+
+/* ── Check if already logged in via cookie ── */
+async function checkAuth() {
+  try {
+    // Any admin endpoint will 401 if not authed
+    await PMS.apiFetch('/api/admin/stats');
+    showDashboard(null);
+  } catch(_) {
+    showLogin();
+  }
+}
+
+function showLogin() {
+  document.getElementById('login-section').style.display = '';
+  document.getElementById('admin-dashboard').style.display = 'none';
+  document.getElementById('logout-btn').style.display = 'none';
+}
+
+function showDashboard(user) {
+  document.getElementById('login-section').style.display = 'none';
+  document.getElementById('admin-dashboard').style.display = '';
+  document.getElementById('logout-btn').style.display = '';
+  if (user) document.getElementById('nav-user').textContent = `👤 ${PMS.escHtml(user.name)}`;
+  loadSection('announcements');
+}
+
+/* ── Login ── */
+document.getElementById('login-form').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const btn = document.getElementById('login-submit');
+  const msg = document.getElementById('login-msg');
+  PMS.setLoading(btn, true);
+  try {
+    const res = await PMS.apiPost('/api/auth/login', {
+      email: document.getElementById('login-email').value,
+      password: document.getElementById('login-password').value,
+    });
+    adminUser = res;
+    showDashboard(res);
+  } catch(e) {
+    PMS.showAlert(msg, e.message || 'Invalid credentials.');
+  } finally {
+    PMS.setLoading(btn, false);
+  }
+});
+
+/* ── Logout ── */
+document.getElementById('logout-btn').addEventListener('click', async () => {
+  try { await PMS.apiPost('/api/auth/logout', {}); } catch(_) {}
+  showLogin();
+});
+
+/* ── Section navigation ── */
+document.querySelectorAll('.admin-nav button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.admin-nav button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    loadSection(btn.dataset.section);
+  });
+});
+
+/* ── Generic list section renderer ── */
+async function loadSection(name) {
+  const content = document.getElementById('admin-content');
+  content.innerHTML = '<div class="spinner"></div>';
+
+  try {
+    switch(name) {
+      case 'announcements': await renderList(content, '/api/admin/announcements', 'announcements', ['message','priority','is_active']); break;
+      case 'events':        await renderList(content, '/api/admin/events',        'events',        ['title','date','category','is_past']); break;
+      case 'registrations': await renderList(content, '/api/admin/registrations', 'registrations', ['student_name','event_id','roll_number','batch','department','certificate_code']); break;
+      case 'team':          await renderList(content, '/api/admin/team',           'team',          ['name','role','tenure_year','is_current']); break;
+      case 'posts':         await renderList(content, '/api/admin/posts',          'posts',         ['title','category','author_name','published_at']); break;
+      case 'resources':     await renderList(content, '/api/admin/resources',      'resources',     ['title','category','is_pinned']); break;
+      case 'opportunities': await renderList(content, '/api/admin/opportunities',  'opportunities', ['title','organization','opportunity_type','deadline']); break;
+      case 'alumni':        await renderList(content, '/api/admin/alumni',         'alumni',        ['name','batch','current_position','organization']); break;
+      case 'projects':      await renderList(content, '/api/admin/projects',       'projects',      ['title','batch','project_type']); break;
+      case 'sponsors':      await renderList(content, '/api/admin/sponsors',       'sponsors',      ['name','tier']); break;
+      case 'contacts':      await renderList(content, '/api/admin/contacts',       'contacts',      ['name','email','subject','created_at']); break;
+      case 'newsletter':    await renderList(content, '/api/admin/newsletter',     'newsletter',    ['email','subscribed_at']); break;
+      case 'membership':    await renderList(content, '/api/admin/membership',     'membership',    ['full_name','email','batch','status']); break;
+      case 'upload':        renderUpload(content); break;
+    }
+  } catch(e) {
+    if (e.message.includes('401') || e.message.toLowerCase().includes('unauthorized')) {
+      showLogin();
+    } else {
+      content.innerHTML = `<div class="alert alert-error">${PMS.escHtml(e.message)}</div>`;
+    }
+  }
+}
+
+async function renderList(container, apiPath, endpointName, columns) {
+  const data = await PMS.apiFetch(apiPath);
+  if (!data.length) { container.innerHTML = '<p style="color:var(--text-muted)">No records found.</p>'; return; }
+  const headers = columns.map(c => `<th>${c.replace(/_/g,' ')}</th>`).join('');
+  const rows = data.map(row => {
+    const cells = columns.map(c => {
+      let val = row[c];
+      if (typeof val === 'boolean') val = val ? '✅' : '—';
+      return `<td>${PMS.escHtml(String(val ?? '—'))}</td>`;
+    }).join('');
+    return `<tr>${cells}<td><button class="delete-btn" onclick="deleteItem('${apiPath}/${row.id}','${endpointName}')">Delete</button></td></tr>`;
+  }).join('');
+  container.innerHTML = `
+    <div style="overflow-x:auto">
+      <table><thead><tr>${headers}<th>Actions</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>`;
+}
+
+async function deleteItem(path, sectionName) {
+  if (!confirm('Delete this record?')) return;
+  try {
+    await PMS.apiDelete(path);
+    loadSection(sectionName);
+  } catch(e) {
+    alert('Delete failed: ' + e.message);
+  }
+}
+
+function renderUpload(container) {
+  container.innerHTML = `
+    <h2 style="margin-bottom:1.25rem">Upload File</h2>
+    <p style="color:var(--text-muted);font-size:.875rem;margin-bottom:1.25rem">
+      Allowed: PNG, JPEG, WebP, PDF, plain text. Max 20 MB. Files are validated by magic bytes.
+    </p>
+    <form id="upload-form">
+      <div class="form-group">
+        <label class="form-label" for="upload-file">Select File</label>
+        <input id="upload-file" type="file" class="form-control" accept="image/*,application/pdf,text/plain" required>
+      </div>
+      <div id="upload-msg"></div>
+      <button type="submit" class="btn btn-primary" id="upload-submit">Upload</button>
+    </form>`;
+
+  document.getElementById('upload-form').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const btn = document.getElementById('upload-submit');
+    const msg = document.getElementById('upload-msg');
+    const file = document.getElementById('upload-file').files[0];
+    if (!file) { PMS.showAlert(msg, 'Please select a file.'); return; }
+    PMS.setLoading(btn, true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/admin/upload', { method:'POST', credentials:'include', body:fd });
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error || 'Upload failed'); }
+      const data = await res.json();
+      PMS.showAlert(msg, `✅ Uploaded! URL: <a href="${PMS.escHtml(data.url)}" target="_blank">${PMS.escHtml(data.url)}</a>`, 'success', true);
+    } catch(e) {
+      PMS.showAlert(msg, e.message);
+    } finally {
+      PMS.setLoading(btn, false);
+    }
+  });
+}
+
+checkAuth();
+</script>
+</body>
+</html>

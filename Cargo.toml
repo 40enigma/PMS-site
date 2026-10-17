@@ -1,0 +1,45 @@
+[package]
+name = "pms-platform"
+version = "1.0.0"
+edition = "2021"
+
+[lib]
+name = "pms_platform"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pms-platform"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.8", features = ["macros", "multipart"] }
+tokio = { version = "1.43", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "macros", "chrono", "uuid"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "fs", "trace", "compression-gzip"] }
+utoipa = { version = "5.3", features = ["axum_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "9.0", features = ["axum"] }
+jsonwebtoken = "9.3"
+argon2 = "0.5"
+rand_core = { version = "0.6", features = ["getrandom"] }
+uuid = { version = "1.11", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+dotenvy = "0.15"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "2.0"
+
+# File type sniffing for upload validation
+infer = "0.16"
+
+# Rate limiting
+governor = { version = "0.6", features = ["std", "dashmap"] }
+axum-extra = { version = "0.10", features = ["cookie"] }
+time = "0.3"
+
+[dev-dependencies]
+tokio = { version = "1.43", features = ["full", "test-util"] }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

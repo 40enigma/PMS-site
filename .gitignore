@@ -1,0 +1,66 @@
+# ==============================================================================
+# Git Ignore — PIEAS Materials Society (PMS) Monolithic Repository
+# ==============================================================================
+
+# Environment & Secrets (NEVER commit secrets to source control)
+.env
+*.env
+!.env.example
+*.pem
+*.key
+*.cert
+
+# Rust Build Artifacts
+/target/
+**/*.rs.bk
+*.pdb
+
+# SQLite Database Files
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Frontend Node Modules & Production Builds
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.oxlintrc.json
+
+# Package Manager Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# User Uploaded Media (Preserve folder structure via .gitkeep)
+uploads/*
+!uploads/.gitkeep
+
+# System & Application Logs
+logs/
+*.log
+
+# Operating System Metadata & Cache
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE & Editor Directories
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*~
+*.bak
