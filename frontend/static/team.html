@@ -14,7 +14,7 @@
 <!-- Navbar -->
 <nav class="navbar" role="navigation" aria-label="Main navigation">
   <div class="container nav-inner">
-    <a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a>
+    <a href="/" class="nav-brand"><img src="/pms-logo.jpeg" alt="PMS Logo" class="nav-logo"> PMS <span>PIEAS</span></a>
     <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
       <span></span><span></span><span></span>
     </button>
@@ -115,7 +115,7 @@ let allMembers = [];
 
 async function loadTeamData() {
   const grid = document.getElementById('team-grid');
-  grid.innerHTML = '<div class="spinner"></div>';
+  grid.innerHTML = PMS.skeletonGrid(4);
   try {
     allMembers = await PMS.apiFetch('/api/team');
     renderFilteredTeam('current');
@@ -135,8 +135,9 @@ function renderFilteredTeam(mode) {
     filtered = allMembers.filter(m => !m.is_current);
   }
   grid.innerHTML = filtered.length
-    ? filtered.map(PMS.teamCard).join('')
+    ? filtered.map((m, idx) => PMS.teamCard(m, idx)).join('')
     : '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No members listed in this category.</p>';
+  PMS.observeFadeElements(grid);
 }
 
 // Button toggles

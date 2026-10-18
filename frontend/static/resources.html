@@ -14,7 +14,7 @@
 <!-- Navbar -->
 <nav class="navbar" role="navigation" aria-label="Main navigation">
   <div class="container nav-inner">
-    <a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a>
+    <a href="/" class="nav-brand"><img src="/pms-logo.jpeg" alt="PMS Logo" class="nav-logo"> PMS <span>PIEAS</span></a>
     <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
       <span></span><span></span><span></span>
     </button>
@@ -117,7 +117,7 @@ let allResources = [];
 
 async function loadResources() {
   const grid = document.getElementById('resources-grid');
-  grid.innerHTML = '<div class="spinner"></div>';
+  grid.innerHTML = PMS.skeletonGrid(3);
   try {
     allResources = await PMS.apiFetch('/api/resources');
     renderFilteredResources('');
@@ -129,12 +129,18 @@ async function loadResources() {
 function renderFilteredResources(category) {
   const grid = document.getElementById('resources-grid');
   const filtered = category
-    ? allResources.filter(r => r.category && r.category.toLowerCase() === category.toLowerCase())
+    ? allResources.filter(r => {
+        if (!r.category) return false;
+        const rCat = r.category.toLowerCase();
+        const target = category.toLowerCase();
+        return rCat === target || rCat.includes(target) || target.includes(rCat);
+      })
     : allResources;
 
   grid.innerHTML = filtered.length
-    ? filtered.map(PMS.resourceCard).join('')
+    ? filtered.map((r, idx) => PMS.resourceCard(r, idx)).join('')
     : '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No resources found in this category.</p>';
+  PMS.observeFadeElements(grid);
 }
 
 // Category filter buttons

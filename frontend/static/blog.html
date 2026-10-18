@@ -14,7 +14,7 @@
 <!-- Navbar -->
 <nav class="navbar" role="navigation" aria-label="Main navigation">
   <div class="container nav-inner">
-    <a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a>
+    <a href="/" class="nav-brand"><img src="/pms-logo.jpeg" alt="PMS Logo" class="nav-logo"> PMS <span>PIEAS</span></a>
     <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
       <span></span><span></span><span></span>
     </button>
@@ -94,11 +94,13 @@
 <script>
 (async () => {
   const grid = document.getElementById('posts-grid');
+  grid.innerHTML = PMS.skeletonGrid(3);
   try {
     const posts = await PMS.apiFetch('/api/posts');
     grid.innerHTML = posts.length
-      ? posts.map(PMS.postCard).join('')
+      ? posts.map((p, idx) => PMS.postCard(p, idx)).join('')
       : '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No articles published yet.</p>';
+    PMS.observeFadeElements(grid);
   } catch(e) {
     grid.innerHTML = '<p style="color:var(--danger);grid-column:1/-1;text-align:center">Could not load posts.</p>';
   }

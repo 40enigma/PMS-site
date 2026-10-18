@@ -171,11 +171,14 @@ pub struct Post {
     pub excerpt: Option<String>,
     pub body_markdown: Option<String>,
     pub author_name: Option<String>,
+    pub author_role: Option<String>,
     pub author_batch: Option<String>,
     pub cover_image_url: Option<String>,
     pub category: String,
     pub material_formula: Option<String>,
     pub crystal_structure: Option<String>,
+    pub read_time_minutes: Option<i64>,
+    pub is_featured: bool,
     pub published_at: String,
 }
 
@@ -186,11 +189,14 @@ pub struct CreatePost {
     pub excerpt: Option<String>,
     pub body_markdown: Option<String>,
     pub author_name: Option<String>,
+    pub author_role: Option<String>,
     pub author_batch: Option<String>,
     pub cover_image_url: Option<String>,
     pub category: Option<String>,
     pub material_formula: Option<String>,
     pub crystal_structure: Option<String>,
+    pub read_time_minutes: Option<i64>,
+    pub is_featured: Option<bool>,
 }
 
 // Resources
@@ -227,6 +233,8 @@ pub struct Opportunity {
     pub apply_url: Option<String>,
     pub description: Option<String>,
     pub posted_by_alumnus: Option<String>,
+    pub is_active: bool,
+    pub created_at: String,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -239,6 +247,7 @@ pub struct CreateOpportunity {
     pub apply_url: Option<String>,
     pub description: Option<String>,
     pub posted_by_alumnus: Option<String>,
+    pub is_active: Option<bool>,
 }
 
 // Alumni
@@ -246,27 +255,35 @@ pub struct CreateOpportunity {
 pub struct Alumnus {
     pub id: i64,
     pub name: String,
-    pub batch: String,
-    pub current_position: Option<String>,
-    pub organization: Option<String>,
+    #[serde(alias = "batch")]
+    pub graduating_batch: String,
+    #[serde(alias = "current_position")]
+    pub current_role: Option<String>,
+    #[serde(alias = "organization")]
+    pub current_organization: Option<String>,
+    #[serde(alias = "research_domain")]
+    pub industry_sector: Option<String>,
     pub location: Option<String>,
     pub photo_url: Option<String>,
     pub quote_testimonial: Option<String>,
     pub linkedin_url: Option<String>,
-    pub research_domain: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateAlumnus {
     pub name: String,
-    pub batch: String,
-    pub current_position: Option<String>,
-    pub organization: Option<String>,
+    #[serde(alias = "batch")]
+    pub graduating_batch: String,
+    #[serde(alias = "current_position")]
+    pub current_role: Option<String>,
+    #[serde(alias = "organization")]
+    pub current_organization: Option<String>,
+    #[serde(alias = "research_domain")]
+    pub industry_sector: Option<String>,
     pub location: Option<String>,
     pub photo_url: Option<String>,
     pub quote_testimonial: Option<String>,
     pub linkedin_url: Option<String>,
-    pub research_domain: Option<String>,
 }
 
 // Projects
@@ -274,11 +291,15 @@ pub struct CreateAlumnus {
 pub struct Project {
     pub id: i64,
     pub title: String,
-    pub student_names: String,
+    #[serde(alias = "student_names")]
+    pub students: Option<String>,
     pub batch: String,
-    pub supervisor_name: Option<String>,
+    #[serde(alias = "supervisor_name")]
+    pub supervisors: Option<String>,
     pub project_type: String,
-    pub abstract_summary: Option<String>,
+    #[sqlx(rename = "abstract")]
+    #[serde(rename = "abstract", alias = "abstract_summary")]
+    pub r#abstract: Option<String>,
     pub image_url: Option<String>,
     pub paper_or_repo_url: Option<String>,
     pub tags: Option<String>,
@@ -287,11 +308,14 @@ pub struct Project {
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateProject {
     pub title: String,
-    pub student_names: String,
+    #[serde(alias = "student_names")]
+    pub students: Option<String>,
     pub batch: String,
-    pub supervisor_name: Option<String>,
+    #[serde(alias = "supervisor_name")]
+    pub supervisors: Option<String>,
     pub project_type: Option<String>,
-    pub abstract_summary: Option<String>,
+    #[serde(rename = "abstract", alias = "abstract_summary")]
+    pub r#abstract: Option<String>,
     pub image_url: Option<String>,
     pub paper_or_repo_url: Option<String>,
     pub tags: Option<String>,
@@ -305,6 +329,8 @@ pub struct Sponsor {
     pub logo_url: Option<String>,
     pub website_url: Option<String>,
     pub tier: String,
+    pub since_year: Option<String>,
+    pub display_order: i64,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -313,6 +339,8 @@ pub struct CreateSponsor {
     pub logo_url: Option<String>,
     pub website_url: Option<String>,
     pub tier: Option<String>,
+    pub since_year: Option<String>,
+    pub display_order: Option<i64>,
 }
 
 // FAQs
@@ -321,6 +349,7 @@ pub struct Faq {
     pub id: i64,
     pub question: String,
     pub answer: String,
+    pub category: String,
     pub display_order: i64,
 }
 
@@ -328,6 +357,7 @@ pub struct Faq {
 pub struct CreateFaq {
     pub question: String,
     pub answer: String,
+    pub category: Option<String>,
     pub display_order: Option<i64>,
 }
 

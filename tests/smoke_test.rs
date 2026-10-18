@@ -8,8 +8,9 @@ use sqlx::sqlite::SqlitePoolOptions;
 use tower::ServiceExt;
 
 async fn setup_test_app() -> axum::Router {
-    // In-memory SQLite for testing
+    // In-memory SQLite for testing (max_connections(1) so in-memory db is shared across queries)
     let pool = SqlitePoolOptions::new()
+        .max_connections(1)
         .connect("sqlite::memory:")
         .await
         .expect("Failed to connect to in-memory test db");
@@ -23,6 +24,14 @@ async fn setup_test_app() -> axum::Router {
     .execute(&pool)
     .await
     .expect("Failed to insert site stats");
+
+    // Insert dummy admin (id=1) so AdminClaims verification against admin_users succeeds
+    sqlx::query(
+        "INSERT OR IGNORE INTO admin_users (id, email, password_hash, name) VALUES (1, 'admin@pieas.edu.pk', 'dummyhash', 'Admin')"
+    )
+    .execute(&pool)
+    .await
+    .expect("Failed to insert dummy admin");
 
     create_app(pool)
 }

@@ -30,12 +30,19 @@
     .status-pending { background:rgba(245,158,11,.15); color:#fbbf24; border:1px solid rgba(245,158,11,.3); }
     .status-approved { background:rgba(16,185,129,.15); color:#6ee7b7; border:1px solid rgba(16,185,129,.3); }
     .status-rejected { background:rgba(239,68,68,.15); color:#fca5a5; border:1px solid rgba(239,68,68,.3); }
+    select.form-control option { background: var(--bg-card); color: var(--text); }
   </style>
 </head>
 <body>
 <nav class="navbar" role="navigation" aria-label="Main navigation">
   <div class="container nav-inner">
-    <a href="/" class="nav-brand">⚛️ PMS <span>Admin</span></a>
+    <a href="/" class="brand">
+      <img src="/pms-logo.jpeg" alt="PMS Logo" class="brand-logo" style="width:28px;height:28px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,.2)">
+      <span class="brand-text">PMS Admin</span>
+    </a>
+    <button class="hamburger" aria-label="Toggle Navigation" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
     <ul class="nav-links" role="list">
       <li><a href="/">← View Live Site</a></li>
       <li><a href="/swagger-ui" target="_blank">📖 Swagger API Docs</a></li>
@@ -146,7 +153,7 @@ const SCHEMAS = {
       { name: 'message', label: 'Message *', type: 'textarea', required: true },
       { name: 'link_text', label: 'Link Text', type: 'text', placeholder: 'e.g. Read Guidelines →' },
       { name: 'link_url', label: 'Link URL', type: 'text', placeholder: 'https:// or /events' },
-      { name: 'priority', label: 'Priority', type: 'select', options: ['info', 'warning', 'success'] },
+      { name: 'priority', label: 'Priority', type: 'select', options: ['info', 'urgent', 'warning', 'event', 'success'] },
       { name: 'is_active', label: 'Is Active', type: 'checkbox', default: true }
     ]
   },
@@ -214,7 +221,7 @@ const SCHEMAS = {
       { name: 'crystal_structure', label: 'Crystal Structure', type: 'text', placeholder: 'e.g. HCP (α), FCC (γ)' },
       { name: 'cover_image_url', label: 'Cover Image URL', type: 'text' },
       { name: 'author_name', label: 'Author Name', type: 'text', default: 'PIEAS Materials Society' },
-      { name: 'author_role', label: 'Author Title / Batch', type: 'text', placeholder: 'e.g. Technical Head (DMME ''26)' },
+      { name: 'author_role', label: 'Author Title / Batch', type: 'text', placeholder: "e.g. Technical Head (DMME '26)" },
       { name: 'read_time_minutes', label: 'Read Time (Minutes)', type: 'number', default: 5 },
       { name: 'is_featured', label: 'Feature on Homepage', type: 'checkbox', default: false }
     ]
@@ -230,7 +237,8 @@ const SCHEMAS = {
       { name: 'category', label: 'Category *', type: 'select', options: ['Standards', 'Software', 'Safety', 'Databases', 'Books', 'Tools'] },
       { name: 'description', label: 'Description', type: 'textarea' },
       { name: 'url', label: 'URL / Document Link *', type: 'text', required: true },
-      { name: 'software_tag', label: 'Software / Sub-Tag', type: 'text', placeholder: 'e.g. Thermo-Calc, ASTM E8, ImageJ' }
+      { name: 'software_tag', label: 'Software / Sub-Tag', type: 'text', placeholder: 'e.g. Thermo-Calc, ASTM E8, ImageJ' },
+      { name: 'is_pinned', label: 'Pin to Top of Toolkit', type: 'checkbox', default: false }
     ]
   },
   opportunities: {
@@ -246,6 +254,7 @@ const SCHEMAS = {
       { name: 'location', label: 'Location', type: 'text', placeholder: 'e.g. Islamabad, Remote, Germany' },
       { name: 'deadline', label: 'Application Deadline', type: 'text', placeholder: 'e.g. 2026-11-30' },
       { name: 'description', label: 'Summary Details', type: 'textarea' },
+      { name: 'posted_by_alumnus', label: 'Posted By Alumnus / Referral', type: 'text', placeholder: 'e.g. Dr. Fatima Zahra (Batch 2018)' },
       { name: 'apply_url', label: 'Application Link', type: 'text' },
       { name: 'is_active', label: 'Is Active', type: 'checkbox', default: true }
     ]
@@ -262,6 +271,8 @@ const SCHEMAS = {
       { name: 'current_role', label: 'Current Role / Job Title', type: 'text' },
       { name: 'current_organization', label: 'Organization / Company', type: 'text' },
       { name: 'industry_sector', label: 'Industry Sector', type: 'text', placeholder: 'e.g. Aerospace, Nuclear, Steel, Semiconductor' },
+      { name: 'location', label: 'Location', type: 'text', placeholder: 'e.g. Cambridge, MA, USA' },
+      { name: 'quote_testimonial', label: 'Quote / Testimonial', type: 'textarea' },
       { name: 'linkedin_url', label: 'LinkedIn Profile URL', type: 'text' },
       { name: 'photo_url', label: 'Photo URL', type: 'text' }
     ]
@@ -279,6 +290,8 @@ const SCHEMAS = {
       { name: 'students', label: 'Student Investigators', type: 'text', placeholder: 'Names separated by commas' },
       { name: 'supervisors', label: 'Faculty Supervisors', type: 'text', placeholder: 'Dr. ..., Engr. ...' },
       { name: 'abstract', label: 'Abstract / Technical Summary', type: 'textarea' },
+      { name: 'tags', label: 'Tags / Keywords', type: 'text', placeholder: 'e.g. Titanium, SLM, Microstructure' },
+      { name: 'image_url', label: 'Project Image URL', type: 'text' },
       { name: 'paper_or_repo_url', label: 'Paper / Code Repository URL', type: 'text' }
     ]
   },
@@ -292,6 +305,7 @@ const SCHEMAS = {
       { name: 'image_url', label: 'Image URL *', type: 'text', required: true, placeholder: 'https:// or /uploads/...' },
       { name: 'caption', label: 'Caption / Micrograph Spec', type: 'text', placeholder: 'e.g. Ti-6Al-4V SLM Microstructure (1000x)' },
       { name: 'event_name', label: 'Event / Context', type: 'text' },
+      { name: 'event_id', label: 'Linked Event ID (Optional)', type: 'number' },
       { name: 'year', label: 'Year *', type: 'text', required: true, default: '2026' }
     ]
   },
@@ -720,6 +734,10 @@ document.getElementById('crud-form').addEventListener('submit', async ev => {
       payload[f.name] = el.value === '' ? null : parseInt(el.value, 10);
     } else {
       payload[f.name] = el.value.trim() === '' ? null : el.value.trim();
+    }
+    if (f.required && (payload[f.name] === null || payload[f.name] === '')) {
+      PMS.showAlert(msg, `Please fill out required field: ${f.label.replace('*', '').trim()}`);
+      return;
     }
   }
 

@@ -112,7 +112,6 @@ PMS-site/
 │       └── admin.rs           # Secured admin CRUD handlers and file uploaders
 │
 ├── frontend/
-│   ├── package.json           # Metadata documenting static frontend
 │   └── static/                # Static HTML pages & assets served by Axum
 │       ├── index.html         # Homepage
 │       ├── about.html         # About & Society history
@@ -148,7 +147,7 @@ The backend uses Axum's `ServeDir` and explicit route services:
 - Visiting `/` serves `frontend/static/index.html`.
 - Visiting `/about` serves `frontend/static/about.html`.
 - Visiting `/team`, `/events`, `/resources`, `/blog`, `/opportunities`, `/alumni`, `/projects`, `/gallery`, `/sponsors`, `/join`, and `/admin` automatically resolve to their corresponding `.html` files.
-- Unknown non-API paths fallback to `index.html`.
+- Unknown non-API paths return HTTP 404 with `frontend/static/404.html`.
 - Static assets (stylesheets, scripts, images) are served directly under `/assets/*` or root.
 
 ### How to Edit Frontend Pages

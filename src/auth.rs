@@ -79,12 +79,14 @@ pub fn create_token(user_id: i64, email: &str) -> Result<String, AppError> {
     .map_err(|e| AppError::Internal(format!("Token creation failed: {}", e)))
 }
 
-/// Verify a JWT token and return the claims.
+/// Verify a JWT token and return the claims, explicitly pinning Algorithm::HS256.
 pub fn verify_token(token: &str) -> Result<AdminClaims, AppError> {
+    let mut validation = Validation::new(jsonwebtoken::Algorithm::HS256);
+    validation.validate_exp = true;
     let token_data = decode::<AdminClaims>(
         token,
         &DecodingKey::from_secret(jwt_secret().as_bytes()),
-        &Validation::default(),
+        &validation,
     )
     .map_err(|_| AppError::Unauthorized)?;
 
@@ -96,6 +98,8 @@ pub fn verify_token(token: &str) -> Result<AdminClaims, AppError> {
 /// Accepts the JWT from (in priority order):
 /// 1. `Authorization: Bearer <token>` header — for programmatic API clients.
 /// 2. The `pms_admin_token` httpOnly cookie — for browser-based flows.
+///
+/// Also verifies that the user still exists in `admin_users` table when the db pool is present.
 impl<S> FromRequestParts<S> for AdminClaims
 where
     S: Send + Sync,
@@ -103,23 +107,37 @@ where
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        // 1. Try Authorization header first (backward-compatible for API clients).
-        if let Some(auth_header) = parts
+        let claims = if let Some(auth_header) = parts
             .headers
             .get(header::AUTHORIZATION)
             .and_then(|v| v.to_str().ok())
         {
             if let Some(token) = auth_header.strip_prefix("Bearer ") {
-                return verify_token(token);
+                verify_token(token)?
+            } else {
+                return Err(AppError::Unauthorized);
+            }
+        } else {
+            let jar = CookieJar::from_headers(&parts.headers);
+            if let Some(cookie) = jar.get(jwt_cookie_name()) {
+                verify_token(cookie.value())?
+            } else {
+                return Err(AppError::Unauthorized);
+            }
+        };
+
+        // If database pool is available in request extensions, verify user account still exists
+        if let Some(pool) = parts.extensions.get::<sqlx::SqlitePool>() {
+            let exists: Option<(i64,)> = sqlx::query_as("SELECT id FROM admin_users WHERE id = ?1")
+                .bind(claims.sub)
+                .fetch_optional(pool)
+                .await
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+            if exists.is_none() {
+                return Err(AppError::Unauthorized);
             }
         }
 
-        // 2. Fall back to the cached httpOnly cookie name for browser clients.
-        let jar = CookieJar::from_headers(&parts.headers);
-        if let Some(cookie) = jar.get(jwt_cookie_name()) {
-            return verify_token(cookie.value());
-        }
-
-        Err(AppError::Unauthorized)
+        Ok(claims)
     }
 }

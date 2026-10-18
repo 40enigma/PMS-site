@@ -96,12 +96,12 @@ The database schema is defined in `migrations/0001_initial_schema.sql` and initi
 4. **`events`**: Technical workshops and seminars (`id`, `title`, `slug`, `date`, `time_range`, `venue`, `category`, `short_description`, `full_summary`, `poster_url`, `registration_link`, `speaker_or_organizer`, `is_past`, `is_featured`).
 5. **`event_registrations`**: Participant registrations (`id`, `event_id` REFERENCES events, `student_name`, `roll_number`, `batch`, `department`, `email`, `phone`, `certificate_code`, `created_at`).
 6. **`team_members`**: Executive council & faculty advisors (`id`, `name`, `role`, `role_responsibility`, `photo_url`, `batch`, `tenure_year`, `is_current`, `is_faculty_advisor`, `bio`, `linkedin_url`, `display_order`).
-7. **`gallery_items`**: Micrograph repository and event photos (`id`, `image_url`, `caption`, `event_name`, `year`, `created_at`).
+7. **`gallery_images`**: Micrograph repository and event photos (`id`, `image_url`, `caption`, `event_name`, `year`, `event_id`, `created_at`).
 8. **`posts`**: Technical explainers and blog articles (`id`, `title`, `slug` UNIQUE, `category`, `excerpt`, `body_markdown`, `material_formula`, `crystal_structure`, `cover_image_url`, `author_name`, `author_role`, `published_at`, `read_time_minutes`, `is_featured`).
-9. **`resources`**: Undergraduate toolkit, ASTM standards, software links (`id`, `title`, `category`, `description`, `url`, `software_tag`, `created_at`).
-10. **`opportunities`**: Internships, scholarships, research postings (`id`, `title`, `organization`, `opportunity_type`, `location`, `deadline`, `description`, `apply_url`, `is_active`, `created_at`).
-11. **`alumni`**: Departmental alumni directory (`id`, `name`, `graduating_batch`, `current_role`, `current_organization`, `industry_sector`, `linkedin_url`, `photo_url`).
-12. **`projects`**: FYP and student research archive (`id`, `title`, `project_type`, `batch`, `supervisors`, `abstract`, `students`, `paper_or_repo_url`, `created_at`).
+9. **`resources`**: Undergraduate toolkit, ASTM standards, software links (`id`, `title`, `category`, `description`, `url`, `software_tag`, `is_pinned`, `created_at`).
+10. **`opportunities`**: Internships, scholarships, research postings (`id`, `title`, `organization`, `opportunity_type`, `location`, `deadline`, `description`, `apply_url`, `is_active`, `posted_by_alumnus`, `created_at`).
+11. **`alumni`**: Departmental alumni directory (`id`, `name`, `graduating_batch`, `current_role`, `current_organization`, `industry_sector`, `location`, `quote_testimonial`, `linkedin_url`, `photo_url`).
+12. **`projects`**: FYP and student research archive (`id`, `title`, `project_type`, `batch`, `supervisors`, `abstract`, `students`, `image_url`, `tags`, `paper_or_repo_url`, `created_at`).
 13. **`sponsors`**: Corporate and industrial partners (`id`, `name`, `tier`, `logo_url`, `website_url`, `since_year`, `display_order`).
 14. **`faqs`**: Frequently asked questions (`id`, `question`, `answer`, `category`, `display_order`).
 15. **`membership_applications`**: Student society membership submissions (`id`, `full_name`, `roll_number`, `batch`, `department`, `email`, `phone`, `interests`, `why_join`, `status`, `created_at`).

@@ -198,7 +198,7 @@ pub async fn security_headers(req: Request, next: Next) -> Response {
     headers.insert(
         "Content-Security-Policy",
         HeaderValue::from_static(
-            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https://images.unsplash.com; connect-src 'self'; frame-ancestors 'self';"
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'self';"
         ),
     );
     res
@@ -253,8 +253,12 @@ pub fn create_app(pool: SqlitePool) -> Router {
         .route_service("/join", ServeFile::new("frontend/static/join.html"))
         .route_service("/admin", ServeFile::new("frontend/static/admin.html"))
         .route_service("/404", ServeFile::new("frontend/static/404.html"))
+        .route_service("/favicon.svg", ServeFile::new("frontend/static/favicon.svg"))
+        .route_service("/favicon.ico", ServeFile::new("frontend/static/favicon.svg"))
+        .route_service("/pms-logo.jpeg", ServeFile::new("frontend/static/pms-logo.jpeg"))
         // Any unknown route serves 404.html with StatusCode::NOT_FOUND (404)
         .fallback(not_found_fallback)
+        .layer(axum::Extension(pool.clone()))
         .layer(middleware::from_fn(security_headers))
         .layer(cors)
         .layer(TraceLayer::new_for_http())

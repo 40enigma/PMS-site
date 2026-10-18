@@ -14,7 +14,7 @@
 <!-- Navbar -->
 <nav class="navbar" role="navigation" aria-label="Main navigation">
   <div class="container nav-inner">
-    <a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a>
+    <a href="/" class="nav-brand"><img src="/pms-logo.jpeg" alt="PMS Logo" class="nav-logo"> PMS <span>PIEAS</span></a>
     <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
       <span></span><span></span><span></span>
     </button>
@@ -159,13 +159,14 @@ let currentFilter = null;
 
 async function loadEvents(isPast) {
   const grid = document.getElementById('events-grid');
-  grid.innerHTML = '<div class="spinner"></div>';
+  grid.innerHTML = PMS.skeletonGrid(3);
   try {
     const qs = isPast !== null ? `?is_past=${isPast}` : '';
     const events = await PMS.apiFetch(`/api/events${qs}`);
     grid.innerHTML = events.length
-      ? events.map(PMS.eventCard).join('')
+      ? events.map((e, idx) => PMS.eventCard(e, idx)).join('')
       : '<p style="grid-column:1/-1;text-align:center;color:var(--text-muted);padding:2rem 0">No events found in this category.</p>';
+    PMS.observeFadeElements(grid);
   } catch(err) {
     grid.innerHTML = `<p style="color:var(--danger);grid-column:1/-1;text-align:center">Failed to load events.</p>`;
   }
@@ -193,14 +194,30 @@ document.getElementById('reg-form').addEventListener('submit', async (ev) => {
   const btn = document.getElementById('reg-submit');
   const msgEl = document.getElementById('reg-msg');
   const eventId = document.getElementById('reg-event-id').value;
+
+  const name = document.getElementById('reg-name').value.trim();
+  const roll = document.getElementById('reg-roll').value.trim();
+  const batch = document.getElementById('reg-batch').value.trim();
+  const dept = document.getElementById('reg-dept').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+
+  if (!name || !roll || !batch || !dept || !email) {
+    PMS.showAlert(msgEl, 'Please fill in all required fields.');
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    PMS.showAlert(msgEl, 'Please enter a valid email address.');
+    return;
+  }
+
   PMS.setLoading(btn, true);
   try {
     const result = await PMS.apiPost(`/api/events/${eventId}/register`, {
-      student_name: document.getElementById('reg-name').value.trim(),
-      roll_number:  document.getElementById('reg-roll').value.trim(),
-      batch:        document.getElementById('reg-batch').value.trim(),
-      department:   document.getElementById('reg-dept').value.trim(),
-      email:        document.getElementById('reg-email').value.trim(),
+      student_name: name,
+      roll_number:  roll,
+      batch:        batch,
+      department:   dept,
+      email:        email,
       phone:        document.getElementById('reg-phone').value.trim() || null,
     });
     PMS.showAlert(msgEl, `✅ Registration confirmed! Your digital participation verification code is: <br><strong style="font-size:1.15rem;letter-spacing:1px;color:#6ee7b7">${PMS.escHtml(result.certificate_code)}</strong><br><small>Save this code to verify your certificate on this portal.</small>`, 'success', true);

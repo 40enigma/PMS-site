@@ -14,7 +14,7 @@
 <!-- Navbar -->
 <nav class="navbar" role="navigation" aria-label="Main navigation">
   <div class="container nav-inner">
-    <a href="/" class="nav-brand">⚛️ PMS <span>PIEAS</span></a>
+    <a href="/" class="nav-brand"><img src="/pms-logo.jpeg" alt="PMS Logo" class="nav-logo"> PMS <span>PIEAS</span></a>
     <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
       <span></span><span></span><span></span>
     </button>
@@ -165,14 +165,30 @@ document.getElementById('join-form').addEventListener('submit', async ev => {
   ev.preventDefault();
   const btn = document.getElementById('join-submit');
   const msg = document.getElementById('join-msg');
+
+  const fullName = document.getElementById('join-name').value.trim();
+  const rollNumber = document.getElementById('join-roll').value.trim();
+  const batch = document.getElementById('join-batch').value.trim();
+  const department = document.getElementById('join-dept').value.trim();
+  const email = document.getElementById('join-email').value.trim();
+
+  if (!fullName || !rollNumber || !batch || !department || !email) {
+    PMS.showAlert(msg, 'Please complete all required fields (*).');
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    PMS.showAlert(msg, 'Please provide a valid email address.');
+    return;
+  }
+
   PMS.setLoading(btn, true);
   try {
     await PMS.apiPost('/api/membership', {
-      full_name:   document.getElementById('join-name').value.trim(),
-      roll_number: document.getElementById('join-roll').value.trim(),
-      batch:       document.getElementById('join-batch').value.trim(),
-      department:  document.getElementById('join-dept').value.trim(),
-      email:       document.getElementById('join-email').value.trim(),
+      full_name:   fullName,
+      roll_number: rollNumber,
+      batch:       batch,
+      department:  department,
+      email:       email,
       phone:       document.getElementById('join-phone').value.trim() || null,
       interests:   document.getElementById('join-interests').value.trim() || null,
       why_join:    document.getElementById('join-why').value.trim() || null,
@@ -190,13 +206,27 @@ document.getElementById('contact-form').addEventListener('submit', async ev => {
   ev.preventDefault();
   const btn = document.getElementById('contact-submit');
   const msg = document.getElementById('contact-msg');
+
+  const name = document.getElementById('contact-name').value.trim();
+  const email = document.getElementById('contact-email').value.trim();
+  const message = document.getElementById('contact-message').value.trim();
+
+  if (!name || !email || !message) {
+    PMS.showAlert(msg, 'Please fill in your name, email, and message.');
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    PMS.showAlert(msg, 'Please enter a valid email address.');
+    return;
+  }
+
   PMS.setLoading(btn, true);
   try {
     await PMS.apiPost('/api/contact', {
-      name:    document.getElementById('contact-name').value.trim(),
-      email:   document.getElementById('contact-email').value.trim(),
+      name:    name,
+      email:   email,
       subject: document.getElementById('contact-subject').value.trim() || null,
-      message: document.getElementById('contact-message').value.trim(),
+      message: message,
     });
     PMS.showAlert(msg, '✉️ Your message has been sent to PMS administration.', 'success');
     document.getElementById('contact-form').reset();

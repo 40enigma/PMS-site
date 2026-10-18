@@ -372,7 +372,7 @@ pub async fn get_posts(
     Query(filter): Query<PostFilter>,
 ) -> Result<Json<Vec<Post>>, AppError> {
     let rows = sqlx::query_as::<_, Post>(
-        "SELECT id, title, slug, excerpt, body_markdown, author_name, author_batch, cover_image_url, category, material_formula, crystal_structure, published_at FROM posts
+        "SELECT id, title, slug, excerpt, body_markdown, author_name, author_role, author_batch, cover_image_url, category, material_formula, crystal_structure, read_time_minutes, is_featured, published_at FROM posts
          WHERE (?1 IS NULL OR category = ?1)
          ORDER BY published_at DESC"
     )
@@ -399,7 +399,7 @@ pub async fn get_post_by_slug(
     Path(slug): Path<String>,
 ) -> Result<Json<Post>, AppError> {
     let row = sqlx::query_as::<_, Post>(
-        "SELECT id, title, slug, excerpt, body_markdown, author_name, author_batch, cover_image_url, category, material_formula, crystal_structure, published_at FROM posts WHERE slug = ?1"
+        "SELECT id, title, slug, excerpt, body_markdown, author_name, author_role, author_batch, cover_image_url, category, material_formula, crystal_structure, read_time_minutes, is_featured, published_at FROM posts WHERE slug = ?1"
     )
     .bind(&slug)
     .fetch_optional(&pool)
@@ -446,8 +446,9 @@ pub async fn get_opportunities(
     Query(filter): Query<OpportunityFilter>,
 ) -> Result<Json<Vec<Opportunity>>, AppError> {
     let rows = sqlx::query_as::<_, Opportunity>(
-        "SELECT id, title, organization, opportunity_type, location, deadline, apply_url, description, posted_by_alumnus FROM opportunities
-         WHERE (?1 IS NULL OR opportunity_type = ?1)
+        "SELECT id, title, organization, opportunity_type, location, deadline, apply_url, description, posted_by_alumnus, is_active, created_at FROM opportunities
+         WHERE is_active = 1
+           AND (?1 IS NULL OR opportunity_type = ?1)
          ORDER BY deadline ASC"
     )
     .bind(&filter.opportunity_type)
@@ -466,7 +467,7 @@ pub async fn get_opportunities(
 )]
 pub async fn get_alumni(State(pool): State<SqlitePool>) -> Result<Json<Vec<Alumnus>>, AppError> {
     let rows = sqlx::query_as::<_, Alumnus>(
-        "SELECT id, name, batch, current_position, organization, location, photo_url, quote_testimonial, linkedin_url, research_domain FROM alumni ORDER BY batch DESC"
+        "SELECT id, name, graduating_batch, current_role, current_organization, industry_sector, location, photo_url, quote_testimonial, linkedin_url FROM alumni ORDER BY graduating_batch DESC"
     )
     .fetch_all(&pool)
     .await?;
@@ -486,7 +487,7 @@ pub async fn get_projects(
     Query(filter): Query<ProjectFilter>,
 ) -> Result<Json<Vec<Project>>, AppError> {
     let rows = sqlx::query_as::<_, Project>(
-        "SELECT id, title, student_names, batch, supervisor_name, project_type, abstract_summary, image_url, paper_or_repo_url, tags FROM projects
+        "SELECT id, title, students, batch, supervisors, project_type, abstract, image_url, paper_or_repo_url, tags FROM projects
          WHERE (?1 IS NULL OR project_type = ?1)
            AND (?2 IS NULL OR batch = ?2)
          ORDER BY batch DESC, title ASC"
@@ -508,7 +509,7 @@ pub async fn get_projects(
 )]
 pub async fn get_sponsors(State(pool): State<SqlitePool>) -> Result<Json<Vec<Sponsor>>, AppError> {
     let rows = sqlx::query_as::<_, Sponsor>(
-        "SELECT id, name, logo_url, website_url, tier FROM sponsors ORDER BY CASE tier WHEN 'Platinum' THEN 1 WHEN 'Gold' THEN 2 WHEN 'Silver' THEN 3 ELSE 4 END"
+        "SELECT id, name, logo_url, website_url, tier, since_year, display_order FROM sponsors ORDER BY display_order ASC, CASE tier WHEN 'Platinum' THEN 1 WHEN 'Gold' THEN 2 WHEN 'Silver' THEN 3 ELSE 4 END"
     )
     .fetch_all(&pool)
     .await?;
@@ -525,7 +526,7 @@ pub async fn get_sponsors(State(pool): State<SqlitePool>) -> Result<Json<Vec<Spo
 )]
 pub async fn get_faqs(State(pool): State<SqlitePool>) -> Result<Json<Vec<Faq>>, AppError> {
     let rows = sqlx::query_as::<_, Faq>(
-        "SELECT id, question, answer, display_order FROM faqs ORDER BY display_order ASC",
+        "SELECT id, question, answer, category, display_order FROM faqs ORDER BY display_order ASC",
     )
     .fetch_all(&pool)
     .await?;

@@ -17,7 +17,7 @@
 <nav class="navbar" role="navigation" aria-label="Main navigation">
   <div class="container nav-inner">
     <a href="/" class="nav-brand">
-      ⚛️ PMS <span>PIEAS</span>
+      <img src="/pms-logo.jpeg" alt="PMS Logo" class="nav-logo"> PMS <span>PIEAS</span>
     </a>
     <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
       <span></span><span></span><span></span>
@@ -176,8 +176,12 @@
         </ul>
       </div>
       <div>
-        <div class="footer-title">Contact &amp; Location</div>
-        <p style="font-size:.85rem">pms@pieas.edu.pk<br>DMME Block, PIEAS, Nilore, Islamabad</p>
+        <div class="footer-title">Contact &amp; Governance</div>
+        <p style="font-size:.85rem;line-height:1.6">
+          <a href="mailto:pms@pieas.edu.pk" class="pms-contact-email" style="color:var(--text-muted)">pms@pieas.edu.pk</a><br>
+          <span class="pms-office-location">DMME Block, PIEAS, Nilore, Islamabad</span><br>
+          <a href="#" class="pms-constitution-link" style="display:none;margin-top:.45rem;color:var(--accent);font-weight:600">📜 Society Constitution (PDF) ↗</a>
+        </p>
       </div>
     </div>
     <div class="footer-bottom">
@@ -240,33 +244,40 @@
 
   // 2. Load featured events
   const eventsGrid = document.getElementById('events-grid');
+  eventsGrid.innerHTML = PMS.skeletonGrid(3);
   try {
     const events = await PMS.apiFetch('/api/events?is_featured=true&is_past=false');
     eventsGrid.innerHTML = events.length
-      ? events.slice(0, 3).map(PMS.eventCard).join('')
+      ? events.slice(0, 3).map((e, idx) => PMS.eventCard(e, idx)).join('')
       : '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No upcoming featured events listed at this time.</p>';
+    PMS.observeFadeElements(eventsGrid);
   } catch(e) {
     eventsGrid.innerHTML = `<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">Could not load events.</p>`;
   }
 
   // 3. Load latest technical posts
   const postsGrid = document.getElementById('posts-grid');
+  postsGrid.innerHTML = PMS.skeletonGrid(3);
   try {
     const posts = await PMS.apiFetch('/api/posts');
     postsGrid.innerHTML = posts.length
-      ? posts.slice(0, 3).map(PMS.postCard).join('')
+      ? posts.slice(0, 3).map((p, idx) => PMS.postCard(p, idx)).join('')
       : '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No articles published yet.</p>';
+    PMS.observeFadeElements(postsGrid);
   } catch(e) {
     postsGrid.innerHTML = `<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">Could not load posts.</p>`;
   }
 
-  // 4. Newsletter form
+  // 4. Newsletter form with client validation
   document.getElementById('newsletter-form').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const btn = document.getElementById('newsletter-submit');
     const msgEl = document.getElementById('newsletter-msg');
     const email = document.getElementById('newsletter-email').value.trim();
-    if (!email) { PMS.showAlert(msgEl, 'Please enter a valid email address.'); return; }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      PMS.showAlert(msgEl, 'Please enter a valid email address.');
+      return;
+    }
     PMS.setLoading(btn, true);
     try {
       await PMS.apiPost('/api/newsletter', { email });

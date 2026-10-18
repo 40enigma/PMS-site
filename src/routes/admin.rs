@@ -779,7 +779,7 @@ async fn list_posts(
     State(pool): State<SqlitePool>,
 ) -> Result<Json<Vec<Post>>, AppError> {
     let rows = sqlx::query_as::<_, Post>(
-        "SELECT id, title, slug, excerpt, body_markdown, author_name, author_batch, cover_image_url, category, material_formula, crystal_structure, published_at FROM posts ORDER BY published_at DESC"
+        "SELECT id, title, slug, excerpt, body_markdown, author_name, author_role, author_batch, cover_image_url, category, material_formula, crystal_structure, read_time_minutes, is_featured, published_at FROM posts ORDER BY published_at DESC"
     ).fetch_all(&pool).await?;
     Ok(Json(rows))
 }
@@ -799,11 +799,13 @@ async fn create_post(
         ));
     }
     let slug = p.slug.unwrap_or_else(|| slugify(&p.title));
-    sqlx::query("INSERT INTO posts (title,slug,excerpt,body_markdown,author_name,author_batch,cover_image_url,category,material_formula,crystal_structure) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)")
+    sqlx::query("INSERT INTO posts (title,slug,excerpt,body_markdown,author_name,author_role,author_batch,cover_image_url,category,material_formula,crystal_structure,read_time_minutes,is_featured) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)")
         .bind(&p.title).bind(&slug).bind(&p.excerpt).bind(&p.body_markdown)
-        .bind(&p.author_name).bind(&p.author_batch).bind(&p.cover_image_url)
+        .bind(&p.author_name).bind(&p.author_role).bind(&p.author_batch).bind(&p.cover_image_url)
         .bind(p.category.as_deref().unwrap_or("Explainer"))
         .bind(&p.material_formula).bind(&p.crystal_structure)
+        .bind(p.read_time_minutes.unwrap_or(5))
+        .bind(p.is_featured.unwrap_or(false))
         .execute(&pool).await?;
     Ok(Json(DeleteResponse {
         message: "Created".into(),
@@ -821,11 +823,13 @@ async fn update_post(
         return Err(AppError::BadRequest("title is required".into()));
     }
     let slug = p.slug.unwrap_or_else(|| slugify(&p.title));
-    let res = sqlx::query("UPDATE posts SET title=?1,slug=?2,excerpt=?3,body_markdown=?4,author_name=?5,author_batch=?6,cover_image_url=?7,category=?8,material_formula=?9,crystal_structure=?10 WHERE id=?11")
+    let res = sqlx::query("UPDATE posts SET title=?1,slug=?2,excerpt=?3,body_markdown=?4,author_name=?5,author_role=?6,author_batch=?7,cover_image_url=?8,category=?9,material_formula=?10,crystal_structure=?11,read_time_minutes=?12,is_featured=?13 WHERE id=?14")
         .bind(&p.title).bind(&slug).bind(&p.excerpt).bind(&p.body_markdown)
-        .bind(&p.author_name).bind(&p.author_batch).bind(&p.cover_image_url)
+        .bind(&p.author_name).bind(&p.author_role).bind(&p.author_batch).bind(&p.cover_image_url)
         .bind(p.category.as_deref().unwrap_or("Explainer"))
         .bind(&p.material_formula).bind(&p.crystal_structure)
+        .bind(p.read_time_minutes.unwrap_or(5))
+        .bind(p.is_featured.unwrap_or(false))
         .bind(id)
         .execute(&pool).await?;
     if res.rows_affected() == 0 {
@@ -882,7 +886,7 @@ async fn create_resource(
         return Err(AppError::BadRequest("url is required".into()));
     }
     sqlx::query("INSERT INTO resources (title,url,category,software_tag,description,is_pinned) VALUES (?1,?2,?3,?4,?5,?6)")
-        .bind(&p.title).bind(&p.url).bind(p.category.as_deref().unwrap_or("Software Guides"))
+        .bind(&p.title).bind(&p.url).bind(p.category.as_deref().unwrap_or("Software"))
         .bind(&p.software_tag).bind(&p.description).bind(p.is_pinned.unwrap_or(false))
         .execute(&pool).await?;
     Ok(Json(DeleteResponse {
@@ -901,7 +905,7 @@ async fn update_resource(
         return Err(AppError::BadRequest("title is required".into()));
     }
     let res = sqlx::query("UPDATE resources SET title=?1,url=?2,category=?3,software_tag=?4,description=?5,is_pinned=?6 WHERE id=?7")
-        .bind(&p.title).bind(&p.url).bind(p.category.as_deref().unwrap_or("Software Guides"))
+        .bind(&p.title).bind(&p.url).bind(p.category.as_deref().unwrap_or("Software"))
         .bind(&p.software_tag).bind(&p.description).bind(p.is_pinned.unwrap_or(false)).bind(id)
         .execute(&pool).await?;
     if res.rows_affected() == 0 {
@@ -940,7 +944,7 @@ async fn list_opportunities(
     State(pool): State<SqlitePool>,
 ) -> Result<Json<Vec<Opportunity>>, AppError> {
     let rows = sqlx::query_as::<_, Opportunity>(
-        "SELECT id, title, organization, opportunity_type, location, deadline, apply_url, description, posted_by_alumnus FROM opportunities ORDER BY id DESC"
+        "SELECT id, title, organization, opportunity_type, location, deadline, apply_url, description, posted_by_alumnus, is_active, created_at FROM opportunities ORDER BY id DESC"
     ).fetch_all(&pool).await?;
     Ok(Json(rows))
 }
@@ -957,9 +961,10 @@ async fn create_opportunity(
     if p.organization.trim().is_empty() {
         return Err(AppError::BadRequest("organization is required".into()));
     }
-    sqlx::query("INSERT INTO opportunities (title,organization,opportunity_type,location,deadline,apply_url,description,posted_by_alumnus) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)")
+    sqlx::query("INSERT INTO opportunities (title,organization,opportunity_type,location,deadline,apply_url,description,posted_by_alumnus,is_active) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)")
         .bind(&p.title).bind(&p.organization).bind(p.opportunity_type.as_deref().unwrap_or("Internship"))
         .bind(&p.location).bind(&p.deadline).bind(&p.apply_url).bind(&p.description).bind(&p.posted_by_alumnus)
+        .bind(p.is_active.unwrap_or(true))
         .execute(&pool).await?;
     Ok(Json(DeleteResponse {
         message: "Created".into(),
@@ -976,9 +981,10 @@ async fn update_opportunity(
     if p.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".into()));
     }
-    let res = sqlx::query("UPDATE opportunities SET title=?1,organization=?2,opportunity_type=?3,location=?4,deadline=?5,apply_url=?6,description=?7,posted_by_alumnus=?8 WHERE id=?9")
+    let res = sqlx::query("UPDATE opportunities SET title=?1,organization=?2,opportunity_type=?3,location=?4,deadline=?5,apply_url=?6,description=?7,posted_by_alumnus=?8,is_active=?9 WHERE id=?10")
         .bind(&p.title).bind(&p.organization).bind(p.opportunity_type.as_deref().unwrap_or("Internship"))
         .bind(&p.location).bind(&p.deadline).bind(&p.apply_url).bind(&p.description).bind(&p.posted_by_alumnus)
+        .bind(p.is_active.unwrap_or(true))
         .bind(id)
         .execute(&pool).await?;
     if res.rows_affected() == 0 {
@@ -1017,7 +1023,7 @@ async fn list_alumni(
     State(pool): State<SqlitePool>,
 ) -> Result<Json<Vec<Alumnus>>, AppError> {
     let rows = sqlx::query_as::<_, Alumnus>(
-        "SELECT id, name, batch, current_position, organization, location, photo_url, quote_testimonial, linkedin_url, research_domain FROM alumni ORDER BY batch DESC"
+        "SELECT id, name, graduating_batch, current_role, current_organization, industry_sector, location, photo_url, quote_testimonial, linkedin_url FROM alumni ORDER BY graduating_batch DESC"
     ).fetch_all(&pool).await?;
     Ok(Json(rows))
 }
@@ -1031,13 +1037,13 @@ async fn create_alumnus(
     if p.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".into()));
     }
-    if p.batch.trim().is_empty() {
-        return Err(AppError::BadRequest("batch is required".into()));
+    if p.graduating_batch.trim().is_empty() {
+        return Err(AppError::BadRequest("graduating_batch is required".into()));
     }
-    sqlx::query("INSERT INTO alumni (name,batch,current_position,organization,location,photo_url,quote_testimonial,linkedin_url,research_domain) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)")
-        .bind(&p.name).bind(&p.batch).bind(&p.current_position).bind(&p.organization)
-        .bind(&p.location).bind(&p.photo_url).bind(&p.quote_testimonial)
-        .bind(&p.linkedin_url).bind(&p.research_domain)
+    sqlx::query("INSERT INTO alumni (name,graduating_batch,current_role,current_organization,industry_sector,location,photo_url,quote_testimonial,linkedin_url) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)")
+        .bind(&p.name).bind(&p.graduating_batch).bind(&p.current_role).bind(&p.current_organization)
+        .bind(&p.industry_sector).bind(&p.location).bind(&p.photo_url).bind(&p.quote_testimonial)
+        .bind(&p.linkedin_url)
         .execute(&pool).await?;
     Ok(Json(DeleteResponse {
         message: "Created".into(),
@@ -1054,10 +1060,10 @@ async fn update_alumnus(
     if p.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".into()));
     }
-    let res = sqlx::query("UPDATE alumni SET name=?1,batch=?2,current_position=?3,organization=?4,location=?5,photo_url=?6,quote_testimonial=?7,linkedin_url=?8,research_domain=?9 WHERE id=?10")
-        .bind(&p.name).bind(&p.batch).bind(&p.current_position).bind(&p.organization)
-        .bind(&p.location).bind(&p.photo_url).bind(&p.quote_testimonial)
-        .bind(&p.linkedin_url).bind(&p.research_domain).bind(id)
+    let res = sqlx::query("UPDATE alumni SET name=?1,graduating_batch=?2,current_role=?3,current_organization=?4,industry_sector=?5,location=?6,photo_url=?7,quote_testimonial=?8,linkedin_url=?9 WHERE id=?10")
+        .bind(&p.name).bind(&p.graduating_batch).bind(&p.current_role).bind(&p.current_organization)
+        .bind(&p.industry_sector).bind(&p.location).bind(&p.photo_url).bind(&p.quote_testimonial)
+        .bind(&p.linkedin_url).bind(id)
         .execute(&pool).await?;
     if res.rows_affected() == 0 {
         return Err(AppError::NotFound);
@@ -1095,7 +1101,7 @@ async fn list_projects(
     State(pool): State<SqlitePool>,
 ) -> Result<Json<Vec<Project>>, AppError> {
     let rows = sqlx::query_as::<_, Project>(
-        "SELECT id, title, student_names, batch, supervisor_name, project_type, abstract_summary, image_url, paper_or_repo_url, tags FROM projects ORDER BY id DESC"
+        "SELECT id, title, students, batch, supervisors, project_type, abstract, image_url, paper_or_repo_url, tags FROM projects ORDER BY id DESC"
     ).fetch_all(&pool).await?;
     Ok(Json(rows))
 }
@@ -1109,16 +1115,13 @@ async fn create_project(
     if p.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".into()));
     }
-    if p.student_names.trim().is_empty() {
-        return Err(AppError::BadRequest("student_names is required".into()));
-    }
     if p.batch.trim().is_empty() {
         return Err(AppError::BadRequest("batch is required".into()));
     }
-    sqlx::query("INSERT INTO projects (title,student_names,batch,supervisor_name,project_type,abstract_summary,image_url,paper_or_repo_url,tags) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)")
-        .bind(&p.title).bind(&p.student_names).bind(&p.batch).bind(&p.supervisor_name)
-        .bind(p.project_type.as_deref().unwrap_or("FYP Highlight"))
-        .bind(&p.abstract_summary).bind(&p.image_url).bind(&p.paper_or_repo_url).bind(&p.tags)
+    sqlx::query("INSERT INTO projects (title,students,batch,supervisors,project_type,abstract,image_url,paper_or_repo_url,tags) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)")
+        .bind(&p.title).bind(&p.students).bind(&p.batch).bind(&p.supervisors)
+        .bind(p.project_type.as_deref().unwrap_or("FYP"))
+        .bind(&p.r#abstract).bind(&p.image_url).bind(&p.paper_or_repo_url).bind(&p.tags)
         .execute(&pool).await?;
     Ok(Json(DeleteResponse {
         message: "Created".into(),
@@ -1135,10 +1138,10 @@ async fn update_project(
     if p.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".into()));
     }
-    let res = sqlx::query("UPDATE projects SET title=?1,student_names=?2,batch=?3,supervisor_name=?4,project_type=?5,abstract_summary=?6,image_url=?7,paper_or_repo_url=?8,tags=?9 WHERE id=?10")
-        .bind(&p.title).bind(&p.student_names).bind(&p.batch).bind(&p.supervisor_name)
-        .bind(p.project_type.as_deref().unwrap_or("FYP Highlight"))
-        .bind(&p.abstract_summary).bind(&p.image_url).bind(&p.paper_or_repo_url).bind(&p.tags)
+    let res = sqlx::query("UPDATE projects SET title=?1,students=?2,batch=?3,supervisors=?4,project_type=?5,abstract=?6,image_url=?7,paper_or_repo_url=?8,tags=?9 WHERE id=?10")
+        .bind(&p.title).bind(&p.students).bind(&p.batch).bind(&p.supervisors)
+        .bind(p.project_type.as_deref().unwrap_or("FYP"))
+        .bind(&p.r#abstract).bind(&p.image_url).bind(&p.paper_or_repo_url).bind(&p.tags)
         .bind(id)
         .execute(&pool).await?;
     if res.rows_affected() == 0 {
@@ -1177,7 +1180,7 @@ async fn list_sponsors(
     State(pool): State<SqlitePool>,
 ) -> Result<Json<Vec<Sponsor>>, AppError> {
     let rows = sqlx::query_as::<_, Sponsor>(
-        "SELECT id, name, logo_url, website_url, tier FROM sponsors ORDER BY CASE tier WHEN 'Platinum' THEN 1 WHEN 'Gold' THEN 2 WHEN 'Silver' THEN 3 ELSE 4 END"
+        "SELECT id, name, logo_url, website_url, tier, since_year, display_order FROM sponsors ORDER BY display_order ASC, id DESC"
     ).fetch_all(&pool).await?;
     Ok(Json(rows))
 }
@@ -1191,11 +1194,13 @@ async fn create_sponsor(
     if p.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".into()));
     }
-    sqlx::query("INSERT INTO sponsors (name,logo_url,website_url,tier) VALUES (?1,?2,?3,?4)")
+    sqlx::query("INSERT INTO sponsors (name,logo_url,website_url,tier,since_year,display_order) VALUES (?1,?2,?3,?4,?5,?6)")
         .bind(&p.name)
         .bind(&p.logo_url)
         .bind(&p.website_url)
         .bind(p.tier.as_deref().unwrap_or("Partner"))
+        .bind(&p.since_year)
+        .bind(p.display_order.unwrap_or(0))
         .execute(&pool)
         .await?;
     Ok(Json(DeleteResponse {
@@ -1213,11 +1218,13 @@ async fn update_sponsor(
     if p.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".into()));
     }
-    let res = sqlx::query("UPDATE sponsors SET name=?1,logo_url=?2,website_url=?3,tier=?4 WHERE id=?5")
+    let res = sqlx::query("UPDATE sponsors SET name=?1,logo_url=?2,website_url=?3,tier=?4,since_year=?5,display_order=?6 WHERE id=?7")
         .bind(&p.name)
         .bind(&p.logo_url)
         .bind(&p.website_url)
         .bind(p.tier.as_deref().unwrap_or("Partner"))
+        .bind(&p.since_year)
+        .bind(p.display_order.unwrap_or(0))
         .bind(id)
         .execute(&pool)
         .await?;
@@ -1257,7 +1264,7 @@ async fn list_faqs(
     State(pool): State<SqlitePool>,
 ) -> Result<Json<Vec<Faq>>, AppError> {
     let rows = sqlx::query_as::<_, Faq>(
-        "SELECT id, question, answer, display_order FROM faqs ORDER BY display_order ASC",
+        "SELECT id, question, answer, category, display_order FROM faqs ORDER BY display_order ASC",
     )
     .fetch_all(&pool)
     .await?;
@@ -1276,9 +1283,10 @@ async fn create_faq(
     if p.answer.trim().is_empty() {
         return Err(AppError::BadRequest("answer is required".into()));
     }
-    sqlx::query("INSERT INTO faqs (question,answer,display_order) VALUES (?1,?2,?3)")
+    sqlx::query("INSERT INTO faqs (question,answer,category,display_order) VALUES (?1,?2,?3,?4)")
         .bind(&p.question)
         .bind(&p.answer)
+        .bind(p.category.as_deref().unwrap_or("General"))
         .bind(p.display_order.unwrap_or(99))
         .execute(&pool)
         .await?;
@@ -1297,9 +1305,10 @@ async fn update_faq(
     if p.question.trim().is_empty() {
         return Err(AppError::BadRequest("question is required".into()));
     }
-    let res = sqlx::query("UPDATE faqs SET question=?1,answer=?2,display_order=?3 WHERE id=?4")
+    let res = sqlx::query("UPDATE faqs SET question=?1,answer=?2,category=?3,display_order=?4 WHERE id=?5")
         .bind(&p.question)
         .bind(&p.answer)
+        .bind(p.category.as_deref().unwrap_or("General"))
         .bind(p.display_order.unwrap_or(99))
         .bind(id)
         .execute(&pool)
