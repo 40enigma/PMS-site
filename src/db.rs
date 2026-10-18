@@ -12,6 +12,7 @@ pub async fn init_pool() -> SqlitePool {
         .expect("Invalid DB URL")
         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
         .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
+        .busy_timeout(std::time::Duration::from_secs(5))
         .foreign_keys(true);
 
     let pool = SqlitePoolOptions::new()
@@ -126,22 +127,7 @@ pub async fn seed_data(pool: &SqlitePool) {
         );
     }
 
-    // Check if initial seeding was already completed via _db_metadata
-    let already_seeded: Option<(String,)> = sqlx::query_as(
-        "SELECT value FROM _db_metadata WHERE key = 'initial_seed_done'"
-    )
-    .fetch_optional(pool)
-    .await
-    .unwrap_or(None);
-
-    if let Some((val,)) = already_seeded {
-        if val == "1" {
-            tracing::info!("Database already seeded (initial_seed_done=1), skipping.");
-            return;
-        }
-    }
-
-    tracing::info!("Seeding database with initial academic society records...");
+    tracing::info!("Checking and seeding database with initial academic society records...");
 
     sqlx::query(
         "INSERT OR IGNORE INTO site_stats (id, active_members, events_held, years_active, industrial_partners, constitution_pdf_url, office_location, contact_email) VALUES (1, 85, 42, 6, 12, '/uploads/pms-constitution.pdf', 'Department of Metallurgy & Materials Engineering (DMME) Block, PIEAS, Nilore, Islamabad', 'pms@pieas.edu.pk')"

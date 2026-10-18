@@ -20,7 +20,7 @@ async fn main() {
         .init();
 
     // Create uploads directory
-    tokio::fs::create_dir_all("uploads")
+    tokio::fs::create_dir_all(pms_platform::upload_dir())
         .await
         .expect("Failed to create uploads directory");
 

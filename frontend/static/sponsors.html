@@ -142,14 +142,16 @@
       if (sec.subtitle || sec.content) document.getElementById('pitch-desc').textContent = sec.subtitle || sec.content;
 
       if (sec.extra_json) {
-        const cards = JSON.parse(sec.extra_json);
-        pitchGrid.innerHTML = cards.map(c => `
-          <article class="card fade-up">
-            <h3 style="font-size:1.1rem;margin-bottom:.5rem;color:var(--primary-light)">✨ ${PMS.escHtml(c.title)}</h3>
-            <p style="color:var(--text-muted);font-size:.875rem;line-height:1.6">${PMS.escHtml(c.desc)}</p>
-          </article>
-        `).join('');
-        return;
+        try {
+          const cards = JSON.parse(sec.extra_json);
+          pitchGrid.innerHTML = cards.map(c => `
+            <article class="card fade-up">
+              <h3 style="font-size:1.1rem;margin-bottom:.5rem;color:var(--primary-light)">✨ ${PMS.escHtml(c.title)}</h3>
+              <p style="color:var(--text-muted);font-size:.875rem;line-height:1.6">${PMS.escHtml(c.desc)}</p>
+            </article>
+          `).join('');
+          return;
+        } catch (_) {}
       }
     }
     pitchGrid.innerHTML = '';

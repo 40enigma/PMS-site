@@ -6,7 +6,7 @@ pub mod rate_limit;
 pub mod routes;
 
 use axum::{
-    extract::Request,
+    extract::{DefaultBodyLimit, Request},
     http::{HeaderValue, Method, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -14,12 +14,18 @@ use axum::{
 };
 use sqlx::SqlitePool;
 use tower_http::{
+    compression::CompressionLayer,
     cors::CorsLayer,
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
+
+/// Helper to read the upload directory from UPLOAD_DIR env var (defaulting to "uploads").
+pub fn upload_dir() -> String {
+    std::env::var("UPLOAD_DIR").unwrap_or_else(|_| "uploads".to_string())
+}
 
 #[derive(OpenApi)]
 #[openapi(
@@ -229,7 +235,7 @@ pub fn create_app(pool: SqlitePool) -> Router {
         .merge(routes::public::public_routes())
         .merge(routes::admin::admin_routes())
         // uploads served as raw files (no execution)
-        .nest_service("/uploads", ServeDir::new("uploads"))
+        .nest_service("/uploads", ServeDir::new(upload_dir()))
         // Static assets served under /assets
         .nest_service("/assets", ServeDir::new("frontend/static/assets"))
         // Explicit static page routes for pretty URLs
@@ -258,6 +264,8 @@ pub fn create_app(pool: SqlitePool) -> Router {
         .route_service("/pms-logo.jpeg", ServeFile::new("frontend/static/pms-logo.jpeg"))
         // Any unknown route serves 404.html with StatusCode::NOT_FOUND (404)
         .fallback(not_found_fallback)
+        .layer(DefaultBodyLimit::max(20 * 1024 * 1024))
+        .layer(CompressionLayer::new())
         .layer(axum::Extension(pool.clone()))
         .layer(middleware::from_fn(security_headers))
         .layer(cors)

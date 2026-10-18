@@ -56,7 +56,9 @@ CREATE TABLE IF NOT EXISTS event_registrations (
     email TEXT NOT NULL,
     phone TEXT,
     certificate_code TEXT UNIQUE,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(event_id, roll_number),
+    UNIQUE(event_id, email)
 );
 
 CREATE TABLE IF NOT EXISTS team_members (
@@ -182,7 +184,9 @@ CREATE TABLE IF NOT EXISTS membership_applications (
     interests TEXT,
     why_join TEXT,
     status TEXT NOT NULL DEFAULT 'Pending',
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(roll_number),
+    UNIQUE(email)
 );
 
 CREATE TABLE IF NOT EXISTS contact_messages (

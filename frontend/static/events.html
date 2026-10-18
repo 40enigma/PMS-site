@@ -172,61 +172,7 @@ async function loadEvents(isPast) {
   }
 }
 
-// Event delegation for Register buttons (no inline onclick!)
-document.getElementById('events-grid').addEventListener('click', (ev) => {
-  const btn = ev.target.closest('.btn-open-reg');
-  if (btn) {
-    const eventId = btn.dataset.eventId;
-    const eventTitle = btn.dataset.eventTitle;
-    document.getElementById('reg-event-id').value = eventId;
-    document.getElementById('reg-modal-title').textContent = `Register: ${eventTitle}`;
-    document.getElementById('reg-msg').innerHTML = '';
-    document.getElementById('reg-modal').showModal();
-  }
-});
-
-const regModal = document.getElementById('reg-modal');
-document.getElementById('reg-close').onclick = () => regModal.close();
-document.getElementById('reg-close-icon').onclick = () => regModal.close();
-
-document.getElementById('reg-form').addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  const btn = document.getElementById('reg-submit');
-  const msgEl = document.getElementById('reg-msg');
-  const eventId = document.getElementById('reg-event-id').value;
-
-  const name = document.getElementById('reg-name').value.trim();
-  const roll = document.getElementById('reg-roll').value.trim();
-  const batch = document.getElementById('reg-batch').value.trim();
-  const dept = document.getElementById('reg-dept').value.trim();
-  const email = document.getElementById('reg-email').value.trim();
-
-  if (!name || !roll || !batch || !dept || !email) {
-    PMS.showAlert(msgEl, 'Please fill in all required fields.');
-    return;
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    PMS.showAlert(msgEl, 'Please enter a valid email address.');
-    return;
-  }
-
-  PMS.setLoading(btn, true);
-  try {
-    const result = await PMS.apiPost(`/api/events/${eventId}/register`, {
-      student_name: name,
-      roll_number:  roll,
-      batch:        batch,
-      department:   dept,
-      email:        email,
-      phone:        document.getElementById('reg-phone').value.trim() || null,
-    });
-    PMS.showAlert(msgEl, `✅ Registration confirmed! Your digital participation verification code is: <br><strong style="font-size:1.15rem;letter-spacing:1px;color:#6ee7b7">${PMS.escHtml(result.certificate_code)}</strong><br><small>Save this code to verify your certificate on this portal.</small>`, 'success', true);
-  } catch(e) {
-    PMS.showAlert(msgEl, e.message || 'Registration failed.');
-  } finally {
-    PMS.setLoading(btn, false);
-  }
-});
+// Note: Event registration modal & delegation handled globally by PMS.openRegistrationModal in app.js
 
 document.querySelectorAll('.filter-btn').forEach(btn => {
   btn.addEventListener('click', () => {

@@ -13,6 +13,8 @@ pub enum AppError {
     NotFound,
     #[error("Bad request: {0}")]
     BadRequest(String),
+    #[error("Conflict: {0}")]
+    Conflict(String),
     #[error("Unauthorized")]
     Unauthorized,
     #[error("Too Many Requests")]
@@ -31,6 +33,7 @@ impl IntoResponse for AppError {
         let (status, client_message) = match &self {
             AppError::NotFound => (StatusCode::NOT_FOUND, "Resource not found".to_string()),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
+            AppError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
             AppError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()),
             AppError::TooManyRequests => (
                 StatusCode::TOO_MANY_REQUESTS,

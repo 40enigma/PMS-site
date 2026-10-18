@@ -161,15 +161,17 @@ async function loadTeamGuidance() {
       if (sec.subtitle) document.getElementById('guidance-desc').textContent = sec.subtitle;
 
       if (sec.extra_json) {
-        const portfolios = JSON.parse(sec.extra_json);
-        grid.innerHTML = portfolios.map(p => `
-          <article class="card fade-up">
-            <span class="badge" style="margin-bottom:.5rem">${PMS.escHtml(p.scope)}</span>
-            <h3 style="font-size:1.15rem;margin-bottom:.5rem;color:var(--text)">${PMS.escHtml(p.title)}</h3>
-            <p style="color:var(--text-muted);font-size:.875rem;line-height:1.6">${PMS.escHtml(p.desc)}</p>
-          </article>
-        `).join('');
-        return;
+        try {
+          const portfolios = JSON.parse(sec.extra_json);
+          grid.innerHTML = portfolios.map(p => `
+            <article class="card fade-up">
+              <span class="badge" style="margin-bottom:.5rem">${PMS.escHtml(p.scope)}</span>
+              <h3 style="font-size:1.15rem;margin-bottom:.5rem;color:var(--text)">${PMS.escHtml(p.title)}</h3>
+              <p style="color:var(--text-muted);font-size:.875rem;line-height:1.6">${PMS.escHtml(p.desc)}</p>
+            </article>
+          `).join('');
+          return;
+        } catch (_) {}
       }
     }
     grid.innerHTML = '<p style="color:var(--text-muted);grid-column:1/-1">Portfolios configured in administration.</p>';

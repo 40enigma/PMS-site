@@ -40,6 +40,8 @@ pub fn admin_routes() -> Router<SqlitePool> {
         .route("/api/auth/me", get(verify_session))
         // Upload
         .route("/api/admin/upload", post(upload_file))
+        .route("/api/admin/uploads", get(list_uploads))
+        .route("/api/admin/uploads/{filename}", delete(delete_upload))
         // Generic CRUD for all models
         .route(
             "/api/admin/announcements",
@@ -321,9 +323,13 @@ async fn upload_file(
         }
 
         // Sniff the actual MIME type from magic bytes.
-        let sniffed_mime = infer::get(&data)
-            .map(|t| t.mime_type())
-            .unwrap_or("application/octet-stream");
+        let sniffed_mime = if let Some(t) = infer::get(&data) {
+            t.mime_type()
+        } else if lower.ends_with(".txt") && std::str::from_utf8(&data).is_ok() {
+            "text/plain"
+        } else {
+            "application/octet-stream"
+        };
 
         // Allow only the whitelisted MIME types.
         if !ALLOWED_MIME_TYPES.contains(&sniffed_mime) {
@@ -346,8 +352,9 @@ async fn upload_file(
         }
 
         // Generate a safe filename (UUID prefix + original name, no path components).
+        let upload_directory = crate::upload_dir();
         let safe_name = format!("{}_{}", uuid::Uuid::new_v4(), file_name);
-        let path = format!("uploads/{}", safe_name);
+        let path = format!("{}/{}", upload_directory, safe_name);
 
         tokio::fs::write(&path, &data)
             .await
@@ -370,12 +377,71 @@ async fn upload_file(
         );
 
         return Ok(Json(UploadResponse {
-            url: format!("/{}", path),
+            url: format!("/uploads/{}", safe_name),
             filename: safe_name,
         }));
     }
 
     Err(AppError::BadRequest("No file provided".into()))
+}
+
+#[derive(serde::Serialize)]
+pub struct UploadedFileItem {
+    pub filename: String,
+    pub url: String,
+    pub size: u64,
+}
+
+#[axum::debug_handler]
+async fn list_uploads(
+    _claims: AdminClaims,
+) -> Result<Json<Vec<UploadedFileItem>>, AppError> {
+    let dir = crate::upload_dir();
+    let mut entries = tokio::fs::read_dir(&dir)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let mut files = Vec::new();
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        if let Ok(meta) = entry.metadata().await {
+            if meta.is_file() {
+                if let Ok(name) = entry.file_name().into_string() {
+                    let size = meta.len();
+                    files.push(UploadedFileItem {
+                        url: format!("/uploads/{}", name),
+                        filename: name,
+                        size,
+                    });
+                }
+            }
+        }
+    }
+    files.sort_by(|a, b| a.filename.cmp(&b.filename));
+    Ok(Json(files))
+}
+
+#[axum::debug_handler]
+async fn delete_upload(
+    _claims: AdminClaims,
+    Path(filename): Path<String>,
+) -> Result<Json<DeleteResponse>, AppError> {
+    let safe_filename = std::path::Path::new(&filename)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| AppError::BadRequest("Invalid filename".into()))?;
+
+    let path = format!("{}/{}", crate::upload_dir(), safe_filename);
+    if !std::path::Path::new(&path).exists() {
+        return Err(AppError::NotFound);
+    }
+
+    tokio::fs::remove_file(&path)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    Ok(Json(DeleteResponse {
+        message: "File deleted successfully".into(),
+    }))
 }
 
 // ---------------------------------------------------------------------------
@@ -482,7 +548,17 @@ async fn update_stats(
     State(pool): State<SqlitePool>,
     Json(p): Json<UpdateSiteStats>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    let res = sqlx::query("UPDATE site_stats SET active_members=COALESCE(?1,active_members), events_held=COALESCE(?2,events_held), years_active=COALESCE(?3,years_active), industrial_partners=COALESCE(?4,industrial_partners), constitution_pdf_url=COALESCE(?5,constitution_pdf_url), office_location=COALESCE(?6,office_location), contact_email=COALESCE(?7,contact_email) WHERE id=1")
+    let res = sqlx::query(
+        "UPDATE site_stats SET \
+         active_members=COALESCE(?1,active_members), \
+         events_held=COALESCE(?2,events_held), \
+         years_active=COALESCE(?3,years_active), \
+         industrial_partners=COALESCE(?4,industrial_partners), \
+         constitution_pdf_url=?5, \
+         office_location=?6, \
+         contact_email=?7 \
+         WHERE id=1"
+    )
         .bind(p.active_members).bind(p.events_held).bind(p.years_active).bind(p.industrial_partners)
         .bind(&p.constitution_pdf_url).bind(&p.office_location).bind(&p.contact_email)
         .execute(&pool).await?;
@@ -1364,7 +1440,14 @@ async fn update_membership_status(
     let status = body
         .get("status")
         .and_then(|s| s.as_str())
-        .unwrap_or("Pending");
+        .ok_or_else(|| AppError::BadRequest("status is required".into()))?;
+
+    if !["Pending", "Approved", "Rejected"].contains(&status) {
+        return Err(AppError::BadRequest(
+            "Status must be one of: Pending, Approved, Rejected".into(),
+        ));
+    }
+
     let res = sqlx::query("UPDATE membership_applications SET status=?1 WHERE id=?2")
         .bind(status)
         .bind(id)
@@ -1539,7 +1622,7 @@ async fn update_section(
     Json(p): Json<UpdateSiteSection>,
 ) -> Result<Json<DeleteResponse>, AppError> {
     let res = sqlx::query(
-        "UPDATE site_sections SET title=COALESCE(?1,title), subtitle=COALESCE(?2,subtitle), content=COALESCE(?3,content), badge=COALESCE(?4,badge), extra_json=COALESCE(?5,extra_json), updated_at=datetime('now') WHERE id=?6"
+        "UPDATE site_sections SET title=COALESCE(?1,title), subtitle=?2, content=COALESCE(?3,content), badge=?4, extra_json=?5, updated_at=datetime('now') WHERE id=?6"
     )
     .bind(&p.title)
     .bind(&p.subtitle)
@@ -1579,12 +1662,19 @@ async fn delete_section(
 // ---------------------------------------------------------------------------
 
 fn slugify(s: &str) -> String {
-    s.to_lowercase()
+    let slug = s
+        .to_lowercase()
         .chars()
         .map(|c| if c.is_alphanumeric() { c } else { '-' })
         .collect::<String>()
         .split('-')
         .filter(|s| !s.is_empty())
         .collect::<Vec<&str>>()
-        .join("-")
+        .join("-");
+
+    if slug.is_empty() {
+        uuid::Uuid::new_v4().to_string()[..8].to_string()
+    } else {
+        slug
+    }
 }

@@ -56,13 +56,8 @@ impl RateLimitState {
             "Rate limiter initialised"
         );
 
-        let login_quota = Quota::with_period(Duration::from_secs(60 / login_rpm.get() as u64))
-            .unwrap()
-            .allow_burst(login_rpm);
-
-        let submit_quota = Quota::with_period(Duration::from_secs(60 / submit_rpm.get() as u64))
-            .unwrap()
-            .allow_burst(submit_rpm);
+        let login_quota = Quota::per_minute(login_rpm);
+        let submit_quota = Quota::per_minute(submit_rpm);
 
         let state = Self {
             login: Arc::new(RateLimiter::keyed(login_quota)),

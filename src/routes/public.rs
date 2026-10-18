@@ -220,25 +220,49 @@ pub async fn register_for_event(
     if payload.student_name.trim().is_empty() {
         return Err(AppError::BadRequest("student_name is required".into()));
     }
+    if payload.student_name.len() > 200 {
+        return Err(AppError::BadRequest("student_name is too long (max 200 chars)".into()));
+    }
     if payload.email.trim().is_empty() || !payload.email.contains('@') {
         return Err(AppError::BadRequest("A valid email is required".into()));
+    }
+    if payload.email.len() > 254 {
+        return Err(AppError::BadRequest("email is too long".into()));
     }
     if payload.roll_number.trim().is_empty() {
         return Err(AppError::BadRequest("roll_number is required".into()));
     }
+    if payload.roll_number.len() > 50 {
+        return Err(AppError::BadRequest("roll_number is too long (max 50 chars)".into()));
+    }
     if payload.batch.trim().is_empty() {
         return Err(AppError::BadRequest("batch is required".into()));
+    }
+    if payload.batch.len() > 50 {
+        return Err(AppError::BadRequest("batch is too long (max 50 chars)".into()));
     }
     if payload.department.trim().is_empty() {
         return Err(AppError::BadRequest("department is required".into()));
     }
+    if payload.department.len() > 200 {
+        return Err(AppError::BadRequest("department is too long (max 200 chars)".into()));
+    }
+    if let Some(ref phone) = payload.phone {
+        if phone.len() > 50 {
+            return Err(AppError::BadRequest("phone is too long (max 50 chars)".into()));
+        }
+    }
 
-    // Check event exists
-    let _event = sqlx::query("SELECT id FROM events WHERE id = ?1")
+    // Check event exists and is not past
+    let (is_past,): (bool,) = sqlx::query_as("SELECT is_past FROM events WHERE id = ?1")
         .bind(event_id)
         .fetch_optional(&pool)
         .await?
         .ok_or(AppError::NotFound)?;
+
+    if is_past {
+        return Err(AppError::BadRequest("Registration is closed for past events".into()));
+    }
 
     let cert_code = format!(
         "PMS-{}-{}",
@@ -246,7 +270,7 @@ pub async fn register_for_event(
         uuid::Uuid::new_v4().to_string()[..8].to_uppercase()
     );
 
-    sqlx::query(
+    let insert_res = sqlx::query(
         "INSERT INTO event_registrations (event_id, student_name, roll_number, batch, department, email, phone, certificate_code) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"
     )
     .bind(event_id)
@@ -258,7 +282,14 @@ pub async fn register_for_event(
     .bind(&payload.phone)
     .bind(&cert_code)
     .execute(&pool)
-    .await?;
+    .await;
+
+    if let Err(err) = insert_res {
+        if is_unique_violation(&err) {
+            return Err(AppError::Conflict("You are already registered for this event".into()));
+        }
+        return Err(AppError::Database(err));
+    }
 
     let reg = sqlx::query_as::<_, EventRegistration>(
         "SELECT id, event_id, student_name, roll_number, batch, department, email, phone, certificate_code, created_at FROM event_registrations WHERE certificate_code = ?1"
@@ -560,7 +591,7 @@ pub async fn submit_membership(
         return Err(AppError::BadRequest("full_name is required".into()));
     }
     if payload.full_name.len() > 200 {
-        return Err(AppError::BadRequest("full_name is too long".into()));
+        return Err(AppError::BadRequest("full_name is too long (max 200 chars)".into()));
     }
     if payload.email.trim().is_empty() || !payload.email.contains('@') {
         return Err(AppError::BadRequest("A valid email is required".into()));
@@ -571,14 +602,38 @@ pub async fn submit_membership(
     if payload.roll_number.trim().is_empty() {
         return Err(AppError::BadRequest("roll_number is required".into()));
     }
+    if payload.roll_number.len() > 50 {
+        return Err(AppError::BadRequest("roll_number is too long (max 50 chars)".into()));
+    }
     if payload.batch.trim().is_empty() {
         return Err(AppError::BadRequest("batch is required".into()));
+    }
+    if payload.batch.len() > 50 {
+        return Err(AppError::BadRequest("batch is too long (max 50 chars)".into()));
     }
     if payload.department.trim().is_empty() {
         return Err(AppError::BadRequest("department is required".into()));
     }
+    if payload.department.len() > 200 {
+        return Err(AppError::BadRequest("department is too long (max 200 chars)".into()));
+    }
+    if let Some(ref phone) = payload.phone {
+        if phone.len() > 50 {
+            return Err(AppError::BadRequest("phone is too long (max 50 chars)".into()));
+        }
+    }
+    if let Some(ref interests) = payload.interests {
+        if interests.len() > 2000 {
+            return Err(AppError::BadRequest("interests is too long (max 2000 chars)".into()));
+        }
+    }
+    if let Some(ref why_join) = payload.why_join {
+        if why_join.len() > 2000 {
+            return Err(AppError::BadRequest("why_join is too long (max 2000 chars)".into()));
+        }
+    }
 
-    let res = sqlx::query(
+    let insert_res = sqlx::query(
         "INSERT INTO membership_applications (full_name, roll_number, batch, department, email, phone, interests, why_join) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"
     )
     .bind(&payload.full_name)
@@ -590,7 +645,19 @@ pub async fn submit_membership(
     .bind(&payload.interests)
     .bind(&payload.why_join)
     .execute(&pool)
-    .await?;
+    .await;
+
+    let res = match insert_res {
+        Ok(r) => r,
+        Err(err) => {
+            if is_unique_violation(&err) {
+                return Err(AppError::Conflict(
+                    "An application with this Roll Number or Email already exists".into(),
+                ));
+            }
+            return Err(AppError::Database(err));
+        }
+    };
 
     let inserted_id = res.last_insert_rowid();
 
@@ -722,4 +789,13 @@ pub async fn get_sections(State(pool): State<SqlitePool>) -> Result<Json<Vec<Sit
     .fetch_all(&pool)
     .await?;
     Ok(Json(rows))
+}
+
+fn is_unique_violation(err: &sqlx::Error) -> bool {
+    if let sqlx::Error::Database(db_err) = err {
+        if db_err.is_unique_violation() {
+            return true;
+        }
+    }
+    err.to_string().contains("UNIQUE constraint failed")
 }

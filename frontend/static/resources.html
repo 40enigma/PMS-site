@@ -164,15 +164,17 @@ async function loadAstmStrip() {
       if (sec.subtitle) document.getElementById('astm-desc').textContent = sec.subtitle;
 
       if (sec.extra_json) {
-        const protocols = JSON.parse(sec.extra_json);
-        strip.innerHTML = protocols.map(p => `
-          <div class="card" style="padding:1.25rem;border-left:3px solid var(--primary)">
-            <span class="tag" style="margin-bottom:.5rem;font-weight:700">${PMS.escHtml(p.code)}</span>
-            <h3 style="font-size:.95rem;margin-bottom:.35rem;color:var(--text)">${PMS.escHtml(p.title)}</h3>
-            <p style="font-size:.8rem;color:var(--text-muted);line-height:1.5">${PMS.escHtml(p.detail)}</p>
-          </div>
-        `).join('');
-        return;
+        try {
+          const protocols = JSON.parse(sec.extra_json);
+          strip.innerHTML = protocols.map(p => `
+            <div class="card" style="padding:1.25rem;border-left:3px solid var(--primary)">
+              <span class="tag" style="margin-bottom:.5rem;font-weight:700">${PMS.escHtml(p.code)}</span>
+              <h3 style="font-size:.95rem;margin-bottom:.35rem;color:var(--text)">${PMS.escHtml(p.title)}</h3>
+              <p style="font-size:.8rem;color:var(--text-muted);line-height:1.5">${PMS.escHtml(p.detail)}</p>
+            </div>
+          `).join('');
+          return;
+        } catch (_) {}
       }
     }
     strip.innerHTML = '';

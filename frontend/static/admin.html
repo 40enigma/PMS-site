@@ -129,6 +129,18 @@
   </form>
 </dialog>
 
+<!-- Read-Only Full Details View Modal -->
+<dialog id="view-modal" class="modal-dialog" style="max-width:650px;width:92%">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem">
+    <h2 id="view-modal-title" style="font-size:1.35rem;margin:0">Record Details</h2>
+    <button type="button" id="view-modal-close-btn" class="btn btn-outline btn-sm" style="padding:.25rem .5rem">✕</button>
+  </div>
+  <div id="view-modal-content" style="max-height:65vh;overflow-y:auto;display:flex;flex-direction:column;gap:.75rem"></div>
+  <div style="display:flex;justify-content:flex-end;margin-top:1.5rem">
+    <button type="button" id="view-modal-close-footer-btn" class="btn btn-outline">Close</button>
+  </div>
+</dialog>
+
 <footer>
   <div class="container footer-bottom">
     <p>© 2026 PIEAS Materials Society (PMS) • Department of Metallurgy &amp; Materials Engineering (DMME)</p>
@@ -165,7 +177,7 @@ const SCHEMAS = {
     canCreate: true,
     fields: [
       { name: 'title', label: 'Event Title *', type: 'text', required: true },
-      { name: 'category', label: 'Category', type: 'select', options: ['Seminar', 'Workshop', 'Competition', 'Industrial Visit', 'Symposium'] },
+      { name: 'category', label: 'Category', type: 'select', options: ['Seminar', 'Workshop', 'Competition', 'Industrial Visit', 'Symposium', 'Lab Visit', 'Alumni Talk'] },
       { name: 'date', label: 'Event Date * (YYYY-MM-DD)', type: 'text', required: true, placeholder: '2026-10-25' },
       { name: 'time_range', label: 'Time Range', type: 'text', placeholder: 'e.g. 10:00 AM – 1:00 PM' },
       { name: 'venue', label: 'Venue', type: 'text', placeholder: 'e.g. DMME Block Lecture Hall A' },
@@ -214,7 +226,7 @@ const SCHEMAS = {
     canCreate: true,
     fields: [
       { name: 'title', label: 'Article Title *', type: 'text', required: true },
-      { name: 'category', label: 'Category', type: 'select', options: ['Technical', 'Alloy Highlight', 'Characterization', 'Additive Manufacturing', 'Student Research'] },
+      { name: 'category', label: 'Category', type: 'select', options: ['Material of the Month', 'Explainer', 'Technical', 'Alloy Highlight', 'Characterization', 'Additive Manufacturing', 'Student Research'] },
       { name: 'excerpt', label: 'Excerpt Summary *', type: 'textarea', required: true },
       { name: 'body_markdown', label: 'Full Article Markdown *', type: 'textarea', required: true, rows: 10 },
       { name: 'material_formula', label: 'Chemical / Alloy Formula', type: 'text', placeholder: 'e.g. Zr-1.5Sn-0.2Fe or Inconel 718' },
@@ -234,7 +246,7 @@ const SCHEMAS = {
     canCreate: true,
     fields: [
       { name: 'title', label: 'Resource Title *', type: 'text', required: true },
-      { name: 'category', label: 'Category *', type: 'select', options: ['Standards', 'Software', 'Safety', 'Databases', 'Books', 'Tools'] },
+      { name: 'category', label: 'Category *', type: 'select', options: ['Standards', 'Software', 'Safety', 'Databases', 'Books', 'Tools', 'Software Guides', 'Phase Diagrams & Databases', 'Standards (ASTM/ISO)', 'Lab Safety'] },
       { name: 'description', label: 'Description', type: 'textarea' },
       { name: 'url', label: 'URL / Document Link *', type: 'text', required: true },
       { name: 'software_tag', label: 'Software / Sub-Tag', type: 'text', placeholder: 'e.g. Thermo-Calc, ASTM E8, ImageJ' },
@@ -250,7 +262,7 @@ const SCHEMAS = {
     fields: [
       { name: 'title', label: 'Position / Program Title *', type: 'text', required: true },
       { name: 'organization', label: 'Organization / University *', type: 'text', required: true },
-      { name: 'opportunity_type', label: 'Type *', type: 'select', options: ['Internship', 'Scholarship', 'Job', 'Research', 'Competition'] },
+      { name: 'opportunity_type', label: 'Type *', type: 'select', options: ['Internship', 'Scholarship', 'Job', 'Research', 'Research Position', 'Conference', 'Competition'] },
       { name: 'location', label: 'Location', type: 'text', placeholder: 'e.g. Islamabad, Remote, Germany' },
       { name: 'deadline', label: 'Application Deadline', type: 'text', placeholder: 'e.g. 2026-11-30' },
       { name: 'description', label: 'Summary Details', type: 'textarea' },
@@ -438,6 +450,8 @@ document.querySelectorAll('.admin-nav button').forEach(btn => {
   });
 });
 
+let eventsMap = {};
+
 /* ── Section Loader ── */
 async function loadSection(tab) {
   const content = document.getElementById('admin-content');
@@ -463,6 +477,14 @@ async function loadSection(tab) {
       document.getElementById('btn-create-record').onclick = () => openCreateModal(tab);
     }
 
+    if (tab === 'registrations') {
+      try {
+        const evts = await PMS.apiFetch('/api/admin/events');
+        eventsMap = {};
+        evts.forEach(e => { eventsMap[e.id] = e.title; });
+      } catch (_) {}
+    }
+
     const data = await PMS.apiFetch(schema.api);
     currentCache = data;
 
@@ -471,10 +493,27 @@ async function loadSection(tab) {
       return;
     }
 
-    const ths = schema.columns.map(c => `<th>${PMS.escHtml(c.replace(/_/g, ' '))}</th>`).join('');
-    const rows = data.map(item => {
+    if (tab === 'registrations') {
+      const uniqueEvents = Object.keys(eventsMap).map(id => ({ id, title: eventsMap[id] }));
+      const opts = uniqueEvents.map(e => `<option value="${e.id}">${PMS.escHtml(e.title)}</option>`).join('');
+      toolbar.innerHTML = `
+        <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
+          <select id="reg-event-filter" class="form-control" style="width:auto;padding:.35rem .75rem;font-size:.85rem">
+            <option value="">All Events (${data.length})</option>
+            ${opts}
+          </select>
+          <button class="btn btn-outline btn-sm" id="btn-export-csv">📥 Export CSV</button>
+        </div>
+      `;
+    }
+
+    function renderRow(item) {
       const tds = schema.columns.map(c => {
         let val = item[c];
+        if (c === 'event_id' && tab === 'registrations') {
+          const t = eventsMap[val] || `Event #${val}`;
+          return `<td><span title="${PMS.escHtml(t)}" style="font-weight:600;color:var(--primary-light)">${PMS.escHtml(t)}</span></td>`;
+        }
         if (c === 'status' && tab === 'membership') {
           const s = String(val).toLowerCase();
           const cls = s === 'approved' ? 'status-approved' : (s === 'rejected' ? 'status-rejected' : 'status-pending');
@@ -490,28 +529,84 @@ async function loadSection(tab) {
       let actions = '';
       if (tab === 'membership') {
         actions = `
+          <button class="action-btn btn-outline" data-action="view" data-id="${item.id}">View</button>
           <button class="action-btn btn-success" data-action="status" data-id="${item.id}" data-status="Approved">Approve</button>
           <button class="action-btn btn-danger" data-action="status" data-id="${item.id}" data-status="Rejected">Reject</button>
           <button class="action-btn" data-action="status" data-id="${item.id}" data-status="Pending">Reset</button>
           <button class="action-btn btn-danger" data-action="delete" data-id="${item.id}">Delete</button>
         `;
       } else {
+        if (tab === 'contacts' || tab === 'registrations') {
+          actions += `<button class="action-btn btn-outline" data-action="view" data-id="${item.id}">View</button>`;
+        }
         if (schema.canEdit !== false) {
           actions += `<button class="action-btn btn-primary" data-action="edit" data-id="${item.id}">Edit</button>`;
         }
         actions += `<button class="action-btn btn-danger" data-action="delete" data-id="${item.id}">Delete</button>`;
       }
 
-      return `<tr>${tds}<td><div style="display:flex;flex-wrap:nowrap">${actions}</div></td></tr>`;
-    }).join('');
+      return `<tr>${tds}<td><div style="display:flex;flex-wrap:nowrap;gap:.25rem">${actions}</div></td></tr>`;
+    }
+
+    const ths = schema.columns.map(c => `<th>${PMS.escHtml(c.replace(/_/g, ' '))}</th>`).join('');
 
     content.innerHTML = `
       <div style="overflow-x:auto">
         <table>
           <thead><tr>${ths}<th>Actions</th></tr></thead>
-          <tbody>${rows}</tbody>
+          <tbody id="table-body">${data.map(renderRow).join('')}</tbody>
         </table>
       </div>`;
+
+    if (tab === 'registrations') {
+      let displayed = data;
+      const filterEl = document.getElementById('reg-event-filter');
+      const exportBtn = document.getElementById('btn-export-csv');
+
+      if (filterEl) {
+        filterEl.onchange = () => {
+          const val = filterEl.value;
+          displayed = val ? data.filter(d => String(d.event_id) === String(val)) : data;
+          document.getElementById('table-body').innerHTML = displayed.map(renderRow).join('');
+        };
+      }
+
+      if (exportBtn) {
+        exportBtn.onclick = () => {
+          if (!displayed.length) {
+            alert('No registrations to export.');
+            return;
+          }
+          const headers = ['ID', 'Event ID', 'Event Title', 'Student Name', 'Roll Number', 'Batch', 'Department', 'Email', 'Phone', 'Certificate Code', 'Created At'];
+          const rows = displayed.map(r => [
+            r.id,
+            r.event_id,
+            eventsMap[r.event_id] || `Event #${r.event_id}`,
+            r.student_name,
+            r.roll_number,
+            r.batch,
+            r.department,
+            r.email,
+            r.phone || '',
+            r.certificate_code || '',
+            r.created_at || ''
+          ]);
+          const csv = [headers, ...rows]
+            .map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
+            .join('\r\n');
+
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `pms_event_registrations_${new Date().toISOString().slice(0, 10)}.csv`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        };
+      }
+    }
   } catch (err) {
     if (err.message.includes('401') || err.message.toLowerCase().includes('unauthorized')) {
       showLogin();
@@ -539,6 +634,8 @@ document.getElementById('admin-content').addEventListener('click', async ev => {
     }
   } else if (action === 'edit') {
     openEditModal(currentTab, id);
+  } else if (action === 'view') {
+    openViewModal(currentTab, id);
   } else if (action === 'status') {
     const status = btn.dataset.status;
     try {
@@ -549,6 +646,31 @@ document.getElementById('admin-content').addEventListener('click', async ev => {
     }
   }
 });
+
+/* ── Full Details View Modal ── */
+function openViewModal(tab, id) {
+  const item = currentCache.find(x => String(x.id) === String(id));
+  if (!item) return;
+  const schema = SCHEMAS[tab];
+  const modal = document.getElementById('view-modal');
+  document.getElementById('view-modal-title').textContent = `${schema ? schema.singular : 'Record'} #${id} Full Details`;
+  const container = document.getElementById('view-modal-content');
+  container.innerHTML = Object.entries(item).map(([k, v]) => `
+    <div style="border-bottom:1px solid var(--border);padding:.6rem 0">
+      <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);font-weight:600;margin-bottom:.25rem">${PMS.escHtml(k.replace(/_/g, ' '))}</div>
+      <div style="font-size:.9rem;color:var(--text);white-space:pre-wrap;word-break:break-word">${v !== null && v !== undefined && v !== '' ? PMS.escHtml(String(v)) : '<span style="color:var(--text-muted)">—</span>'}</div>
+    </div>
+  `).join('');
+  modal.showModal();
+}
+
+const viewModal = document.getElementById('view-modal');
+if (viewModal) {
+  const closeBtn = document.getElementById('view-modal-close-btn');
+  const closeFooterBtn = document.getElementById('view-modal-close-footer-btn');
+  if (closeBtn) closeBtn.onclick = () => viewModal.close();
+  if (closeFooterBtn) closeFooterBtn.onclick = () => viewModal.close();
+}
 
 /* ── Site Stats Editor ── */
 async function renderStatsEditor(container) {
@@ -709,6 +831,19 @@ function renderFields(fields, currentData) {
           <select id="f-${f.name}" class="form-control">${opts}</select>
         </div>`;
     }
+    if (f.name.endsWith('_url')) {
+      return `
+        <div class="form-group">
+          <label class="form-label" for="f-${f.name}">${PMS.escHtml(f.label)}</label>
+          <div style="display:flex;gap:.5rem;align-items:center">
+            <input type="${f.type || 'text'}" id="f-${f.name}" class="form-control" value="${PMS.escHtml(val)}" placeholder="${PMS.escHtml(f.placeholder || '')}" ${f.required ? 'required' : ''} style="flex:1">
+            <label class="btn btn-outline btn-sm inline-upload-label" style="margin:0;white-space:nowrap;cursor:pointer;padding:.4rem .7rem">
+              📁 Upload
+              <input type="file" style="display:none" data-target-input="f-${f.name}" class="inline-file-input">
+            </label>
+          </div>
+        </div>`;
+    }
     return `
       <div class="form-group">
         <label class="form-label" for="f-${f.name}">${PMS.escHtml(f.label)}</label>
@@ -716,6 +851,35 @@ function renderFields(fields, currentData) {
       </div>`;
   }).join('');
 }
+
+// Inline file uploader listener for crud modal
+document.getElementById('crud-fields').addEventListener('change', async ev => {
+  const fileInput = ev.target.closest('.inline-file-input');
+  if (!fileInput || !fileInput.files || !fileInput.files[0]) return;
+  const file = fileInput.files[0];
+  const targetId = fileInput.dataset.targetInput;
+  const targetEl = document.getElementById(targetId);
+  const labelEl = fileInput.parentElement;
+  labelEl.textContent = '⏳ Uploading…';
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch('/api/admin/upload', { method: 'POST', credentials: 'include', body: fd });
+    if (!res.ok) {
+      const b = await res.json();
+      throw new Error(b.error || 'Upload failed');
+    }
+    const data = await res.json();
+    if (targetEl) targetEl.value = data.url;
+    labelEl.innerHTML = '✅ Done <input type="file" style="display:none" data-target-input="' + targetId + '" class="inline-file-input">';
+    setTimeout(() => {
+      labelEl.innerHTML = '📁 Upload <input type="file" style="display:none" data-target-input="' + targetId + '" class="inline-file-input">';
+    }, 2500);
+  } catch (err) {
+    alert('Upload failed: ' + err.message);
+    labelEl.innerHTML = '📁 Upload <input type="file" style="display:none" data-target-input="' + targetId + '" class="inline-file-input">';
+  }
+});
 
 document.getElementById('crud-form').addEventListener('submit', async ev => {
   ev.preventDefault();
@@ -737,6 +901,16 @@ document.getElementById('crud-form').addEventListener('submit', async ev => {
     }
     if (f.required && (payload[f.name] === null || payload[f.name] === '')) {
       PMS.showAlert(msg, `Please fill out required field: ${f.label.replace('*', '').trim()}`);
+      return;
+    }
+  }
+
+  // Client-Side extra_json Validation
+  if (payload.extra_json) {
+    try {
+      JSON.parse(payload.extra_json);
+    } catch (jsonErr) {
+      PMS.showAlert(msg, `Invalid JSON in Extra JSON field: ${jsonErr.message}`);
       return;
     }
   }

@@ -102,7 +102,9 @@ function setLoading(el, loading) {
 /** Format ISO date string to human readable */
 function fmtDate(iso) {
   if (!iso) return '';
-  return new Date(iso).toLocaleDateString('en-PK', {
+  const d = new Date(String(iso).replace(' ', 'T'));
+  if (isNaN(d.getTime())) return String(iso);
+  return d.toLocaleDateString('en-PK', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -451,99 +453,136 @@ function openRegistrationModal(eventId, eventTitle) {
   if (!modal) {
     modal = document.createElement('dialog');
     modal.id = 'reg-modal';
-    modal.className = 'lightbox-modal';
-    modal.style.maxWidth = '550px';
+    modal.style.cssText = 'background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);color:var(--text);max-width:540px;width:92%;padding:2rem;box-shadow:0 25px 50px -12px rgba(0,0,0,.7);';
     modal.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem">
-        <div>
-          <span class="badge badge-success">Event Registration</span>
-          <h2 id="reg-event-title" style="font-size:1.25rem;margin-top:.4rem">Register</h2>
-        </div>
-        <button id="close-reg-modal-btn" class="btn btn-outline btn-sm" style="padding:.25rem .6rem">✕</button>
+        <h2 id="reg-modal-title" style="margin:0;font-size:1.35rem">Register for Event</h2>
+        <button type="button" id="reg-close-icon" class="btn btn-outline btn-sm" style="padding:.25rem .5rem">✕</button>
       </div>
-      <div id="reg-msg-container"></div>
-      <form id="global-reg-form" novalidate>
-        <input type="hidden" id="reg-event-id" value="">
+      <form id="reg-form" novalidate>
+        <input type="hidden" id="reg-event-id">
         <div class="form-group">
-          <label class="form-label" for="reg-student-name">Full Name *</label>
-          <input type="text" id="reg-student-name" class="form-control" required placeholder="e.g. Ayesha Khan">
+          <label class="form-label" for="reg-name">Full Name *</label>
+          <input id="reg-name" class="form-control" required placeholder="Your full name">
         </div>
-        <div class="form-group">
-          <label class="form-label" for="reg-email">PIEAS Email *</label>
-          <input type="email" id="reg-email" class="form-control" required placeholder="e.g. 21-dmme-001@pieas.edu.pk">
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+        <div class="grid grid-2" style="gap:.75rem">
           <div class="form-group">
             <label class="form-label" for="reg-roll">Roll Number *</label>
-            <input type="text" id="reg-roll" class="form-control" required placeholder="e.g. 21-DMME-001">
+            <input id="reg-roll" class="form-control" required placeholder="e.g. 22-DMME-01">
           </div>
           <div class="form-group">
             <label class="form-label" for="reg-batch">Batch *</label>
-            <input type="text" id="reg-batch" class="form-control" required placeholder="e.g. 2021-2025">
+            <input id="reg-batch" class="form-control" required placeholder="e.g. 2022-2026">
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label" for="reg-dept">Department *</label>
-          <input type="text" id="reg-dept" class="form-control" required placeholder="e.g. DMME">
+          <label class="form-label" for="reg-dept">Academic Department *</label>
+          <input id="reg-dept" class="form-control" required placeholder="e.g. Metallurgy & Materials Engineering (DMME)">
         </div>
-        <button type="submit" id="reg-submit-btn" class="btn btn-primary" style="width:100%">Confirm Registration</button>
+        <div class="form-group">
+          <label class="form-label" for="reg-email">PIEAS Email *</label>
+          <input id="reg-email" type="email" class="form-control" required placeholder="student@pieas.edu.pk">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="reg-phone">Contact Phone</label>
+          <input id="reg-phone" class="form-control" placeholder="Optional for SMS updates">
+        </div>
+        <div id="reg-msg" style="margin-top:1rem"></div>
+        <div style="display:flex;justify-content:flex-end;gap:.75rem;margin-top:1.5rem">
+          <button type="button" class="btn btn-outline" id="reg-close">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="reg-submit">Confirm Registration</button>
+        </div>
       </form>
     `;
     document.body.appendChild(modal);
-
-    modal.querySelector('#close-reg-modal-btn').onclick = () => modal.close();
-
-    const form = modal.querySelector('#global-reg-form');
-    form.addEventListener('submit', async ev => {
-      ev.preventDefault();
-      const msgBox = modal.querySelector('#reg-msg-container');
-      const submitBtn = modal.querySelector('#reg-submit-btn');
-
-      const name = qs('#reg-student-name', form).value.trim();
-      const email = qs('#reg-email', form).value.trim();
-      const roll = qs('#reg-roll', form).value.trim();
-      const batch = qs('#reg-batch', form).value.trim();
-      const dept = qs('#reg-dept', form).value.trim();
-      const id = qs('#reg-event-id', form).value;
-
-      if (!name || !email || !roll || !batch || !dept) {
-        showAlert(msgBox, 'Please complete all required fields.', 'error');
-        return;
-      }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        showAlert(msgBox, 'Please provide a valid email address.', 'error');
-        return;
-      }
-
-      setLoading(submitBtn, true);
-      try {
-        await apiPost(`/api/events/${id}/register`, {
-          student_name: name,
-          email,
-          roll_number: roll,
-          batch,
-          department: dept,
-        });
-        showAlert(msgBox, '🎉 Registration successful! See you at the event.', 'success');
-        form.reset();
-        setTimeout(() => modal.close(), 1800);
-      } catch (err) {
-        showAlert(msgBox, err.message, 'error');
-      } finally {
-        setLoading(submitBtn, false);
-      }
-    });
   }
 
-  // Set fields and show modal
-  const titleEl = modal.querySelector('#reg-event-title') || modal.querySelector('#modal-event-title');
-  if (titleEl) titleEl.textContent = eventTitle || 'Register for Event';
-  const idEl = modal.querySelector('#reg-event-id') || modal.querySelector('#modal-event-id');
+  // Set fields and reset alert
+  const titleEl = modal.querySelector('#reg-modal-title') || modal.querySelector('#reg-event-title');
+  if (titleEl) titleEl.textContent = eventTitle ? `Register: ${eventTitle}` : 'Register for Event';
+  const idEl = modal.querySelector('#reg-event-id');
   if (idEl) idEl.value = eventId;
-  const msgBox = modal.querySelector('#reg-msg-container') || modal.querySelector('#reg-alert-container');
+  const msgBox = modal.querySelector('#reg-msg') || modal.querySelector('#reg-msg-container');
   if (msgBox) msgBox.innerHTML = '';
 
-  modal.showModal();
+  // Ensure submit button is re-enabled and visible on opening modal
+  const submitBtn = modal.querySelector('#reg-submit') || modal.querySelector('#reg-submit-btn');
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.style.display = '';
+  }
+
+  // Bind close buttons and form submit once
+  if (!modal.dataset.initialized) {
+    modal.dataset.initialized = 'true';
+    const closeBtns = modal.querySelectorAll('#reg-close, #reg-close-icon, #close-reg-modal-btn');
+    closeBtns.forEach(b => {
+      b.onclick = () => modal.close();
+    });
+
+    const form = modal.querySelector('#reg-form') || modal.querySelector('#global-reg-form');
+    if (form) {
+      form.addEventListener('submit', async ev => {
+        ev.preventDefault();
+        const curSubmitBtn = modal.querySelector('#reg-submit') || modal.querySelector('#reg-submit-btn');
+        const curMsgBox = modal.querySelector('#reg-msg') || modal.querySelector('#reg-msg-container');
+        const curEventId = (modal.querySelector('#reg-event-id') || {}).value;
+
+        const nameInput = modal.querySelector('#reg-name') || modal.querySelector('#reg-student-name');
+        const rollInput = modal.querySelector('#reg-roll');
+        const batchInput = modal.querySelector('#reg-batch');
+        const deptInput = modal.querySelector('#reg-dept');
+        const emailInput = modal.querySelector('#reg-email');
+        const phoneInput = modal.querySelector('#reg-phone');
+
+        const name = (nameInput?.value || '').trim();
+        const roll = (rollInput?.value || '').trim();
+        const batch = (batchInput?.value || '').trim();
+        const dept = (deptInput?.value || '').trim();
+        const email = (emailInput?.value || '').trim();
+        const phone = (phoneInput?.value || '').trim();
+
+        if (!name || !roll || !batch || !dept || !email) {
+          showAlert(curMsgBox, 'Please fill in all required fields.', 'error');
+          return;
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          showAlert(curMsgBox, 'Please enter a valid email address.', 'error');
+          return;
+        }
+
+        setLoading(curSubmitBtn, true);
+        try {
+          const result = await apiPost(`/api/events/${curEventId}/register`, {
+            student_name: name,
+            roll_number: roll,
+            batch,
+            department: dept,
+            email,
+            phone: phone || null,
+          });
+          showAlert(
+            curMsgBox,
+            `✅ Registration confirmed! Your digital participation verification code is: <br><strong style="font-size:1.15rem;letter-spacing:1px;color:#6ee7b7">${escHtml(result.certificate_code)}</strong><br><small>Save this code to verify your certificate on this portal.</small>`,
+            'success',
+            true
+          );
+          form.reset();
+          // Hide and disable submit button to prevent accidental double-registration
+          curSubmitBtn.disabled = true;
+          curSubmitBtn.style.display = 'none';
+        } catch (err) {
+          showAlert(curMsgBox, err.message || 'Registration failed.', 'error');
+        } finally {
+          setLoading(curSubmitBtn, false);
+        }
+      });
+    }
+  }
+
+  if (!modal.open) {
+    modal.showModal();
+  }
 }
 
 /* ── Lightbox for SEM & Optical Micrographs (gallery.html) ── */
@@ -571,14 +610,39 @@ function openLightbox(imageUrl, title, caption = '') {
   modal.showModal();
 }
 
-/* ── Open Article Modal and load full article ── */
+/* ── Open Article Modal and load full article (with URL Deep Linking) ── */
 async function openArticleModal(slug) {
+  if (!slug) return;
   let modal = document.getElementById('article-reader-modal');
   if (!modal) {
     modal = document.createElement('dialog');
     modal.id = 'article-reader-modal';
     modal.style.cssText = 'background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);color:var(--text);max-width:780px;width:95%;padding:2rem;max-height:85vh;overflow-y:auto;box-shadow:0 25px 60px rgba(0,0,0,.8);';
     document.body.appendChild(modal);
+  }
+
+  // Deep linking: update URL query parameter ?article=<slug>
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('article') !== slug) {
+      url.searchParams.set('article', slug);
+      history.pushState(null, '', url.pathname + url.search + url.hash);
+    }
+  } catch (_) {}
+
+  // Clear query parameter on modal close
+  if (!modal.dataset.hasCloseHandler) {
+    modal.dataset.hasCloseHandler = 'true';
+    modal.addEventListener('close', () => {
+      try {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has('article')) {
+          url.searchParams.delete('article');
+          const cleanUrl = url.pathname + (url.search ? url.search : '') + url.hash;
+          history.pushState(null, '', cleanUrl);
+        }
+      } catch (_) {}
+    });
   }
 
   modal.innerHTML = `
@@ -588,7 +652,9 @@ async function openArticleModal(slug) {
     </div>
     <div id="article-reader-content"><div class="spinner"></div></div>
   `;
-  modal.showModal();
+  if (!modal.open) {
+    modal.showModal();
+  }
   document.getElementById('close-article-modal').onclick = () => modal.close();
 
   try {
@@ -648,12 +714,29 @@ document.addEventListener('click', ev => {
   }
 });
 
+/* ── Popstate handler for back/forward navigation with article deep links ── */
+window.addEventListener('popstate', () => {
+  const articleSlug = new URLSearchParams(window.location.search).get('article');
+  const modal = document.getElementById('article-reader-modal');
+  if (articleSlug) {
+    openArticleModal(articleSlug);
+  } else if (modal && modal.open) {
+    modal.close();
+  }
+});
+
 /* ── On DOM ready ── */
 document.addEventListener('DOMContentLoaded', () => {
   initNavbar();
   initScrollReveal();
   loadAnnouncements(qs('#announcement-banner'));
   loadStats(qs('#stats-strip'));
+
+  // Auto-open article modal if ?article=<slug> is in URL
+  const articleSlug = new URLSearchParams(window.location.search).get('article');
+  if (articleSlug) {
+    openArticleModal(articleSlug);
+  }
 });
 
 /* Export for use across all page scripts */
