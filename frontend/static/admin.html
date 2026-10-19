@@ -768,8 +768,12 @@ function renderUploadTool(container) {
       fd.append('file', file);
       const res = await fetch('/api/admin/upload', { method: 'POST', credentials: 'include', body: fd });
       if (!res.ok) {
-        const b = await res.json();
-        throw new Error(b.error || 'Upload rejected');
+        let errDetail = '';
+        try {
+          const b = await res.json();
+          errDetail = b.error;
+        } catch (_) {}
+        throw new Error(errDetail || `Upload failed (HTTP ${res.status})`);
       }
       const data = await res.json();
       PMS.showAlert(msg, `✅ Asset uploaded: <a href="${PMS.safeUrl(data.url)}" target="_blank" style="color:var(--primary-light);font-weight:600">${PMS.escHtml(data.url)}</a>`, 'success', true);
@@ -868,8 +872,12 @@ document.getElementById('crud-fields').addEventListener('change', async ev => {
     fd.append('file', file);
     const res = await fetch('/api/admin/upload', { method: 'POST', credentials: 'include', body: fd });
     if (!res.ok) {
-      const b = await res.json();
-      throw new Error(b.error || 'Upload failed');
+      let errDetail = '';
+      try {
+        const b = await res.json();
+        errDetail = b.error;
+      } catch (_) {}
+      throw new Error(errDetail || `Upload failed (HTTP ${res.status})`);
     }
     const data = await res.json();
     if (targetEl) targetEl.value = data.url;

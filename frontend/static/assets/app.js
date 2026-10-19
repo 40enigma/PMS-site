@@ -27,7 +27,15 @@ async function apiFetch(path, options = {}) {
     throw new Error(msg);
   }
 
-  return res.json();
+  const text = await res.text();
+  if (!text || !text.trim()) {
+    return {};
+  }
+  try {
+    return JSON.parse(text);
+  } catch (_) {
+    return {};
+  }
 }
 
 /** POST JSON helper */
