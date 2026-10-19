@@ -19,92 +19,12 @@ use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
-use utoipa::OpenApi;
-use utoipa_swagger_ui::SwaggerUi;
 
 /// Helper to read the upload directory from UPLOAD_DIR env var (defaulting to "uploads").
 pub fn upload_dir() -> String {
     std::env::var("UPLOAD_DIR").unwrap_or_else(|_| "uploads".to_string())
 }
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(
-        routes::public::get_announcements,
-        routes::public::get_stats,
-        routes::public::get_events,
-        routes::public::get_event,
-        routes::public::register_for_event,
-        routes::public::verify_certificate,
-        routes::public::get_team,
-        routes::public::get_gallery,
-        routes::public::get_posts,
-        routes::public::get_post_by_slug,
-        routes::public::get_resources,
-        routes::public::get_opportunities,
-        routes::public::get_alumni,
-        routes::public::get_projects,
-        routes::public::get_sponsors,
-        routes::public::get_faqs,
-        routes::public::submit_membership,
-        routes::public::submit_contact,
-        routes::public::subscribe_newsletter,
-        routes::public::get_sections,
-        routes::admin::login,
-        routes::admin::logout,
-        routes::admin::verify_session,
-    ),
-    components(
-        schemas(
-            models::Announcement,
-            models::CreateAnnouncement,
-            models::SiteStats,
-            models::UpdateSiteStats,
-            models::Event,
-            models::CreateEvent,
-            models::EventRegistration,
-            models::CreateEventRegistration,
-            models::CertificateVerification,
-            models::TeamMember,
-            models::CreateTeamMember,
-            models::GalleryImage,
-            models::CreateGalleryImage,
-            models::Post,
-            models::CreatePost,
-            models::Resource,
-            models::CreateResource,
-            models::Opportunity,
-            models::CreateOpportunity,
-            models::Alumnus,
-            models::CreateAlumnus,
-            models::Project,
-            models::CreateProject,
-            models::Sponsor,
-            models::CreateSponsor,
-            models::Faq,
-            models::CreateFaq,
-            models::MembershipApplication,
-            models::CreateMembershipApplication,
-            models::ContactMessage,
-            models::CreateContactMessage,
-            models::NewsletterSubscriber,
-            models::CreateNewsletterSubscriber,
-            models::SiteSection,
-            models::CreateSiteSection,
-            models::UpdateSiteSection,
-            models::LoginRequest,
-            models::LoginResponse,
-            models::DeleteResponse,
-            models::UploadResponse,
-        )
-    ),
-    info(
-        title = "PIEAS Materials Society (PMS) API",
-        version = "1.0.0",
-        description = "Official REST API for PIEAS Materials Society (DMME, PIEAS Islamabad)."
-    )
-)]
-pub struct ApiDoc;
 
 /// Build the CORS layer from ALLOWED_ORIGINS env var.
 ///
@@ -231,7 +151,6 @@ pub fn create_app(pool: SqlitePool) -> Router {
     let cors = build_cors();
 
     Router::new()
-        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .merge(routes::public::public_routes())
         .merge(routes::admin::admin_routes())
         // uploads served as raw files (no execution)

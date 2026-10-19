@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 // Announcements
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Announcement {
     pub id: i64,
     pub message: String,
@@ -13,7 +12,7 @@ pub struct Announcement {
     pub created_at: String,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct CreateAnnouncement {
     pub message: String,
     pub link_text: Option<String>,
@@ -23,7 +22,7 @@ pub struct CreateAnnouncement {
 }
 
 // Site Stats
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct SiteStats {
     pub id: i64,
     pub active_members: i64,
@@ -35,7 +34,7 @@ pub struct SiteStats {
     pub contact_email: Option<String>,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct UpdateSiteStats {
     pub active_members: Option<i64>,
     pub events_held: Option<i64>,
@@ -47,7 +46,7 @@ pub struct UpdateSiteStats {
 }
 
 // Events
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Event {
     pub id: i64,
     pub title: String,
@@ -65,7 +64,7 @@ pub struct Event {
     pub is_featured: bool,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct CreateEvent {
     pub title: String,
     pub slug: Option<String>,
@@ -83,7 +82,7 @@ pub struct CreateEvent {
 }
 
 // Event Registrations
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct EventRegistration {
     pub id: i64,
     pub event_id: i64,
@@ -97,7 +96,7 @@ pub struct EventRegistration {
     pub created_at: String,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct CreateEventRegistration {
     pub student_name: String,
     pub roll_number: String,
@@ -108,7 +107,7 @@ pub struct CreateEventRegistration {
 }
 
 // Team Members
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct TeamMember {
     pub id: i64,
     pub name: String,
@@ -125,7 +124,7 @@ pub struct TeamMember {
     pub display_order: i64,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct CreateTeamMember {
     pub name: String,
     pub role: String,
@@ -142,7 +141,7 @@ pub struct CreateTeamMember {
 }
 
 // Gallery Images
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct GalleryImage {
     pub id: i64,
     pub image_url: String,
@@ -153,7 +152,7 @@ pub struct GalleryImage {
     pub created_at: String,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct CreateGalleryImage {
     pub image_url: String,
     pub caption: Option<String>,
@@ -163,7 +162,7 @@ pub struct CreateGalleryImage {
 }
 
 // Posts (Blog & Material of the Month)
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Post {
     pub id: i64,
     pub title: String,
@@ -182,7 +181,7 @@ pub struct Post {
     pub published_at: String,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct CreatePost {
     pub title: String,
     pub slug: Option<String>,
@@ -200,7 +199,7 @@ pub struct CreatePost {
 }
 
 // Resources
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Resource {
     pub id: i64,
     pub title: String,
@@ -211,7 +210,7 @@ pub struct Resource {
     pub is_pinned: bool,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct CreateResource {
     pub title: String,
     pub url: String,
@@ -222,7 +221,7 @@ pub struct CreateResource {
 }
 
 // Opportunities
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Opportunity {
     pub id: i64,
     pub title: String,
@@ -237,7 +236,7 @@ pub struct Opportunity {
     pub created_at: String,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct CreateOpportunity {
     pub title: String,
     pub organization: String,
@@ -251,7 +250,7 @@ pub struct CreateOpportunity {
 }
 
 // Alumni
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Alumnus {
     pub id: i64,
     pub name: String,
@@ -269,7 +268,7 @@ pub struct Alumnus {
     pub linkedin_url: Option<String>,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct CreateAlumnus {
     pub name: String,
     #[serde(alias = "batch")]
@@ -287,7 +286,7 @@ pub struct CreateAlumnus {
 }
 
 // Projects
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Project {
     pub id: i64,
     pub title: String,
@@ -305,7 +304,7 @@ pub struct Project {
     pub tags: Option<String>,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct CreateProject {
     pub title: String,
     #[serde(alias = "student_names")]
@@ -322,7 +321,7 @@ pub struct CreateProject {
 }
 
 // Sponsors
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Sponsor {
     pub id: i64,
     pub name: String,
@@ -333,7 +332,7 @@ pub struct Sponsor {
     pub display_order: i64,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct CreateSponsor {
     pub name: String,
     pub logo_url: Option<String>,
@@ -344,7 +343,7 @@ pub struct CreateSponsor {
 }
 
 // FAQs
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Faq {
     pub id: i64,
     pub question: String,
@@ -353,7 +352,7 @@ pub struct Faq {
     pub display_order: i64,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct CreateFaq {
     pub question: String,
     pub answer: String,
@@ -362,7 +361,7 @@ pub struct CreateFaq {
 }
 
 // Membership Applications
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct MembershipApplication {
     pub id: i64,
     pub full_name: String,
@@ -377,7 +376,7 @@ pub struct MembershipApplication {
     pub created_at: String,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct CreateMembershipApplication {
     pub full_name: String,
     pub roll_number: String,
@@ -390,7 +389,7 @@ pub struct CreateMembershipApplication {
 }
 
 // Contact Messages
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct ContactMessage {
     pub id: i64,
     pub name: String,
@@ -400,7 +399,7 @@ pub struct ContactMessage {
     pub created_at: String,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct CreateContactMessage {
     pub name: String,
     pub email: String,
@@ -409,14 +408,14 @@ pub struct CreateContactMessage {
 }
 
 // Newsletter Subscribers
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct NewsletterSubscriber {
     pub id: i64,
     pub email: String,
     pub subscribed_at: String,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct CreateNewsletterSubscriber {
     pub email: String,
 }
@@ -430,13 +429,13 @@ pub struct AdminUser {
     pub name: String,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize)]
 pub struct LoginResponse {
     pub token: String,
     pub name: String,
@@ -450,20 +449,20 @@ pub struct AdminClaims {
     pub exp: usize,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize)]
 pub struct UploadResponse {
     pub url: String,
     pub filename: String,
 }
 
 /// Generic response for delete operations
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize)]
 pub struct DeleteResponse {
     pub message: String,
 }
 
 /// Certificate verification response
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize)]
 pub struct CertificateVerification {
     pub valid: bool,
     pub student_name: Option<String>,
@@ -472,7 +471,7 @@ pub struct CertificateVerification {
 }
 
 // Site Sections (Editable Content Across Website)
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct SiteSection {
     pub id: i64,
     pub section_key: String,
@@ -484,7 +483,7 @@ pub struct SiteSection {
     pub updated_at: String,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct CreateSiteSection {
     pub section_key: String,
     pub title: String,
@@ -494,7 +493,7 @@ pub struct CreateSiteSection {
     pub extra_json: Option<String>,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
 pub struct UpdateSiteSection {
     pub title: Option<String>,
     pub subtitle: Option<String>,

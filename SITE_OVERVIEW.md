@@ -22,7 +22,6 @@ The PMS platform is engineered as a self-contained, single-binary full-stack ser
 │   ├── /api/admin/*        (Secured CRUD Management)         │
 │   ├── /api/*              (Public Endpoints & Forms)        │
 │   ├── /uploads/*          (Non-executable user media)       │
-│   ├── /swagger-ui         (Interactive OpenAPI Docs)        │
 │   ├── /assets/*           (Static CSS & JS stylesheets)     │
 │   └── /*                  (Static HTML pages: /about, etc.) │
 │       └── Fallback        (HTTP 404 with 404.html)          │
@@ -34,9 +33,9 @@ The PMS platform is engineered as a self-contained, single-binary full-stack ser
 └─────────────────────────────────────────────────────────────┘
 ```
 
-- **Backend**: Rust 2021 edition using **Axum 0.8**, **SQLx 0.8 (SQLite)**, **Argon2** password hashing, **jsonwebtoken (JWT)** for administrative sessions, **tower-http** for CORS, tracing, compression, and static file serving, **governor** for IP-safe rate limiting, and **utoipa / utoipa-swagger-ui** for interactive API documentation at `/swagger-ui`.
+- **Backend**: Rust 2021 edition using **Axum 0.8**, **SQLx 0.8 (SQLite)**, **Argon2** password hashing, **jsonwebtoken (JWT)** for administrative sessions, **tower-http** for CORS, tracing, compression, and static file serving, and **governor** for IP-safe rate limiting.
 - **Frontend**: High-performance, responsive static HTML5, vanilla modern CSS with design tokens, glassmorphism, responsive navigation, and lightweight modular ES6 JavaScript (`frontend/static/assets/app.js`). **Zero Node.js build step, bundler, or npm dependencies required.**
-- **Single Deployment Artifact**: Axum serves the REST API, the interactive Swagger UI, and the static HTML/CSS/JS frontend with automated routing and 404 fallback.
+- **Single Deployment Artifact**: Axum serves the REST API and the static HTML/CSS/JS frontend with automated routing and 404 fallback.
 
 ---
 
@@ -46,8 +45,8 @@ The PMS platform is engineered as a self-contained, single-binary full-stack ser
 PMS-site/
 ├── src/
 │   ├── main.rs              # Entrypoint, TCP listener, ConnectInfo injection, tracing init
-│   ├── lib.rs               # Application router, CORS, modern security headers, 404 fallback, ApiDoc
-│   ├── models.rs            # Data structures, serialization schemas, ToSchema derives
+│   ├── lib.rs               # Application router, CORS, modern security headers, 404 fallback
+│   ├── models.rs            # Data structures, serialization schemas
 │   ├── db.rs                # SQLite connection pool, single-source migration runner, seed logic
 │   ├── auth.rs              # Cached JWT secret/cookie OnceLock, token generation & extractor
 │   ├── rate_limit.rs        # In-memory IP rate limiter (TRUST_PROXY aware, DashMap pruning)
@@ -133,11 +132,6 @@ The database schema is defined in `migrations/0001_initial_schema.sql` and initi
 
 ---
 
-## 5. API Reference & Swagger Documentation
+## 5. API Reference
 
-An interactive OpenAPI Swagger UI is mounted at:
-```
-http://localhost:3000/swagger-ui
-```
-Raw OpenAPI 3.0 specification JSON is served at `/api-docs/openapi.json`.
-All public, authentication, and administrative endpoints are registered with complete schemas and response definitions.
+All public, authentication, and administrative endpoints are served under `/api/` with JSON payloads and response definitions.

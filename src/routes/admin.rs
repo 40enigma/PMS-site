@@ -162,16 +162,6 @@ fn build_auth_cookie(token: String) -> Cookie<'static> {
     cookie
 }
 
-#[utoipa::path(
-    post,
-    path = "/api/auth/login",
-    request_body = LoginRequest,
-    responses(
-        (status = 200, description = "Admin logged in successfully", body = LoginResponse),
-        (status = 401, description = "Invalid credentials"),
-        (status = 429, description = "Too many login attempts")
-    )
-)]
 #[axum::debug_handler]
 pub async fn login(
     State(pool): State<SqlitePool>,
@@ -224,13 +214,6 @@ pub async fn login(
     ))
 }
 
-#[utoipa::path(
-    post,
-    path = "/api/auth/logout",
-    responses(
-        (status = 200, description = "Admin logged out successfully")
-    )
-)]
 #[axum::debug_handler]
 pub async fn logout(jar: CookieJar) -> (CookieJar, Json<serde_json::Value>) {
     let removal = Cookie::build((jwt_cookie_name(), ""))
@@ -245,14 +228,6 @@ pub async fn logout(jar: CookieJar) -> (CookieJar, Json<serde_json::Value>) {
     )
 }
 
-#[utoipa::path(
-    get,
-    path = "/api/auth/me",
-    responses(
-        (status = 200, description = "Current authenticated admin session", body = LoginResponse),
-        (status = 401, description = "Not authenticated")
-    )
-)]
 #[axum::debug_handler]
 pub async fn verify_session(
     claims: AdminClaims,

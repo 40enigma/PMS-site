@@ -104,13 +104,6 @@ pub fn public_routes() -> Router<SqlitePool> {
 // ---------------------------------------------------------------------------
 
 #[axum::debug_handler]
-#[utoipa::path(
-    get,
-    path = "/api/announcements",
-    responses(
-        (status = 200, description = "List active announcements", body = Vec<Announcement>)
-    )
-)]
 pub async fn get_announcements(
     State(pool): State<SqlitePool>,
 ) -> Result<Json<Vec<Announcement>>, AppError> {
@@ -123,14 +116,6 @@ pub async fn get_announcements(
 }
 
 #[axum::debug_handler]
-#[utoipa::path(
-    get,
-    path = "/api/stats",
-    responses(
-        (status = 200, description = "Get public site statistics", body = SiteStats),
-        (status = 404, description = "Stats not found")
-    )
-)]
 pub async fn get_stats(State(pool): State<SqlitePool>) -> Result<Json<SiteStats>, AppError> {
     let row = sqlx::query_as::<_, SiteStats>(
         "SELECT id, active_members, events_held, years_active, industrial_partners, constitution_pdf_url, office_location, contact_email FROM site_stats WHERE id = 1"
@@ -142,13 +127,6 @@ pub async fn get_stats(State(pool): State<SqlitePool>) -> Result<Json<SiteStats>
 }
 
 #[axum::debug_handler]
-#[utoipa::path(
-    get,
-    path = "/api/events",
-    responses(
-        (status = 200, description = "List events", body = Vec<Event>)
-    )
-)]
 pub async fn get_events(
     State(pool): State<SqlitePool>,
     Query(filter): Query<EventFilter>,
@@ -169,17 +147,6 @@ pub async fn get_events(
 }
 
 #[axum::debug_handler]
-#[utoipa::path(
-    get,
-    path = "/api/events/{id}",
-    params(
-        ("id" = i64, Path, description = "Event ID")
-    ),
-    responses(
-        (status = 200, description = "Get event by ID", body = Event),
-        (status = 404, description = "Event not found")
-    )
-)]
 pub async fn get_event(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
@@ -195,19 +162,6 @@ pub async fn get_event(
 }
 
 #[axum::debug_handler]
-#[utoipa::path(
-    post,
-    path = "/api/events/{id}/register",
-    params(
-        ("id" = i64, Path, description = "Event ID")
-    ),
-    request_body = CreateEventRegistration,
-    responses(
-        (status = 200, description = "Registered successfully", body = EventRegistration),
-        (status = 400, description = "Invalid registration input"),
-        (status = 429, description = "Rate limit exceeded")
-    )
-)]
 pub async fn register_for_event(
     State(pool): State<SqlitePool>,
     Path(event_id): Path<i64>,
@@ -302,16 +256,6 @@ pub async fn register_for_event(
 }
 
 #[axum::debug_handler]
-#[utoipa::path(
-    get,
-    path = "/api/certificates/verify",
-    params(
-        ("code" = String, Query, description = "Certificate verification code")
-    ),
-    responses(
-        (status = 200, description = "Verification outcome", body = CertificateVerification)
-    )
-)]
 pub async fn verify_certificate(
     State(pool): State<SqlitePool>,
     Query(q): Query<CertificateQuery>,
@@ -341,13 +285,6 @@ pub async fn verify_certificate(
 }
 
 #[axum::debug_handler]
-#[utoipa::path(
-    get,
-    path = "/api/team",
-    responses(
-        (status = 200, description = "List council and team members", body = Vec<TeamMember>)
-    )
-)]
 pub async fn get_team(
     State(pool): State<SqlitePool>,
     Query(filter): Query<TeamFilter>,
@@ -366,13 +303,6 @@ pub async fn get_team(
 }
 
 #[axum::debug_handler]
-#[utoipa::path(
-    get,
-    path = "/api/gallery",
-    responses(
-        (status = 200, description = "List gallery items", body = Vec<GalleryImage>)
-    )
-)]
 pub async fn get_gallery(
     State(pool): State<SqlitePool>,
     Query(filter): Query<GalleryFilter>,
@@ -391,13 +321,6 @@ pub async fn get_gallery(
 }
 
 #[axum::debug_handler]
-#[utoipa::path(
-    get,
-    path = "/api/posts",
-    responses(
-        (status = 200, description = "List articles", body = Vec<Post>)
-    )
-)]
 pub async fn get_posts(
     State(pool): State<SqlitePool>,
     Query(filter): Query<PostFilter>,
@@ -414,17 +337,6 @@ pub async fn get_posts(
 }
 
 #[axum::debug_handler]
-#[utoipa::path(
-    get,
-    path = "/api/posts/{slug}",
-    params(
-        ("slug" = String, Path, description = "Post slug")
-    ),
-    responses(
-        (status = 200, description = "Get article details", body = Post),
-        (status = 404, description = "Post not found")
-    )
-)]
 pub async fn get_post_by_slug(
     State(pool): State<SqlitePool>,
     Path(slug): Path<String>,
@@ -440,13 +352,6 @@ pub async fn get_post_by_slug(
 }
 
 #[axum::debug_handler]
-#[utoipa::path(
-    get,
-    path = "/api/resources",
-    responses(
-        (status = 200, description = "List toolkit resources", body = Vec<Resource>)
-    )
-)]
 pub async fn get_resources(
     State(pool): State<SqlitePool>,
     Query(filter): Query<ResourceFilter>,
@@ -465,13 +370,6 @@ pub async fn get_resources(
 }
 
 #[axum::debug_handler]
-#[utoipa::path(
-    get,
-    path = "/api/opportunities",
-    responses(
-        (status = 200, description = "List opportunities", body = Vec<Opportunity>)
-    )
-)]
 pub async fn get_opportunities(
     State(pool): State<SqlitePool>,
     Query(filter): Query<OpportunityFilter>,
@@ -489,13 +387,6 @@ pub async fn get_opportunities(
 }
 
 #[axum::debug_handler]
-#[utoipa::path(
-    get,
-    path = "/api/alumni",
-    responses(
-        (status = 200, description = "List alumni", body = Vec<Alumnus>)
-    )
-)]
 pub async fn get_alumni(State(pool): State<SqlitePool>) -> Result<Json<Vec<Alumnus>>, AppError> {
     let rows = sqlx::query_as::<_, Alumnus>(
         "SELECT id, name, graduating_batch, current_role, current_organization, industry_sector, location, photo_url, quote_testimonial, linkedin_url FROM alumni ORDER BY graduating_batch DESC"
@@ -506,13 +397,6 @@ pub async fn get_alumni(State(pool): State<SqlitePool>) -> Result<Json<Vec<Alumn
 }
 
 #[axum::debug_handler]
-#[utoipa::path(
-    get,
-    path = "/api/projects",
-    responses(
-        (status = 200, description = "List student projects", body = Vec<Project>)
-    )
-)]
 pub async fn get_projects(
     State(pool): State<SqlitePool>,
     Query(filter): Query<ProjectFilter>,
@@ -531,13 +415,6 @@ pub async fn get_projects(
 }
 
 #[axum::debug_handler]
-#[utoipa::path(
-    get,
-    path = "/api/sponsors",
-    responses(
-        (status = 200, description = "List sponsors", body = Vec<Sponsor>)
-    )
-)]
 pub async fn get_sponsors(State(pool): State<SqlitePool>) -> Result<Json<Vec<Sponsor>>, AppError> {
     let rows = sqlx::query_as::<_, Sponsor>(
         "SELECT id, name, logo_url, website_url, tier, since_year, display_order FROM sponsors ORDER BY display_order ASC, CASE tier WHEN 'Platinum' THEN 1 WHEN 'Gold' THEN 2 WHEN 'Silver' THEN 3 ELSE 4 END"
@@ -548,13 +425,6 @@ pub async fn get_sponsors(State(pool): State<SqlitePool>) -> Result<Json<Vec<Spo
 }
 
 #[axum::debug_handler]
-#[utoipa::path(
-    get,
-    path = "/api/faqs",
-    responses(
-        (status = 200, description = "List FAQs", body = Vec<Faq>)
-    )
-)]
 pub async fn get_faqs(State(pool): State<SqlitePool>) -> Result<Json<Vec<Faq>>, AppError> {
     let rows = sqlx::query_as::<_, Faq>(
         "SELECT id, question, answer, category, display_order FROM faqs ORDER BY display_order ASC",
@@ -569,16 +439,6 @@ pub async fn get_faqs(State(pool): State<SqlitePool>) -> Result<Json<Vec<Faq>>, 
 // ---------------------------------------------------------------------------
 
 #[axum::debug_handler]
-#[utoipa::path(
-    post,
-    path = "/api/membership",
-    request_body = CreateMembershipApplication,
-    responses(
-        (status = 200, description = "Membership application submitted", body = MembershipApplication),
-        (status = 400, description = "Invalid application data"),
-        (status = 429, description = "Rate limit exceeded")
-    )
-)]
 pub async fn submit_membership(
     State(pool): State<SqlitePool>,
     ClientIp(ip): ClientIp,
@@ -672,16 +532,6 @@ pub async fn submit_membership(
 }
 
 #[axum::debug_handler]
-#[utoipa::path(
-    post,
-    path = "/api/contact",
-    request_body = CreateContactMessage,
-    responses(
-        (status = 200, description = "Contact message sent", body = ContactMessage),
-        (status = 400, description = "Invalid contact input"),
-        (status = 429, description = "Rate limit exceeded")
-    )
-)]
 pub async fn submit_contact(
     State(pool): State<SqlitePool>,
     ClientIp(ip): ClientIp,
@@ -734,16 +584,6 @@ pub async fn submit_contact(
 }
 
 #[axum::debug_handler]
-#[utoipa::path(
-    post,
-    path = "/api/newsletter",
-    request_body = CreateNewsletterSubscriber,
-    responses(
-        (status = 200, description = "Subscribed successfully", body = NewsletterSubscriber),
-        (status = 400, description = "Invalid email address"),
-        (status = 429, description = "Rate limit exceeded")
-    )
-)]
 pub async fn subscribe_newsletter(
     State(pool): State<SqlitePool>,
     ClientIp(ip): ClientIp,
@@ -775,13 +615,6 @@ pub async fn subscribe_newsletter(
 }
 
 #[axum::debug_handler]
-#[utoipa::path(
-    get,
-    path = "/api/sections",
-    responses(
-        (status = 200, description = "List dynamic site sections", body = Vec<SiteSection>)
-    )
-)]
 pub async fn get_sections(State(pool): State<SqlitePool>) -> Result<Json<Vec<SiteSection>>, AppError> {
     let rows = sqlx::query_as::<_, SiteSection>(
         "SELECT id, section_key, title, subtitle, content, badge, extra_json, updated_at FROM site_sections ORDER BY id ASC"

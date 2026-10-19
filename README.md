@@ -68,7 +68,6 @@ The application is engineered as a **self-contained, monolithic Rust service**:
 │   ├── /api/admin/*        (Secured CRUD Database Ops)       │
 │   ├── /api/*              (Public Endpoints & Forms)        │
 │   ├── /uploads/*          (Validated non-executable media)  │
-│   ├── /swagger-ui         (Interactive OpenAPI Docs)        │
 │   └── /*                  (Static HTML: index, about, etc.) │
 └──────────────────────────────▲──────────────────────────────┘
                                │ SQLite Connection Pool (sqlx)
@@ -334,12 +333,6 @@ server {
 ---
 
 ## 📡 REST API Reference
-
-The platform features an automated interactive OpenAPI Swagger specification at:
-
-```
-http://localhost:3000/swagger-ui
-```
 
 ### Summary of Core Endpoints
 
