@@ -155,7 +155,7 @@ function renderMarkdown(md) {
 
   // 4. Bold & Italics
   text = text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
-  text = text.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+  text = text.replace(/(^|[^\w*])\*([^*\n\s](?:[^*\n]*?[^*\n\s])?)\*(?=[^\w*]|$)/g, '$1<em>$2</em>');
 
   // 5. Links [text](url)
   text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, linkText, url) => {
