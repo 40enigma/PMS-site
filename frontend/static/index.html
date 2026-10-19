@@ -234,6 +234,7 @@
               <p style="color:var(--text-muted);font-size:.875rem;line-height:1.6">${PMS.escHtml(c.desc)}</p>
             </article>
           `).join('');
+          PMS.observeFadeElements(actGrid);
         } catch (_) {
           actGrid.innerHTML = '<p style="color:var(--text-muted);grid-column:1/-1">Activities configured in site sections.</p>';
         }

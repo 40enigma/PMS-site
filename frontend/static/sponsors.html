@@ -154,6 +154,7 @@
               <p style="color:var(--text-muted);font-size:.875rem;line-height:1.6">${PMS.escHtml(c.desc)}</p>
             </article>
           `).join('');
+          PMS.observeFadeElements(pitchGrid);
           return;
         } catch (_) {}
       }
