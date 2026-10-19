@@ -61,15 +61,6 @@ pub async fn run_migrations(pool: &SqlitePool) {
 }
 
 pub async fn seed_data(pool: &SqlitePool) {
-    let seed_data = std::env::var("SEED_DATA")
-        .map(|v| v.to_lowercase() != "false")
-        .unwrap_or(true);
-
-    if !seed_data {
-        tracing::info!("SEED_DATA=false, skipping database seeding.");
-        return;
-    }
-
     // --- Admin user seeding is EXPLICITLY GATED behind SEED_ADMIN=true ---
     let seed_admin = std::env::var("SEED_ADMIN")
         .unwrap_or_default()
@@ -125,6 +116,15 @@ pub async fn seed_data(pool: &SqlitePool) {
              No admin user will be created automatically. \
              Set SEED_ADMIN=true with credentials to create one."
         );
+    }
+
+    let seed_data = std::env::var("SEED_DATA")
+        .map(|v| v.to_lowercase() != "false")
+        .unwrap_or(true);
+
+    if !seed_data {
+        tracing::info!("SEED_DATA=false, skipping database seeding.");
+        return;
     }
 
     tracing::info!("Checking and seeding database with initial academic society records...");
