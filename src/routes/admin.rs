@@ -1,7 +1,7 @@
 
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use axum::{
-    extract::{Multipart, Path, State},
+    extract::{DefaultBodyLimit, Multipart, Path, State},
     routing::{delete, get, post, put},
     Json, Router,
 };
@@ -39,7 +39,10 @@ pub fn admin_routes() -> Router<SqlitePool> {
         .route("/api/auth/logout", post(logout))
         .route("/api/auth/me", get(verify_session))
         // Upload
-        .route("/api/admin/upload", post(upload_file))
+        .route(
+            "/api/admin/upload",
+            post(upload_file).layer(DefaultBodyLimit::max(20 * 1024 * 1024)),
+        )
         .route("/api/admin/uploads", get(list_uploads))
         .route("/api/admin/uploads/{filename}", delete(delete_upload))
         // Generic CRUD for all models

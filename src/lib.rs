@@ -183,7 +183,7 @@ pub fn create_app(pool: SqlitePool) -> Router {
         .route_service("/pms-logo.jpeg", ServeFile::new("frontend/static/pms-logo.jpeg"))
         // Any unknown route serves 404.html with StatusCode::NOT_FOUND (404)
         .fallback(not_found_fallback)
-        .layer(DefaultBodyLimit::max(20 * 1024 * 1024))
+        .layer(DefaultBodyLimit::max(256 * 1024))
         .layer(CompressionLayer::new())
         .layer(axum::Extension(pool.clone()))
         .layer(middleware::from_fn(security_headers))

@@ -448,3 +448,68 @@ async fn test_rate_limiting_ip_spoofing_prevention() {
         "Should resolve IP from ConnectInfo when available"
     );
 }
+
+#[tokio::test]
+async fn test_body_limits_global_and_upload() {
+    let app = setup_test_app().await;
+    let token = create_token(1, "admin@pieas.edu.pk").unwrap();
+
+    // 1. Regular JSON endpoint with body > 256KB should be rejected with 413 Payload Too Large
+    let large_text = "a".repeat(300 * 1024);
+    let large_json = serde_json::json!({
+        "title": "A",
+        "date": "2026-10-19",
+        "short_description": large_text,
+    });
+    let req_large_json = Request::builder()
+        .method(Method::POST)
+        .uri("/api/admin/events")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&large_json).unwrap()))
+        .unwrap();
+
+    let res_large_json = app.clone().oneshot(req_large_json).await.unwrap();
+    assert_eq!(
+        res_large_json.status(),
+        StatusCode::PAYLOAD_TOO_LARGE,
+        "JSON payload > 256KB should be rejected with 413"
+    );
+
+    // 2. Upload endpoint with ~500KB PDF (> 256KB) should succeed (under 20MB limit)
+    let boundary = "------------------------limitboundary123";
+    let pdf_magic = b"%PDF-1.4\n";
+    let mut file_bytes = Vec::new();
+    file_bytes.extend_from_slice(pdf_magic);
+    file_bytes.resize(500 * 1024, b'0');
+
+    let mut multipart_data = Vec::new();
+    multipart_data.extend_from_slice(
+        format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"document.pdf\"\r\nContent-Type: application/pdf\r\n\r\n",
+            boundary = boundary
+        )
+        .as_bytes(),
+    );
+    multipart_data.extend_from_slice(&file_bytes);
+    multipart_data.extend_from_slice(format!("\r\n--{}--\r\n", boundary).as_bytes());
+
+    let req_upload = Request::builder()
+        .method(Method::POST)
+        .uri("/api/admin/upload")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={}", boundary),
+        )
+        .body(Body::from(multipart_data))
+        .unwrap();
+
+    let res_upload = app.oneshot(req_upload).await.unwrap();
+    assert_eq!(
+        res_upload.status(),
+        StatusCode::OK,
+        "Upload of 500KB file should succeed on /api/admin/upload"
+    );
+}
+
