@@ -175,7 +175,9 @@ pub async fn register_for_event(
         return Err(AppError::BadRequest("student_name is required".into()));
     }
     if payload.student_name.len() > 200 {
-        return Err(AppError::BadRequest("student_name is too long (max 200 chars)".into()));
+        return Err(AppError::BadRequest(
+            "student_name is too long (max 200 chars)".into(),
+        ));
     }
     if payload.email.trim().is_empty() || !payload.email.contains('@') {
         return Err(AppError::BadRequest("A valid email is required".into()));
@@ -187,23 +189,31 @@ pub async fn register_for_event(
         return Err(AppError::BadRequest("roll_number is required".into()));
     }
     if payload.roll_number.len() > 50 {
-        return Err(AppError::BadRequest("roll_number is too long (max 50 chars)".into()));
+        return Err(AppError::BadRequest(
+            "roll_number is too long (max 50 chars)".into(),
+        ));
     }
     if payload.batch.trim().is_empty() {
         return Err(AppError::BadRequest("batch is required".into()));
     }
     if payload.batch.len() > 50 {
-        return Err(AppError::BadRequest("batch is too long (max 50 chars)".into()));
+        return Err(AppError::BadRequest(
+            "batch is too long (max 50 chars)".into(),
+        ));
     }
     if payload.department.trim().is_empty() {
         return Err(AppError::BadRequest("department is required".into()));
     }
     if payload.department.len() > 200 {
-        return Err(AppError::BadRequest("department is too long (max 200 chars)".into()));
+        return Err(AppError::BadRequest(
+            "department is too long (max 200 chars)".into(),
+        ));
     }
     if let Some(ref phone) = payload.phone {
         if phone.len() > 50 {
-            return Err(AppError::BadRequest("phone is too long (max 50 chars)".into()));
+            return Err(AppError::BadRequest(
+                "phone is too long (max 50 chars)".into(),
+            ));
         }
     }
 
@@ -215,7 +225,9 @@ pub async fn register_for_event(
         .ok_or(AppError::NotFound)?;
 
     if is_past {
-        return Err(AppError::BadRequest("Registration is closed for past events".into()));
+        return Err(AppError::BadRequest(
+            "Registration is closed for past events".into(),
+        ));
     }
 
     let cert_code = format!(
@@ -240,7 +252,9 @@ pub async fn register_for_event(
 
     if let Err(err) = insert_res {
         if is_unique_violation(&err) {
-            return Err(AppError::Conflict("You are already registered for this event".into()));
+            return Err(AppError::Conflict(
+                "You are already registered for this event".into(),
+            ));
         }
         return Err(AppError::Database(err));
     }
@@ -454,7 +468,9 @@ pub async fn submit_membership(
         return Err(AppError::BadRequest("full_name is required".into()));
     }
     if payload.full_name.len() > 200 {
-        return Err(AppError::BadRequest("full_name is too long (max 200 chars)".into()));
+        return Err(AppError::BadRequest(
+            "full_name is too long (max 200 chars)".into(),
+        ));
     }
     if payload.email.trim().is_empty() || !payload.email.contains('@') {
         return Err(AppError::BadRequest("A valid email is required".into()));
@@ -466,33 +482,45 @@ pub async fn submit_membership(
         return Err(AppError::BadRequest("roll_number is required".into()));
     }
     if payload.roll_number.len() > 50 {
-        return Err(AppError::BadRequest("roll_number is too long (max 50 chars)".into()));
+        return Err(AppError::BadRequest(
+            "roll_number is too long (max 50 chars)".into(),
+        ));
     }
     if payload.batch.trim().is_empty() {
         return Err(AppError::BadRequest("batch is required".into()));
     }
     if payload.batch.len() > 50 {
-        return Err(AppError::BadRequest("batch is too long (max 50 chars)".into()));
+        return Err(AppError::BadRequest(
+            "batch is too long (max 50 chars)".into(),
+        ));
     }
     if payload.department.trim().is_empty() {
         return Err(AppError::BadRequest("department is required".into()));
     }
     if payload.department.len() > 200 {
-        return Err(AppError::BadRequest("department is too long (max 200 chars)".into()));
+        return Err(AppError::BadRequest(
+            "department is too long (max 200 chars)".into(),
+        ));
     }
     if let Some(ref phone) = payload.phone {
         if phone.len() > 50 {
-            return Err(AppError::BadRequest("phone is too long (max 50 chars)".into()));
+            return Err(AppError::BadRequest(
+                "phone is too long (max 50 chars)".into(),
+            ));
         }
     }
     if let Some(ref interests) = payload.interests {
         if interests.len() > 2000 {
-            return Err(AppError::BadRequest("interests is too long (max 2000 chars)".into()));
+            return Err(AppError::BadRequest(
+                "interests is too long (max 2000 chars)".into(),
+            ));
         }
     }
     if let Some(ref why_join) = payload.why_join {
         if why_join.len() > 2000 {
-            return Err(AppError::BadRequest("why_join is too long (max 2000 chars)".into()));
+            return Err(AppError::BadRequest(
+                "why_join is too long (max 2000 chars)".into(),
+            ));
         }
     }
 
@@ -620,7 +648,9 @@ pub async fn subscribe_newsletter(
 }
 
 #[axum::debug_handler]
-pub async fn get_sections(State(pool): State<SqlitePool>) -> Result<Json<Vec<SiteSection>>, AppError> {
+pub async fn get_sections(
+    State(pool): State<SqlitePool>,
+) -> Result<Json<Vec<SiteSection>>, AppError> {
     let rows = sqlx::query_as::<_, SiteSection>(
         "SELECT id, section_key, title, subtitle, content, badge, extra_json, updated_at FROM site_sections ORDER BY id ASC"
     )

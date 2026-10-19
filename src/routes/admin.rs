@@ -1,4 +1,3 @@
-
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use axum::{
     extract::{DefaultBodyLimit, Multipart, Path, State},
@@ -274,7 +273,6 @@ pub async fn verify_session(
     }))
 }
 
-
 // ---------------------------------------------------------------------------
 // File Upload (hardened)
 // ---------------------------------------------------------------------------
@@ -394,9 +392,7 @@ pub struct UploadedFileItem {
 }
 
 #[axum::debug_handler]
-async fn list_uploads(
-    _claims: AdminClaims,
-) -> Result<Json<Vec<UploadedFileItem>>, AppError> {
+async fn list_uploads(_claims: AdminClaims) -> Result<Json<Vec<UploadedFileItem>>, AppError> {
     let dir = crate::upload_dir();
     let mut entries = tokio::fs::read_dir(&dir)
         .await
@@ -563,11 +559,17 @@ async fn update_stats(
          constitution_pdf_url=?5, \
          office_location=?6, \
          contact_email=?7 \
-         WHERE id=1"
+         WHERE id=1",
     )
-        .bind(p.active_members).bind(p.events_held).bind(p.years_active).bind(p.industrial_partners)
-        .bind(&p.constitution_pdf_url).bind(&p.office_location).bind(&p.contact_email)
-        .execute(&pool).await?;
+    .bind(p.active_members)
+    .bind(p.events_held)
+    .bind(p.years_active)
+    .bind(p.industrial_partners)
+    .bind(&p.constitution_pdf_url)
+    .bind(&p.office_location)
+    .bind(&p.contact_email)
+    .execute(&pool)
+    .await?;
     if res.rows_affected() == 0 {
         return Err(AppError::NotFound);
     }
@@ -575,7 +577,6 @@ async fn update_stats(
         message: "Updated".into(),
     }))
 }
-
 
 // ---------------------------------------------------------------------------
 // Events CRUD
@@ -621,10 +622,12 @@ async fn create_event(
         .execute(&pool).await;
 
     match res {
-        Ok(_) => Ok(Json(DeleteResponse { message: "Created".into() })),
-        Err(err) if is_unique_violation(&err) => {
-            Err(AppError::Conflict("An event with this title or slug already exists".into()))
-        }
+        Ok(_) => Ok(Json(DeleteResponse {
+            message: "Created".into(),
+        })),
+        Err(err) if is_unique_violation(&err) => Err(AppError::Conflict(
+            "An event with this title or slug already exists".into(),
+        )),
         Err(err) => Err(AppError::Database(err)),
     }
 }
@@ -660,7 +663,9 @@ async fn update_event(
     let res = match res {
         Ok(r) => r,
         Err(err) if is_unique_violation(&err) => {
-            return Err(AppError::Conflict("An event with this title or slug already exists".into()));
+            return Err(AppError::Conflict(
+                "An event with this title or slug already exists".into(),
+            ));
         }
         Err(err) => return Err(AppError::Database(err)),
     };
@@ -918,10 +923,12 @@ async fn create_post(
         .execute(&pool).await;
 
     match res {
-        Ok(_) => Ok(Json(DeleteResponse { message: "Created".into() })),
-        Err(err) if is_unique_violation(&err) => {
-            Err(AppError::Conflict("An article with this title or slug already exists".into()))
-        }
+        Ok(_) => Ok(Json(DeleteResponse {
+            message: "Created".into(),
+        })),
+        Err(err) if is_unique_violation(&err) => Err(AppError::Conflict(
+            "An article with this title or slug already exists".into(),
+        )),
         Err(err) => Err(AppError::Database(err)),
     }
 }
@@ -955,7 +962,9 @@ async fn update_post(
     let res = match res {
         Ok(r) => r,
         Err(err) if is_unique_violation(&err) => {
-            return Err(AppError::Conflict("An article with this title or slug already exists".into()));
+            return Err(AppError::Conflict(
+                "An article with this title or slug already exists".into(),
+            ));
         }
         Err(err) => return Err(AppError::Database(err)),
     };
@@ -1447,14 +1456,16 @@ async fn update_faq(
     if p.answer.trim().is_empty() {
         return Err(AppError::BadRequest("answer is required".into()));
     }
-    let res = sqlx::query("UPDATE faqs SET question=?1,answer=?2,category=?3,display_order=?4 WHERE id=?5")
-        .bind(&p.question)
-        .bind(&p.answer)
-        .bind(p.category.as_deref().unwrap_or("General"))
-        .bind(p.display_order.unwrap_or(99))
-        .bind(id)
-        .execute(&pool)
-        .await?;
+    let res = sqlx::query(
+        "UPDATE faqs SET question=?1,answer=?2,category=?3,display_order=?4 WHERE id=?5",
+    )
+    .bind(&p.question)
+    .bind(&p.answer)
+    .bind(p.category.as_deref().unwrap_or("General"))
+    .bind(p.display_order.unwrap_or(99))
+    .bind(id)
+    .execute(&pool)
+    .await?;
     if res.rows_affected() == 0 {
         return Err(AppError::NotFound);
     }

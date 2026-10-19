@@ -432,12 +432,7 @@ async fn test_rate_limiting_ip_spoofing_prevention() {
     std::env::remove_var("TRUST_PROXY");
 
     // ConnectInfo extraction test
-    let mut parts = Request::builder()
-        .uri("/")
-        .body(())
-        .unwrap()
-        .into_parts()
-        .0;
+    let mut parts = Request::builder().uri("/").body(()).unwrap().into_parts().0;
     let socket: std::net::SocketAddr = "192.0.2.1:8080".parse().unwrap();
     parts.extensions.insert(axum::extract::ConnectInfo(socket));
 
@@ -608,6 +603,3 @@ async fn test_migrations_on_copy_of_existing_db() {
         let _ = std::fs::remove_file(temp_db_path);
     }
 }
-
-
-

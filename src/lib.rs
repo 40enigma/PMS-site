@@ -25,7 +25,6 @@ pub fn upload_dir() -> String {
     std::env::var("UPLOAD_DIR").unwrap_or_else(|_| "uploads".to_string())
 }
 
-
 /// Build the CORS layer from ALLOWED_ORIGINS env var.
 ///
 /// - In production (`RUST_ENV=production`): ALLOWED_ORIGINS is required.
@@ -175,9 +174,18 @@ pub fn create_app(pool: SqlitePool) -> Router {
         .route_service("/join", ServeFile::new("frontend/static/join.html"))
         .route_service("/admin", ServeFile::new("frontend/static/admin.html"))
         .route_service("/404", ServeFile::new("frontend/static/404.html"))
-        .route_service("/favicon.svg", ServeFile::new("frontend/static/favicon.svg"))
-        .route_service("/favicon.ico", ServeFile::new("frontend/static/favicon.svg"))
-        .route_service("/pms-logo.jpeg", ServeFile::new("frontend/static/pms-logo.jpeg"))
+        .route_service(
+            "/favicon.svg",
+            ServeFile::new("frontend/static/favicon.svg"),
+        )
+        .route_service(
+            "/favicon.ico",
+            ServeFile::new("frontend/static/favicon.svg"),
+        )
+        .route_service(
+            "/pms-logo.jpeg",
+            ServeFile::new("frontend/static/pms-logo.jpeg"),
+        )
         // Any unknown route serves 404.html with StatusCode::NOT_FOUND (404)
         .fallback(not_found_fallback)
         .layer(DefaultBodyLimit::max(256 * 1024))

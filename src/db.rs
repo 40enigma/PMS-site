@@ -34,7 +34,7 @@ pub async fn run_migrations(pool: &SqlitePool) {
 
     // Track migration version in _pms_migrations
     let _ = sqlx::query(
-        "INSERT OR IGNORE INTO _pms_migrations (version) VALUES ('0001_initial_schema')"
+        "INSERT OR IGNORE INTO _pms_migrations (version) VALUES ('0001_initial_schema')",
     )
     .execute(pool)
     .await;
@@ -61,9 +61,11 @@ pub async fn run_migrations(pool: &SqlitePool) {
     let _ = sqlx::query("UPDATE admin_users SET email = lower(email) WHERE email != lower(email)")
         .execute(pool)
         .await;
-    let _ = sqlx::query("UPDATE newsletter_subscribers SET email = lower(email) WHERE email != lower(email)")
-        .execute(pool)
-        .await;
+    let _ = sqlx::query(
+        "UPDATE newsletter_subscribers SET email = lower(email) WHERE email != lower(email)",
+    )
+    .execute(pool)
+    .await;
 
     tracing::info!("✅ Database migrations complete");
 }
