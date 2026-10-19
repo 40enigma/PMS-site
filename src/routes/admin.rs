@@ -190,14 +190,29 @@ pub async fn login(
     )
     .bind(&payload.email)
     .fetch_optional(&pool)
-    .await?
-    .ok_or(AppError::Unauthorized)?;
+    .await?;
 
-    let parsed_hash = PasswordHash::new(&user.password_hash)
+    let (hash_to_verify, user) = match user {
+        Some(u) => (u.password_hash.clone(), Some(u)),
+        None => (
+            "$argon2id$v=19$m=19456,t=2,p=1$kc2irIUf5Ibqnm5+yA7gMg$qyiSjMzAeQTOHoQjm3Gj+qTPQyVVJFlZzN1wL7zW1FM".to_string(),
+            None,
+        ),
+    };
+
+    let parsed_hash = PasswordHash::new(&hash_to_verify)
         .map_err(|_| AppError::Internal("Hash parse error".into()))?;
-    Argon2::default()
-        .verify_password(payload.password.as_bytes(), &parsed_hash)
-        .map_err(|_| AppError::Unauthorized)?;
+    let verify_res = Argon2::default().verify_password(payload.password.as_bytes(), &parsed_hash);
+
+    let user = match user {
+        Some(u) => {
+            verify_res.map_err(|_| AppError::Unauthorized)?;
+            u
+        }
+        None => {
+            return Err(AppError::Unauthorized);
+        }
+    };
 
     let token = create_token(user.id, &user.email)?;
 
