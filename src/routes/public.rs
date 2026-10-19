@@ -594,23 +594,25 @@ pub async fn subscribe_newsletter(
 ) -> Result<Json<NewsletterSubscriber>, AppError> {
     RateLimitState::global().check_submit(ip)?;
 
+    let email = payload.email.trim().to_lowercase();
+
     // Input validation
-    if payload.email.trim().is_empty() || !payload.email.contains('@') {
+    if email.is_empty() || !email.contains('@') {
         return Err(AppError::BadRequest("A valid email is required".into()));
     }
-    if payload.email.len() > 254 {
+    if email.len() > 254 {
         return Err(AppError::BadRequest("email is too long".into()));
     }
 
     sqlx::query("INSERT OR IGNORE INTO newsletter_subscribers (email) VALUES (?1)")
-        .bind(&payload.email)
+        .bind(&email)
         .execute(&pool)
         .await?;
 
     let sub = sqlx::query_as::<_, NewsletterSubscriber>(
         "SELECT id, email, subscribed_at FROM newsletter_subscribers WHERE email = ?1",
     )
-    .bind(&payload.email)
+    .bind(&email)
     .fetch_one(&pool)
     .await?;
 

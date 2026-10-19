@@ -178,20 +178,22 @@ pub async fn login(
     // Enforce rate limiting per client IP
     RateLimitState::global().check_login(ip)?;
 
+    let email = payload.email.trim().to_lowercase();
+
     // Basic input validation
-    if payload.email.is_empty() || payload.password.is_empty() {
+    if email.is_empty() || payload.password.is_empty() {
         return Err(AppError::BadRequest(
             "Email and password are required".into(),
         ));
     }
-    if payload.email.len() > 254 {
+    if email.len() > 254 {
         return Err(AppError::BadRequest("Email too long".into()));
     }
 
     let user = sqlx::query_as::<_, AdminUser>(
         "SELECT id, email, password_hash, name FROM admin_users WHERE email = ?1",
     )
-    .bind(&payload.email)
+    .bind(&email)
     .fetch_optional(&pool)
     .await?;
 

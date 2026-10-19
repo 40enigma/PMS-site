@@ -57,6 +57,14 @@ pub async fn run_migrations(pool: &SqlitePool) {
     .await
     .expect("Failed to seed default site_sections");
 
+    // Normalize existing emails to lowercase
+    let _ = sqlx::query("UPDATE admin_users SET email = lower(email) WHERE email != lower(email)")
+        .execute(pool)
+        .await;
+    let _ = sqlx::query("UPDATE newsletter_subscribers SET email = lower(email) WHERE email != lower(email)")
+        .execute(pool)
+        .await;
+
     tracing::info!("✅ Database migrations complete");
 }
 
@@ -69,7 +77,7 @@ pub async fn seed_data(pool: &SqlitePool) {
 
     if seed_admin {
         let admin_email = match std::env::var("ADMIN_INITIAL_EMAIL") {
-            Ok(e) if !e.is_empty() => e,
+            Ok(e) if !e.trim().is_empty() => e.trim().to_lowercase(),
             _ => {
                 tracing::error!(
                     "SEED_ADMIN=true but ADMIN_INITIAL_EMAIL is not set. \
