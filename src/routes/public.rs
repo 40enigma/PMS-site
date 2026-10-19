@@ -258,8 +258,11 @@ pub async fn register_for_event(
 #[axum::debug_handler]
 pub async fn verify_certificate(
     State(pool): State<SqlitePool>,
+    ClientIp(ip): ClientIp,
     Query(q): Query<CertificateQuery>,
 ) -> Result<Json<CertificateVerification>, AppError> {
+    RateLimitState::global().check_certificate_verify(ip)?;
+
     let code_trimmed = q.code.trim();
     let result = sqlx::query_as::<_, (String, String, String)>(
         "SELECT er.student_name, e.title, er.certificate_code FROM event_registrations er JOIN events e ON er.event_id = e.id WHERE er.certificate_code = ?1 COLLATE NOCASE"

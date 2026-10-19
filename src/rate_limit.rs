@@ -35,6 +35,7 @@ static GLOBAL_RATE_LIMIT: OnceLock<RateLimitState> = OnceLock::new();
 pub struct RateLimitState {
     pub login: Arc<KeyedLimiter>,
     pub submit: Arc<KeyedLimiter>,
+    pub certificate_verify: Arc<KeyedLimiter>,
 }
 
 fn env_rpm(var: &str, default: u32) -> NonZeroU32 {
@@ -49,25 +50,30 @@ impl RateLimitState {
     pub fn new() -> Self {
         let login_rpm = env_rpm("RATE_LIMIT_LOGIN_RPM", 10);
         let submit_rpm = env_rpm("RATE_LIMIT_SUBMIT_RPM", 30);
+        let cert_verify_rpm = env_rpm("RATE_LIMIT_CERT_VERIFY_RPM", 60);
 
         tracing::info!(
             login_rpm = login_rpm.get(),
             submit_rpm = submit_rpm.get(),
+            cert_verify_rpm = cert_verify_rpm.get(),
             "Rate limiter initialised"
         );
 
         let login_quota = Quota::per_minute(login_rpm);
         let submit_quota = Quota::per_minute(submit_rpm);
+        let cert_verify_quota = Quota::per_minute(cert_verify_rpm);
 
         let state = Self {
             login: Arc::new(RateLimiter::keyed(login_quota)),
             submit: Arc::new(RateLimiter::keyed(submit_quota)),
+            certificate_verify: Arc::new(RateLimiter::keyed(cert_verify_quota)),
         };
 
         // Periodic background task to prune stale entries and shrink DashMap,
         // preventing unbounded memory growth under unique IP load.
         let login_limiter = Arc::clone(&state.login);
         let submit_limiter = Arc::clone(&state.submit);
+        let cert_limiter = Arc::clone(&state.certificate_verify);
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(300));
             loop {
@@ -76,6 +82,8 @@ impl RateLimitState {
                 login_limiter.shrink_to_fit();
                 submit_limiter.retain_recent();
                 submit_limiter.shrink_to_fit();
+                cert_limiter.retain_recent();
+                cert_limiter.shrink_to_fit();
             }
         });
 
@@ -101,12 +109,21 @@ impl RateLimitState {
             .map_err(|_| AppError::TooManyRequests)
     }
 
+    /// Check certificate verification rate limit for the given IP. Returns `Err(AppError::TooManyRequests)` if exceeded.
+    pub fn check_certificate_verify(&self, ip: IpAddr) -> Result<(), AppError> {
+        self.certificate_verify
+            .check_key(&ip)
+            .map_err(|_| AppError::TooManyRequests)
+    }
+
     /// Manually prune recent entries and shrink memory allocations (useful for testing or ad-hoc cleanup).
     pub fn cleanup(&self) {
         self.login.retain_recent();
         self.login.shrink_to_fit();
         self.submit.retain_recent();
         self.submit.shrink_to_fit();
+        self.certificate_verify.retain_recent();
+        self.certificate_verify.shrink_to_fit();
     }
 }
 
