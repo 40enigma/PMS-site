@@ -22,9 +22,7 @@
   --text:           #f1f5f9;
   --text-muted:     #94a3b8;
   --text-dim:       #94a3b8; /* Enhanced WCAG AA contrast against #111827 */
-  --gradient-hero:  linear-gradient(135deg,#1e3a5f 0%,#0a0e1a 60%);
   --gradient-card:  linear-gradient(135deg,rgba(37,99,235,.15),rgba(14,165,233,.05));
-  --gradient-gold:  linear-gradient(135deg,rgba(245,158,11,.2),rgba(217,119,6,.05));
   --shadow-glow:    0 0 35px rgba(37,99,235,.25);
   --shadow-gold:    0 0 30px rgba(245,158,11,.2);
   --radius:         12px;
@@ -207,11 +205,9 @@ img {
 }
 
 /* Metallic alloy border motif for featured items */
-.card.featured,
 .card-featured {
   border-color: var(--border-accent);
 }
-.card.featured:hover,
 .card-featured:hover {
   border-color: var(--accent);
   box-shadow: var(--shadow-gold);

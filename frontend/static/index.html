@@ -149,47 +149,6 @@
   </div>
 </section>
 
-<!-- Event Registration Modal -->
-<dialog id="reg-modal" style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);color:var(--text);max-width:540px;width:92%;padding:2rem;box-shadow:0 25px 50px -12px rgba(0,0,0,.7)">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem">
-    <h2 id="reg-modal-title" style="margin:0;font-size:1.35rem">Register for Event</h2>
-    <button type="button" id="reg-close-icon" class="btn btn-outline btn-sm" style="padding:.25rem .5rem">✕</button>
-  </div>
-  <form id="reg-form" novalidate>
-    <input type="hidden" id="reg-event-id">
-    <div class="form-group">
-      <label class="form-label" for="reg-name">Full Name *</label>
-      <input id="reg-name" class="form-control" required placeholder="Your full name">
-    </div>
-    <div class="grid grid-2" style="gap:.75rem">
-      <div class="form-group">
-        <label class="form-label" for="reg-roll">Roll Number *</label>
-        <input id="reg-roll" class="form-control" required placeholder="e.g. 22-DMME-01">
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="reg-batch">Batch *</label>
-        <input id="reg-batch" class="form-control" required placeholder="e.g. 2022-2026">
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label" for="reg-dept">Academic Department *</label>
-      <input id="reg-dept" class="form-control" required placeholder="e.g. Metallurgy &amp; Materials Engineering (DMME)">
-    </div>
-    <div class="form-group">
-      <label class="form-label" for="reg-email">PIEAS Email *</label>
-      <input id="reg-email" type="email" class="form-control" required placeholder="student@pieas.edu.pk">
-    </div>
-    <div class="form-group">
-      <label class="form-label" for="reg-phone">Contact Phone</label>
-      <input id="reg-phone" class="form-control" placeholder="Optional for SMS updates">
-    </div>
-    <div id="reg-msg" style="margin-top:1rem"></div>
-    <div style="display:flex;justify-content:flex-end;gap:.75rem;margin-top:1.5rem">
-      <button type="button" class="btn btn-outline" id="reg-close">Cancel</button>
-      <button type="submit" class="btn btn-primary" id="reg-submit">Confirm Registration</button>
-    </div>
-  </form>
-</dialog>
 
 <!-- Unified Footer -->
 <footer>

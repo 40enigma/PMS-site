@@ -36,9 +36,9 @@
 <body>
 <nav class="navbar" role="navigation" aria-label="Main navigation">
   <div class="container nav-inner">
-    <a href="/" class="brand">
-      <img src="/pms-logo.jpeg" alt="PMS Logo" class="brand-logo" style="width:28px;height:28px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,.2)">
-      <span class="brand-text">PMS Admin</span>
+    <a href="/" class="nav-brand">
+      <img src="/pms-logo.jpeg" alt="PMS Logo" class="nav-logo">
+      PMS <span>Admin</span>
     </a>
     <button class="hamburger" aria-label="Toggle Navigation" aria-expanded="false">
       <span></span><span></span><span></span>
@@ -838,7 +838,7 @@ function renderFields(fields, currentData) {
           <div style="display:flex;gap:.5rem;align-items:center">
             <input type="${f.type || 'text'}" id="f-${f.name}" class="form-control" value="${PMS.escHtml(val)}" placeholder="${PMS.escHtml(f.placeholder || '')}" ${f.required ? 'required' : ''} style="flex:1">
             <label class="btn btn-outline btn-sm inline-upload-label" style="margin:0;white-space:nowrap;cursor:pointer;padding:.4rem .7rem">
-              📁 Upload
+              <span class="upload-status-text">📁 Upload</span>
               <input type="file" style="display:none" data-target-input="f-${f.name}" class="inline-file-input">
             </label>
           </div>
@@ -859,8 +859,9 @@ document.getElementById('crud-fields').addEventListener('change', async ev => {
   const file = fileInput.files[0];
   const targetId = fileInput.dataset.targetInput;
   const targetEl = document.getElementById(targetId);
-  const labelEl = fileInput.parentElement;
-  labelEl.textContent = '⏳ Uploading…';
+  const labelEl = fileInput.closest('.inline-upload-label');
+  const statusSpan = labelEl ? labelEl.querySelector('.upload-status-text') : null;
+  if (statusSpan) statusSpan.textContent = '⏳ Uploading…';
   try {
     const fd = new FormData();
     fd.append('file', file);
@@ -871,13 +872,12 @@ document.getElementById('crud-fields').addEventListener('change', async ev => {
     }
     const data = await res.json();
     if (targetEl) targetEl.value = data.url;
-    labelEl.innerHTML = '✅ Done <input type="file" style="display:none" data-target-input="' + targetId + '" class="inline-file-input">';
-    setTimeout(() => {
-      labelEl.innerHTML = '📁 Upload <input type="file" style="display:none" data-target-input="' + targetId + '" class="inline-file-input">';
-    }, 2500);
+    if (statusSpan) statusSpan.textContent = '✅ Uploaded';
   } catch (err) {
     alert('Upload failed: ' + err.message);
-    labelEl.innerHTML = '📁 Upload <input type="file" style="display:none" data-target-input="' + targetId + '" class="inline-file-input">';
+    if (statusSpan) statusSpan.textContent = '📁 Upload';
+  } finally {
+    fileInput.value = '';
   }
 });
 

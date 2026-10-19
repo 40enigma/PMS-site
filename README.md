@@ -180,6 +180,7 @@ The platform reads all security and networking configurations from `.env` or sys
 | `JWT_COOKIE_SECURE` | Force Secure flag on auth cookie (`true`/`false`) | `false` in dev | `true` in production |
 | `RATE_LIMIT_LOGIN_RPM` | Max login requests per minute per IP | `10` | `10` |
 | `RATE_LIMIT_SUBMIT_RPM`| Max form submissions per minute per IP | `30` | `30` |
+| `TRUST_PROXY` | Trust proxy headers (`X-Forwarded-For`/`X-Real-IP`) (`true`/`false`) | `false` | Set `true` behind reverse proxy (Nginx/Caddy) to prevent all users sharing `127.0.0.1` |
 
 ### Generating a Secure JWT Secret
 Run the following command on Linux/macOS to generate a cryptographically strong 256-bit hexadecimal key:

@@ -146,12 +146,12 @@ function renderMarkdown(md) {
   text = text.replace(/^# (.*$)/gim, '<h1 style="font-size:1.65rem;margin:1.85rem 0 .75rem;color:var(--primary-light)">$1</h1>');
 
   // 4. Bold & Italics
-  text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  text = text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  text = text.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
 
   // 5. Links [text](url)
   text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, linkText, url) => {
-    return `<a href="${safeUrl(url)}" target="_blank" rel="noopener" style="color:var(--primary-light);text-decoration:underline">${linkText}</a>`;
+    return `<a href="${safeUrl(url.replace(/&amp;/g, '&'))}" target="_blank" rel="noopener" style="color:var(--primary-light);text-decoration:underline">${linkText}</a>`;
   });
 
   // 6. Blockquotes
@@ -498,15 +498,15 @@ function openRegistrationModal(eventId, eventTitle) {
   }
 
   // Set fields and reset alert
-  const titleEl = modal.querySelector('#reg-modal-title') || modal.querySelector('#reg-event-title');
+  const titleEl = modal.querySelector('#reg-modal-title');
   if (titleEl) titleEl.textContent = eventTitle ? `Register: ${eventTitle}` : 'Register for Event';
   const idEl = modal.querySelector('#reg-event-id');
   if (idEl) idEl.value = eventId;
-  const msgBox = modal.querySelector('#reg-msg') || modal.querySelector('#reg-msg-container');
+  const msgBox = modal.querySelector('#reg-msg');
   if (msgBox) msgBox.innerHTML = '';
 
   // Ensure submit button is re-enabled and visible on opening modal
-  const submitBtn = modal.querySelector('#reg-submit') || modal.querySelector('#reg-submit-btn');
+  const submitBtn = modal.querySelector('#reg-submit');
   if (submitBtn) {
     submitBtn.disabled = false;
     submitBtn.style.display = '';
@@ -515,20 +515,20 @@ function openRegistrationModal(eventId, eventTitle) {
   // Bind close buttons and form submit once
   if (!modal.dataset.initialized) {
     modal.dataset.initialized = 'true';
-    const closeBtns = modal.querySelectorAll('#reg-close, #reg-close-icon, #close-reg-modal-btn');
+    const closeBtns = modal.querySelectorAll('#reg-close, #reg-close-icon');
     closeBtns.forEach(b => {
       b.onclick = () => modal.close();
     });
 
-    const form = modal.querySelector('#reg-form') || modal.querySelector('#global-reg-form');
+    const form = modal.querySelector('#reg-form');
     if (form) {
       form.addEventListener('submit', async ev => {
         ev.preventDefault();
-        const curSubmitBtn = modal.querySelector('#reg-submit') || modal.querySelector('#reg-submit-btn');
-        const curMsgBox = modal.querySelector('#reg-msg') || modal.querySelector('#reg-msg-container');
+        const curSubmitBtn = modal.querySelector('#reg-submit');
+        const curMsgBox = modal.querySelector('#reg-msg');
         const curEventId = (modal.querySelector('#reg-event-id') || {}).value;
 
-        const nameInput = modal.querySelector('#reg-name') || modal.querySelector('#reg-student-name');
+        const nameInput = modal.querySelector('#reg-name');
         const rollInput = modal.querySelector('#reg-roll');
         const batchInput = modal.querySelector('#reg-batch');
         const deptInput = modal.querySelector('#reg-dept');
@@ -551,6 +551,7 @@ function openRegistrationModal(eventId, eventTitle) {
           return;
         }
 
+        let isSuccess = false;
         setLoading(curSubmitBtn, true);
         try {
           const result = await apiPost(`/api/events/${curEventId}/register`, {
@@ -568,6 +569,7 @@ function openRegistrationModal(eventId, eventTitle) {
             true
           );
           form.reset();
+          isSuccess = true;
           // Hide and disable submit button to prevent accidental double-registration
           curSubmitBtn.disabled = true;
           curSubmitBtn.style.display = 'none';
@@ -575,6 +577,10 @@ function openRegistrationModal(eventId, eventTitle) {
           showAlert(curMsgBox, err.message || 'Registration failed.', 'error');
         } finally {
           setLoading(curSubmitBtn, false);
+          if (isSuccess) {
+            curSubmitBtn.disabled = true;
+            curSubmitBtn.style.display = 'none';
+          }
         }
       });
     }
