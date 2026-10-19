@@ -1,3 +1,4 @@
+use argon2::PasswordHasher;
 use axum::{
     body::Body,
     http::{header, Method, Request, StatusCode},
@@ -602,4 +603,155 @@ async fn test_migrations_on_copy_of_existing_db() {
         drop(pool);
         let _ = std::fs::remove_file(temp_db_path);
     }
+}
+
+#[tokio::test]
+async fn test_email_lowercasing_migration_handles_mixed_case_duplicates_without_losing_rows() {
+    let temp_db_path = format!("target/test_email_dups_{}.db", uuid::Uuid::new_v4());
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect(&format!("sqlite://{}?mode=rwc", temp_db_path))
+        .await
+        .unwrap();
+
+    // 1. Create initial schema
+    let schema = include_str!("../migrations/0001_initial_schema.sql");
+    sqlx::raw_sql(schema).execute(&pool).await.unwrap();
+
+    // 2. Pre-populate tables with duplicate mixed-case rows and single mixed-case rows
+    // Argon2 hash for password "Password123!"
+    let salt = argon2::password_hash::SaltString::generate(&mut rand_core::OsRng);
+    let argon2 = argon2::Argon2::default();
+    let hashed = argon2
+        .hash_password(b"Password123!", &salt)
+        .unwrap()
+        .to_string();
+
+    // admin_users duplicate pair + single mixed-case
+    sqlx::query(
+        "INSERT INTO admin_users (id, email, password_hash, name) VALUES (1, 'duplicate@pieas.edu.pk', ?1, 'User 1')"
+    )
+    .bind(&hashed)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO admin_users (id, email, password_hash, name) VALUES (2, 'Duplicate@pieas.edu.pk', ?1, 'User 2')"
+    )
+    .bind(&hashed)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO admin_users (id, email, password_hash, name) VALUES (3, 'SingleMixed@pieas.edu.pk', ?1, 'User 3')"
+    )
+    .bind(&hashed)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // newsletter_subscribers duplicate pair + single mixed-case
+    sqlx::query("INSERT INTO newsletter_subscribers (id, email) VALUES (1, 'sub@pieas.edu.pk')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO newsletter_subscribers (id, email) VALUES (2, 'Sub@pieas.edu.pk')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO newsletter_subscribers (id, email) VALUES (3, 'OtherMixed@pieas.edu.pk')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // 3. Run migration (must succeed without crashing or failing despite duplicate pair)
+    db::run_migrations(&pool).await;
+
+    // 4. Verify no rows were lost in admin_users
+    let (admin_count,): (i64,) = sqlx::query_as("SELECT count(*) FROM admin_users")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(admin_count, 3, "No admin_users rows should be lost");
+
+    // 5. Verify no rows were lost in newsletter_subscribers
+    let (sub_count,): (i64,) = sqlx::query_as("SELECT count(*) FROM newsletter_subscribers")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        sub_count, 3,
+        "No newsletter_subscribers rows should be lost"
+    );
+
+    // 6. Verify single mixed-case row was normalized to lowercase
+    let (admin3_email,): (String,) = sqlx::query_as("SELECT email FROM admin_users WHERE id = 3")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(admin3_email, "singlemixed@pieas.edu.pk");
+
+    let (sub3_email,): (String,) =
+        sqlx::query_as("SELECT email FROM newsletter_subscribers WHERE id = 3")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(sub3_email, "othermixed@pieas.edu.pk");
+
+    // 7. Verify colliding rows were safely preserved without corruption
+    let (admin1_email,): (String,) = sqlx::query_as("SELECT email FROM admin_users WHERE id = 1")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let (admin2_email,): (String,) = sqlx::query_as("SELECT email FROM admin_users WHERE id = 2")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(admin1_email, "duplicate@pieas.edu.pk");
+    assert_eq!(admin2_email, "Duplicate@pieas.edu.pk");
+
+    // 8. Verify migration idempotence on second run
+    db::run_migrations(&pool).await;
+    let (admin_count2,): (i64,) = sqlx::query_as("SELECT count(*) FROM admin_users")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(admin_count2, 3, "Repeated migration must remain idempotent");
+
+    // 9. Verify login still works for an admin whose email was originally mixed-case
+    // Insert site_stats row 1 so create_app dependencies are met
+    let _ = sqlx::query(
+        "INSERT OR IGNORE INTO site_stats (id, active_members, events_held, years_active, industrial_partners) VALUES (1, 10, 5, 2, 1)"
+    )
+    .execute(&pool)
+    .await;
+
+    let app = create_app(pool.clone());
+    let login_payload = serde_json::json!({
+        "email": "SingleMixed@pieas.edu.pk",
+        "password": "Password123!"
+    });
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/api/auth/login")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&login_payload).unwrap()))
+        .unwrap();
+
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::OK,
+        "Admin whose stored email was originally mixed-case should log in successfully"
+    );
+
+    // 10. Clean up temp DB files
+    drop(pool);
+    let _ = std::fs::remove_file(&temp_db_path);
+    let _ = std::fs::remove_file(format!("{}-wal", temp_db_path));
+    let _ = std::fs::remove_file(format!("{}-shm", temp_db_path));
 }

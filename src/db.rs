@@ -57,12 +57,69 @@ pub async fn run_migrations(pool: &SqlitePool) {
     .await
     .expect("Failed to seed default site_sections");
 
-    // Normalize existing emails to lowercase
-    let _ = sqlx::query("UPDATE admin_users SET email = lower(email) WHERE email != lower(email)")
-        .execute(pool)
-        .await;
+    // Normalize existing emails to lowercase safely, skipping and logging collisions to preserve data
+    let colliding_admins: Vec<(i64, String)> = sqlx::query_as(
+        r#"
+        SELECT id, email FROM admin_users
+        WHERE email != lower(email)
+          AND lower(email) IN (
+            SELECT lower(email) FROM admin_users GROUP BY lower(email) HAVING count(*) > 1
+          )
+        "#,
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    for (id, email) in colliding_admins {
+        tracing::warn!(
+            "Skipping email lowercasing for admin_users id={} email='{}': collision with existing email",
+            id, email
+        );
+    }
+
     let _ = sqlx::query(
-        "UPDATE newsletter_subscribers SET email = lower(email) WHERE email != lower(email)",
+        r#"
+        UPDATE admin_users
+        SET email = lower(email)
+        WHERE email != lower(email)
+          AND lower(email) NOT IN (
+            SELECT lower(email) FROM admin_users GROUP BY lower(email) HAVING count(*) > 1
+          )
+        "#,
+    )
+    .execute(pool)
+    .await;
+
+    let colliding_subscribers: Vec<(i64, String)> = sqlx::query_as(
+        r#"
+        SELECT id, email FROM newsletter_subscribers
+        WHERE email != lower(email)
+          AND lower(email) IN (
+            SELECT lower(email) FROM newsletter_subscribers GROUP BY lower(email) HAVING count(*) > 1
+          )
+        "#,
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    for (id, email) in colliding_subscribers {
+        tracing::warn!(
+            "Skipping email lowercasing for newsletter_subscribers id={} email='{}': collision with existing email",
+            id, email
+        );
+    }
+
+    let _ = sqlx::query(
+        r#"
+        UPDATE newsletter_subscribers
+        SET email = lower(email)
+        WHERE email != lower(email)
+          AND lower(email) NOT IN (
+            SELECT lower(email) FROM newsletter_subscribers GROUP BY lower(email) HAVING count(*) > 1
+          )
+        "#,
     )
     .execute(pool)
     .await;
