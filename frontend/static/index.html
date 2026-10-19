@@ -218,30 +218,38 @@
 
     const actSec = sections.find(s => s.section_key === 'home_activities');
     const actGrid = document.getElementById('activities-grid');
-    if (actSec) {
+    if (actSec && actGrid) {
       if (actSec.badge) document.getElementById('activities-badge').textContent = actSec.badge;
       if (actSec.title) document.getElementById('activities-heading').textContent = actSec.title;
       if (actSec.subtitle) document.getElementById('activities-desc').textContent = actSec.subtitle;
 
+      let rendered = false;
       if (actSec.extra_json) {
         try {
           const cards = JSON.parse(actSec.extra_json);
-          const icons = { Atom: '⚛️', Cpu: '🔬', Award: '🏆', Building: '🏭' };
-          actGrid.innerHTML = cards.map(c => `
-            <article class="card fade-up">
-              <div style="font-size:2rem;margin-bottom:.75rem">${icons[c.icon] || '✨'}</div>
-              <h3 style="font-size:1.1rem;margin-bottom:.5rem">${PMS.escHtml(c.title)}</h3>
-              <p style="color:var(--text-muted);font-size:.875rem;line-height:1.6">${PMS.escHtml(c.desc)}</p>
-            </article>
-          `).join('');
-          PMS.observeFadeElements(actGrid);
-        } catch (_) {
-          actGrid.innerHTML = '<p style="color:var(--text-muted);grid-column:1/-1">Activities configured in site sections.</p>';
-        }
+          if (Array.isArray(cards) && cards.length > 0) {
+            const icons = { Atom: '⚛️', Cpu: '🔬', Award: '🏆', Building: '🏭' };
+            actGrid.innerHTML = cards.map(c => `
+              <article class="card fade-up">
+                <div style="font-size:2rem;margin-bottom:.75rem">${icons[c.icon] || '✨'}</div>
+                <h3 style="font-size:1.1rem;margin-bottom:.5rem">${PMS.escHtml(c.title)}</h3>
+                <p style="color:var(--text-muted);font-size:.875rem;line-height:1.6">${PMS.escHtml(c.desc)}</p>
+              </article>
+            `).join('');
+            PMS.observeFadeElements(actGrid);
+            rendered = true;
+          }
+        } catch (_) {}
       }
+      if (!rendered) {
+        actGrid.innerHTML = '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">Activities configured in site sections.</p>';
+      }
+    } else if (actGrid) {
+      actGrid.innerHTML = '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">Activities information will be announced soon.</p>';
     }
   } catch (_) {
-    // Fallback to initial HTML content
+    const actGrid = document.getElementById('activities-grid');
+    if (actGrid) actGrid.innerHTML = '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">Activities information will be announced soon.</p>';
   }
 
   // 2. Load featured events
