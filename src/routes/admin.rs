@@ -581,16 +581,21 @@ async fn create_event(
     }
 
     let slug = p.slug.unwrap_or_else(|| slugify(&p.title));
-    sqlx::query("INSERT INTO events (title,slug,date,time_range,venue,category,short_description,full_summary,poster_url,registration_link,speaker_or_organizer,is_past,is_featured) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)")
+    let res = sqlx::query("INSERT INTO events (title,slug,date,time_range,venue,category,short_description,full_summary,poster_url,registration_link,speaker_or_organizer,is_past,is_featured) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)")
         .bind(&p.title).bind(&slug).bind(&p.date).bind(&p.time_range).bind(&p.venue)
         .bind(p.category.as_deref().unwrap_or("Seminar"))
         .bind(&p.short_description).bind(&p.full_summary).bind(&p.poster_url)
         .bind(&p.registration_link).bind(&p.speaker_or_organizer)
         .bind(p.is_past.unwrap_or(false)).bind(p.is_featured.unwrap_or(false))
-        .execute(&pool).await?;
-    Ok(Json(DeleteResponse {
-        message: "Created".into(),
-    }))
+        .execute(&pool).await;
+
+    match res {
+        Ok(_) => Ok(Json(DeleteResponse { message: "Created".into() })),
+        Err(err) if is_unique_violation(&err) => {
+            Err(AppError::Conflict("An event with this title or slug already exists".into()))
+        }
+        Err(err) => Err(AppError::Database(err)),
+    }
 }
 
 #[axum::debug_handler]
@@ -611,7 +616,15 @@ async fn update_event(
         .bind(&p.registration_link).bind(&p.speaker_or_organizer)
         .bind(p.is_past.unwrap_or(false)).bind(p.is_featured.unwrap_or(false))
         .bind(id)
-        .execute(&pool).await?;
+        .execute(&pool).await;
+
+    let res = match res {
+        Ok(r) => r,
+        Err(err) if is_unique_violation(&err) => {
+            return Err(AppError::Conflict("An event with this title or slug already exists".into()));
+        }
+        Err(err) => return Err(AppError::Database(err)),
+    };
     if res.rows_affected() == 0 {
         return Err(AppError::NotFound);
     }
@@ -850,17 +863,22 @@ async fn create_post(
         ));
     }
     let slug = p.slug.unwrap_or_else(|| slugify(&p.title));
-    sqlx::query("INSERT INTO posts (title,slug,excerpt,body_markdown,author_name,author_role,author_batch,cover_image_url,category,material_formula,crystal_structure,read_time_minutes,is_featured) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)")
+    let res = sqlx::query("INSERT INTO posts (title,slug,excerpt,body_markdown,author_name,author_role,author_batch,cover_image_url,category,material_formula,crystal_structure,read_time_minutes,is_featured) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)")
         .bind(&p.title).bind(&slug).bind(&p.excerpt).bind(&p.body_markdown)
         .bind(&p.author_name).bind(&p.author_role).bind(&p.author_batch).bind(&p.cover_image_url)
         .bind(p.category.as_deref().unwrap_or("Explainer"))
         .bind(&p.material_formula).bind(&p.crystal_structure)
         .bind(p.read_time_minutes.unwrap_or(5))
         .bind(p.is_featured.unwrap_or(false))
-        .execute(&pool).await?;
-    Ok(Json(DeleteResponse {
-        message: "Created".into(),
-    }))
+        .execute(&pool).await;
+
+    match res {
+        Ok(_) => Ok(Json(DeleteResponse { message: "Created".into() })),
+        Err(err) if is_unique_violation(&err) => {
+            Err(AppError::Conflict("An article with this title or slug already exists".into()))
+        }
+        Err(err) => Err(AppError::Database(err)),
+    }
 }
 
 #[axum::debug_handler]
@@ -882,7 +900,15 @@ async fn update_post(
         .bind(p.read_time_minutes.unwrap_or(5))
         .bind(p.is_featured.unwrap_or(false))
         .bind(id)
-        .execute(&pool).await?;
+        .execute(&pool).await;
+
+    let res = match res {
+        Ok(r) => r,
+        Err(err) if is_unique_violation(&err) => {
+            return Err(AppError::Conflict("An article with this title or slug already exists".into()));
+        }
+        Err(err) => return Err(AppError::Database(err)),
+    };
     if res.rows_affected() == 0 {
         return Err(AppError::NotFound);
     }
@@ -1652,4 +1678,13 @@ fn slugify(s: &str) -> String {
     } else {
         slug
     }
+}
+
+fn is_unique_violation(err: &sqlx::Error) -> bool {
+    if let sqlx::Error::Database(db_err) = err {
+        if db_err.is_unique_violation() {
+            return true;
+        }
+    }
+    err.to_string().contains("UNIQUE constraint failed")
 }
