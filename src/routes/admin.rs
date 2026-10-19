@@ -470,6 +470,11 @@ async fn update_announcement(
     if p.message.trim().is_empty() {
         return Err(AppError::BadRequest("message is required".into()));
     }
+    if p.message.len() > 1000 {
+        return Err(AppError::BadRequest(
+            "message must be at most 1000 characters".into(),
+        ));
+    }
     let res = sqlx::query("UPDATE announcements SET message=?1, link_text=?2, link_url=?3, priority=?4, is_active=?5 WHERE id=?6")
         .bind(&p.message).bind(&p.link_text).bind(&p.link_url)
         .bind(p.priority.as_deref().unwrap_or("info"))
@@ -608,6 +613,14 @@ async fn update_event(
     if p.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".into()));
     }
+    if p.title.len() > 300 {
+        return Err(AppError::BadRequest(
+            "title must be at most 300 characters".into(),
+        ));
+    }
+    if p.date.trim().is_empty() {
+        return Err(AppError::BadRequest("date is required".into()));
+    }
     let slug = p.slug.unwrap_or_else(|| slugify(&p.title));
     let res = sqlx::query("UPDATE events SET title=?1,slug=?2,date=?3,time_range=?4,venue=?5,category=?6,short_description=?7,full_summary=?8,poster_url=?9,registration_link=?10,speaker_or_organizer=?11,is_past=?12,is_featured=?13 WHERE id=?14")
         .bind(&p.title).bind(&slug).bind(&p.date).bind(&p.time_range).bind(&p.venue)
@@ -732,6 +745,9 @@ async fn update_team_member(
     if p.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".into()));
     }
+    if p.role.trim().is_empty() {
+        return Err(AppError::BadRequest("role is required".into()));
+    }
     let res = sqlx::query("UPDATE team_members SET name=?1,role=?2,role_responsibility=?3,photo_url=?4,batch=?5,tenure_year=?6,is_current=?7,is_faculty_advisor=?8,bio=?9,linkedin_url=?10,email=?11,display_order=?12 WHERE id=?13")
         .bind(&p.name).bind(&p.role).bind(&p.role_responsibility).bind(&p.photo_url)
         .bind(&p.batch).bind(p.tenure_year.as_deref().unwrap_or("2025-2026"))
@@ -804,6 +820,9 @@ async fn update_gallery_image(
     Path(id): Path<i64>,
     Json(p): Json<CreateGalleryImage>,
 ) -> Result<Json<DeleteResponse>, AppError> {
+    if p.image_url.trim().is_empty() {
+        return Err(AppError::BadRequest("image_url is required".into()));
+    }
     let res = sqlx::query("UPDATE gallery_images SET image_url=?1,caption=?2,event_id=?3,event_name=?4,year=?5 WHERE id=?6")
         .bind(&p.image_url).bind(&p.caption).bind(p.event_id).bind(&p.event_name).bind(&p.year).bind(id)
         .execute(&pool).await?;
@@ -890,6 +909,11 @@ async fn update_post(
 ) -> Result<Json<DeleteResponse>, AppError> {
     if p.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".into()));
+    }
+    if p.title.len() > 300 {
+        return Err(AppError::BadRequest(
+            "title must be at most 300 characters".into(),
+        ));
     }
     let slug = p.slug.unwrap_or_else(|| slugify(&p.title));
     let res = sqlx::query("UPDATE posts SET title=?1,slug=?2,excerpt=?3,body_markdown=?4,author_name=?5,author_role=?6,author_batch=?7,cover_image_url=?8,category=?9,material_formula=?10,crystal_structure=?11,read_time_minutes=?12,is_featured=?13 WHERE id=?14")
@@ -981,6 +1005,9 @@ async fn update_resource(
     if p.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".into()));
     }
+    if p.url.trim().is_empty() {
+        return Err(AppError::BadRequest("url is required".into()));
+    }
     let res = sqlx::query("UPDATE resources SET title=?1,url=?2,category=?3,software_tag=?4,description=?5,is_pinned=?6 WHERE id=?7")
         .bind(&p.title).bind(&p.url).bind(p.category.as_deref().unwrap_or("Software"))
         .bind(&p.software_tag).bind(&p.description).bind(p.is_pinned.unwrap_or(false)).bind(id)
@@ -1057,6 +1084,9 @@ async fn update_opportunity(
 ) -> Result<Json<DeleteResponse>, AppError> {
     if p.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".into()));
+    }
+    if p.organization.trim().is_empty() {
+        return Err(AppError::BadRequest("organization is required".into()));
     }
     let res = sqlx::query("UPDATE opportunities SET title=?1,organization=?2,opportunity_type=?3,location=?4,deadline=?5,apply_url=?6,description=?7,posted_by_alumnus=?8,is_active=?9 WHERE id=?10")
         .bind(&p.title).bind(&p.organization).bind(p.opportunity_type.as_deref().unwrap_or("Internship"))
@@ -1137,6 +1167,9 @@ async fn update_alumnus(
     if p.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".into()));
     }
+    if p.graduating_batch.trim().is_empty() {
+        return Err(AppError::BadRequest("graduating_batch is required".into()));
+    }
     let res = sqlx::query("UPDATE alumni SET name=?1,graduating_batch=?2,current_role=?3,current_organization=?4,industry_sector=?5,location=?6,photo_url=?7,quote_testimonial=?8,linkedin_url=?9 WHERE id=?10")
         .bind(&p.name).bind(&p.graduating_batch).bind(&p.current_role).bind(&p.current_organization)
         .bind(&p.industry_sector).bind(&p.location).bind(&p.photo_url).bind(&p.quote_testimonial)
@@ -1214,6 +1247,9 @@ async fn update_project(
 ) -> Result<Json<DeleteResponse>, AppError> {
     if p.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".into()));
+    }
+    if p.batch.trim().is_empty() {
+        return Err(AppError::BadRequest("batch is required".into()));
     }
     let res = sqlx::query("UPDATE projects SET title=?1,students=?2,batch=?3,supervisors=?4,project_type=?5,abstract=?6,image_url=?7,paper_or_repo_url=?8,tags=?9 WHERE id=?10")
         .bind(&p.title).bind(&p.students).bind(&p.batch).bind(&p.supervisors)
@@ -1381,6 +1417,9 @@ async fn update_faq(
 ) -> Result<Json<DeleteResponse>, AppError> {
     if p.question.trim().is_empty() {
         return Err(AppError::BadRequest("question is required".into()));
+    }
+    if p.answer.trim().is_empty() {
+        return Err(AppError::BadRequest("answer is required".into()));
     }
     let res = sqlx::query("UPDATE faqs SET question=?1,answer=?2,category=?3,display_order=?4 WHERE id=?5")
         .bind(&p.question)
@@ -1602,6 +1641,12 @@ async fn create_section(
     if p.section_key.trim().is_empty() {
         return Err(AppError::BadRequest("section_key is required".into()));
     }
+    if let Some(ref json_str) = p.extra_json {
+        let trimmed = json_str.trim();
+        if !trimmed.is_empty() && serde_json::from_str::<serde_json::Value>(trimmed).is_err() {
+            return Err(AppError::BadRequest("extra_json must be valid JSON".into()));
+        }
+    }
     sqlx::query("INSERT INTO site_sections (section_key, title, subtitle, content, badge, extra_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
         .bind(&p.section_key)
         .bind(&p.title)
@@ -1622,6 +1667,12 @@ async fn update_section(
     Path(id): Path<i64>,
     Json(p): Json<UpdateSiteSection>,
 ) -> Result<Json<DeleteResponse>, AppError> {
+    if let Some(ref json_str) = p.extra_json {
+        let trimmed = json_str.trim();
+        if !trimmed.is_empty() && serde_json::from_str::<serde_json::Value>(trimmed).is_err() {
+            return Err(AppError::BadRequest("extra_json must be valid JSON".into()));
+        }
+    }
     let res = sqlx::query(
         "UPDATE site_sections SET title=COALESCE(?1,title), subtitle=?2, content=COALESCE(?3,content), badge=?4, extra_json=?5, updated_at=datetime('now') WHERE id=?6"
     )
