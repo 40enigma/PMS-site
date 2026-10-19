@@ -150,15 +150,18 @@ fn is_production() -> bool {
     std::env::var("RUST_ENV").unwrap_or_default().to_lowercase() == "production"
 }
 
+/// Returns `true` if the auth cookie should have the Secure flag set.
+fn is_cookie_secure() -> bool {
+    std::env::var("JWT_COOKIE_SECURE")
+        .map(|v| v.to_lowercase() != "false")
+        .unwrap_or(is_production())
+}
+
 /// Build the auth cookie with appropriate security attributes.
 fn build_auth_cookie(token: String) -> Cookie<'static> {
-    let secure = std::env::var("JWT_COOKIE_SECURE")
-        .map(|v| v.to_lowercase() != "false")
-        .unwrap_or(is_production());
-
     let mut cookie = Cookie::new(jwt_cookie_name(), token);
     cookie.set_http_only(true);
-    cookie.set_secure(secure);
+    cookie.set_secure(is_cookie_secure());
     cookie.set_same_site(SameSite::Lax);
     cookie.set_path("/");
     cookie.set_max_age(Duration::hours(24));
@@ -236,6 +239,9 @@ pub async fn login(
 pub async fn logout(jar: CookieJar) -> (CookieJar, Json<serde_json::Value>) {
     let removal = Cookie::build((jwt_cookie_name(), ""))
         .path("/")
+        .http_only(true)
+        .secure(is_cookie_secure())
+        .same_site(SameSite::Lax)
         .max_age(Duration::seconds(0))
         .build();
 
