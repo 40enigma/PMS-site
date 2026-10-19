@@ -131,18 +131,14 @@ pub async fn security_headers(req: Request, next: Next) -> Response {
     res
 }
 
+static NOT_FOUND_HTML: &str = include_str!("../frontend/static/404.html");
+
 /// Fallback handler for unmatched routes: returns HTTP 404 with frontend/static/404.html.
 async fn not_found_fallback() -> Response {
-    let not_found_html = tokio::fs::read_to_string("frontend/static/404.html")
-        .await
-        .unwrap_or_else(|_| {
-            "<!DOCTYPE html><html><head><title>404 Not Found</title></head><body><h1>404 Not Found</h1></body></html>".to_string()
-        });
-
     (
         StatusCode::NOT_FOUND,
         [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
-        not_found_html,
+        NOT_FOUND_HTML,
     )
         .into_response()
 }
