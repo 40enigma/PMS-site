@@ -31,6 +31,10 @@
     .status-approved { background:rgba(16,185,129,.15); color:#6ee7b7; border:1px solid rgba(16,185,129,.3); }
     .status-rejected { background:rgba(239,68,68,.15); color:#fca5a5; border:1px solid rgba(239,68,68,.3); }
     select.form-control option { background: var(--bg-card); color: var(--text); }
+    @media (max-width: 1080px) {
+      #nav-user-item, #nav-logout-item { padding: .35rem .5rem; }
+      #logout-btn { width: 100%; text-align: center; }
+    }
   </style>
 </head>
 <body>
@@ -45,8 +49,8 @@
     </button>
     <ul class="nav-links" role="list">
       <li><a href="/">← View Live Site</a></li>
-      <li><span id="nav-user" style="color:var(--text-muted);font-size:.85rem;font-weight:600"></span></li>
-      <li><button id="logout-btn" class="btn btn-outline btn-sm" style="display:none">Logout</button></li>
+      <li id="nav-user-item" style="display:none"><span id="nav-user" style="color:var(--text-muted);font-size:.85rem;font-weight:600"></span></li>
+      <li id="nav-logout-item" style="display:none"><button id="logout-btn" class="btn btn-outline btn-sm" style="display:none">Logout</button></li>
     </ul>
   </div>
 </nav>
@@ -404,6 +408,10 @@ async function checkAuth() {
 function showLogin() {
   document.getElementById('login-section').style.display = '';
   document.getElementById('admin-dashboard').style.display = 'none';
+  const userItem = document.getElementById('nav-user-item');
+  if (userItem) userItem.style.display = 'none';
+  const logoutItem = document.getElementById('nav-logout-item');
+  if (logoutItem) logoutItem.style.display = 'none';
   document.getElementById('logout-btn').style.display = 'none';
   document.getElementById('nav-user').textContent = '';
 }
@@ -411,6 +419,10 @@ function showLogin() {
 function showDashboard(user) {
   document.getElementById('login-section').style.display = 'none';
   document.getElementById('admin-dashboard').style.display = '';
+  const userItem = document.getElementById('nav-user-item');
+  if (userItem) userItem.style.display = '';
+  const logoutItem = document.getElementById('nav-logout-item');
+  if (logoutItem) logoutItem.style.display = '';
   document.getElementById('logout-btn').style.display = '';
   if (user && user.name) {
     document.getElementById('nav-user').textContent = `👤 ${user.name}`;
@@ -439,6 +451,13 @@ document.getElementById('login-form').addEventListener('submit', async ev => {
 document.getElementById('logout-btn').addEventListener('click', async () => {
   try { await PMS.apiPost('/api/auth/logout', {}); } catch (_) {}
   showLogin();
+  const navLinks = document.querySelector('.nav-links');
+  const hamburger = document.querySelector('.hamburger');
+  if (navLinks) navLinks.classList.remove('open');
+  if (hamburger) {
+    hamburger.classList.remove('active');
+    hamburger.setAttribute('aria-expanded', 'false');
+  }
 });
 
 /* ── Tab Switcher ── */
