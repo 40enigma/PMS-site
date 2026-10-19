@@ -107,24 +107,43 @@ where
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        let claims = if let Some(auth_header) = parts
+        let (claims, is_cookie_auth) = if let Some(auth_header) = parts
             .headers
             .get(header::AUTHORIZATION)
             .and_then(|v| v.to_str().ok())
         {
             if let Some(token) = auth_header.strip_prefix("Bearer ") {
-                verify_token(token)?
+                (verify_token(token)?, false)
             } else {
                 return Err(AppError::Unauthorized);
             }
         } else {
             let jar = CookieJar::from_headers(&parts.headers);
             if let Some(cookie) = jar.get(jwt_cookie_name()) {
-                verify_token(cookie.value())?
+                (verify_token(cookie.value())?, true)
             } else {
                 return Err(AppError::Unauthorized);
             }
         };
+
+        // CSRF protection for cookie-authenticated mutating requests:
+        // Require custom header `X-Requested-With: PMS-Client` for non-GET/HEAD/OPTIONS methods
+        if is_cookie_auth
+            && !matches!(
+                parts.method,
+                axum::http::Method::GET | axum::http::Method::HEAD | axum::http::Method::OPTIONS
+            )
+        {
+            let req_with = parts
+                .headers
+                .get("x-requested-with")
+                .and_then(|v| v.to_str().ok());
+            if req_with != Some("PMS-Client") {
+                return Err(AppError::BadRequest(
+                    "CSRF protection: missing or invalid X-Requested-With header".into(),
+                ));
+            }
+        }
 
         // If database pool is available in request extensions, verify user account still exists
         if let Some(pool) = parts.extensions.get::<sqlx::SqlitePool>() {

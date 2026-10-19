@@ -14,7 +14,7 @@ const API = ''; // Same-origin: requests go to /api/*
 async function apiFetch(path, options = {}) {
   const res = await fetch(`${API}${path}`, {
     credentials: 'include', // send cookies for authenticated requests
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'PMS-Client', ...(options.headers || {}) },
     ...options,
   });
 

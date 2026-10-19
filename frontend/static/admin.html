@@ -766,7 +766,12 @@ function renderUploadTool(container) {
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const res = await fetch('/api/admin/upload', { method: 'POST', credentials: 'include', body: fd });
+      const res = await fetch('/api/admin/upload', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'X-Requested-With': 'PMS-Client' },
+        body: fd
+      });
       if (!res.ok) {
         let errDetail = '';
         try {
@@ -870,7 +875,12 @@ document.getElementById('crud-fields').addEventListener('change', async ev => {
   try {
     const fd = new FormData();
     fd.append('file', file);
-    const res = await fetch('/api/admin/upload', { method: 'POST', credentials: 'include', body: fd });
+    const res = await fetch('/api/admin/upload', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'X-Requested-With': 'PMS-Client' },
+      body: fd
+    });
     if (!res.ok) {
       let errDetail = '';
       try {

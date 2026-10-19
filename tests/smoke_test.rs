@@ -513,3 +513,81 @@ async fn test_body_limits_global_and_upload() {
     );
 }
 
+#[tokio::test]
+async fn test_csrf_cookie_protection() {
+    let app = setup_test_app().await;
+    let token = create_token(1, "admin@pieas.edu.pk").unwrap();
+    let cookie_val = format!("pms_admin_token={}", token);
+
+    let payload = serde_json::json!({
+        "message": "Testing CSRF",
+        "priority": "normal",
+        "is_active": true
+    });
+
+    // 1. Cookie auth + POST without X-Requested-With header should fail with 400 Bad Request
+    let req_no_header = Request::builder()
+        .method(Method::POST)
+        .uri("/api/admin/announcements")
+        .header(header::COOKIE, &cookie_val)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+        .unwrap();
+
+    let res_no_header = app.clone().oneshot(req_no_header).await.unwrap();
+    assert_eq!(
+        res_no_header.status(),
+        StatusCode::BAD_REQUEST,
+        "Cookie-authenticated mutation without X-Requested-With should be rejected"
+    );
+
+    // 2. Cookie auth + POST with X-Requested-With: PMS-Client should succeed
+    let req_with_header = Request::builder()
+        .method(Method::POST)
+        .uri("/api/admin/announcements")
+        .header(header::COOKIE, &cookie_val)
+        .header("X-Requested-With", "PMS-Client")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+        .unwrap();
+
+    let res_with_header = app.clone().oneshot(req_with_header).await.unwrap();
+    assert_eq!(
+        res_with_header.status(),
+        StatusCode::OK,
+        "Cookie-authenticated mutation with X-Requested-With: PMS-Client should succeed"
+    );
+
+    // 3. Cookie auth + GET without X-Requested-With header should succeed (safe method)
+    let req_get = Request::builder()
+        .method(Method::GET)
+        .uri("/api/admin/announcements")
+        .header(header::COOKIE, &cookie_val)
+        .body(Body::empty())
+        .unwrap();
+
+    let res_get = app.clone().oneshot(req_get).await.unwrap();
+    assert_eq!(
+        res_get.status(),
+        StatusCode::OK,
+        "Cookie-authenticated GET without custom header should be allowed"
+    );
+
+    // 4. Bearer auth without X-Requested-With header should succeed
+    let req_bearer = Request::builder()
+        .method(Method::POST)
+        .uri("/api/admin/announcements")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+        .unwrap();
+
+    let res_bearer = app.oneshot(req_bearer).await.unwrap();
+    assert_eq!(
+        res_bearer.status(),
+        StatusCode::OK,
+        "Bearer-authenticated mutation without custom header should succeed"
+    );
+}
+
+

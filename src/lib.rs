@@ -104,6 +104,7 @@ pub fn build_cors() -> CorsLayer {
             axum::http::header::ACCEPT,
             axum::http::header::COOKIE,
             axum::http::HeaderName::from_static("x-correlation-id"),
+            axum::http::HeaderName::from_static("x-requested-with"),
         ])
         .allow_credentials(true)
 }
