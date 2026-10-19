@@ -904,7 +904,8 @@ document.getElementById('crud-form').addEventListener('submit', async ev => {
     if (f.type === 'checkbox') {
       payload[f.name] = el.checked;
     } else if (f.type === 'number') {
-      payload[f.name] = el.value === '' ? null : parseInt(el.value, 10);
+      const parsed = parseInt(el.value, 10);
+      payload[f.name] = el.value === '' || isNaN(parsed) ? null : parsed;
     } else {
       payload[f.name] = el.value.trim() === '' ? null : el.value.trim();
     }
