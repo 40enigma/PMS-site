@@ -227,3 +227,17 @@ CREATE TABLE IF NOT EXISTS _db_metadata (
     value TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Indexes for optimized query filtering and sorting
+CREATE INDEX IF NOT EXISTS idx_announcements_active ON announcements(is_active, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_past_date ON events(is_past, date DESC);
+CREATE INDEX IF NOT EXISTS idx_events_featured ON events(is_featured, is_past);
+CREATE INDEX IF NOT EXISTS idx_event_registrations_cert ON event_registrations(certificate_code COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_event_registrations_event_id ON event_registrations(event_id);
+CREATE INDEX IF NOT EXISTS idx_team_members_tenure_current ON team_members(tenure_year, is_current, display_order ASC);
+CREATE INDEX IF NOT EXISTS idx_posts_published_at ON posts(published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_posts_category_pub ON posts(category, published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_resources_category ON resources(category, is_pinned DESC, title ASC);
+CREATE INDEX IF NOT EXISTS idx_opportunities_active ON opportunities(is_active, deadline ASC);
+CREATE INDEX IF NOT EXISTS idx_gallery_images_created ON gallery_images(created_at DESC);
+

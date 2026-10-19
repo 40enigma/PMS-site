@@ -590,4 +590,24 @@ async fn test_csrf_cookie_protection() {
     );
 }
 
+#[tokio::test]
+async fn test_migrations_on_copy_of_existing_db() {
+    if std::path::Path::new("pms.db").exists() {
+        let temp_db_path = format!("target/test_copy_{}.db", uuid::Uuid::new_v4());
+        std::fs::copy("pms.db", &temp_db_path).unwrap();
+
+        let pool = SqlitePoolOptions::new()
+            .connect(&format!("sqlite://{}", temp_db_path))
+            .await
+            .unwrap();
+
+        // Verify migrations run cleanly and idempotently
+        db::run_migrations(&pool).await;
+
+        drop(pool);
+        let _ = std::fs::remove_file(temp_db_path);
+    }
+}
+
+
 
