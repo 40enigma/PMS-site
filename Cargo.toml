@@ -31,6 +31,7 @@ thiserror = "2.0"
 
 # File type sniffing for upload validation
 infer = "0.16"
+sha2 = "0.10"
 
 # Rate limiting
 governor = { version = "0.6", features = ["std", "dashmap"] }

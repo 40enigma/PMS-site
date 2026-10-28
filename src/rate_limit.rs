@@ -46,6 +46,21 @@ fn env_rpm(var: &str, default: u32) -> NonZeroU32 {
     NonZeroU32::new(val.max(1)).unwrap()
 }
 
+/// Canonicalize an IP address for rate-limiting purposes.
+/// For IPv4: keeps the 32-bit address.
+/// For IPv6: masks to a /64 prefix to prevent /128 address rotation attacks and state exhaustion.
+pub fn canonicalize_rate_limit_ip(ip: IpAddr) -> IpAddr {
+    match ip {
+        IpAddr::V4(v4) => IpAddr::V4(v4),
+        IpAddr::V6(v6) => {
+            let seg = v6.segments();
+            IpAddr::V6(std::net::Ipv6Addr::new(
+                seg[0], seg[1], seg[2], seg[3], 0, 0, 0, 0,
+            ))
+        }
+    }
+}
+
 impl RateLimitState {
     pub fn new() -> Self {
         let login_rpm = env_rpm("RATE_LIMIT_LOGIN_RPM", 10);
@@ -97,22 +112,25 @@ impl RateLimitState {
 
     /// Check login rate limit for the given IP. Returns `Err(AppError::TooManyRequests)` if exceeded.
     pub fn check_login(&self, ip: IpAddr) -> Result<(), AppError> {
+        let key = canonicalize_rate_limit_ip(ip);
         self.login
-            .check_key(&ip)
+            .check_key(&key)
             .map_err(|_| AppError::TooManyRequests)
     }
 
     /// Check submit rate limit for the given IP. Returns `Err(AppError::TooManyRequests)` if exceeded.
     pub fn check_submit(&self, ip: IpAddr) -> Result<(), AppError> {
+        let key = canonicalize_rate_limit_ip(ip);
         self.submit
-            .check_key(&ip)
+            .check_key(&key)
             .map_err(|_| AppError::TooManyRequests)
     }
 
     /// Check certificate verification rate limit for the given IP. Returns `Err(AppError::TooManyRequests)` if exceeded.
     pub fn check_certificate_verify(&self, ip: IpAddr) -> Result<(), AppError> {
+        let key = canonicalize_rate_limit_ip(ip);
         self.certificate_verify
-            .check_key(&ip)
+            .check_key(&key)
             .map_err(|_| AppError::TooManyRequests)
     }
 
@@ -142,10 +160,24 @@ pub fn is_trust_proxy() -> bool {
 
 /// Extract client IP from HTTP headers ONLY if `TRUST_PROXY=true` is set in the environment.
 ///
-/// When `TRUST_PROXY` is enabled, reads the rightmost hop in `X-Forwarded-For` or `X-Real-IP`.
+/// When `TRUST_PROXY` is enabled:
+/// 1. Reads `CF-Connecting-IP` or `True-Client-IP` when deployed behind Cloudflare.
+/// 2. Reads the rightmost hop in `X-Forwarded-For` or `X-Real-IP`.
+///
 /// When `TRUST_PROXY` is NOT enabled, header values are strictly ignored to prevent IP spoofing.
 pub fn client_ip_from_headers(headers: &axum::http::HeaderMap) -> IpAddr {
     if is_trust_proxy() {
+        if let Some(cf_ip) = headers
+            .get("cf-connecting-ip")
+            .or_else(|| headers.get("CF-Connecting-IP"))
+            .or_else(|| headers.get("true-client-ip"))
+            .or_else(|| headers.get("True-Client-IP"))
+            .and_then(|v| v.to_str().ok())
+        {
+            if let Ok(ip) = IpAddr::from_str(cf_ip.trim()) {
+                return ip;
+            }
+        }
         if let Some(xff) = headers.get("X-Forwarded-For").and_then(|v| v.to_str().ok()) {
             if let Some(rightmost) = xff.split(',').next_back() {
                 if let Ok(ip) = IpAddr::from_str(rightmost.trim()) {

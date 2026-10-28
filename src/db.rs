@@ -39,16 +39,28 @@ pub async fn run_migrations(pool: &SqlitePool) {
     .execute(pool)
     .await;
 
+    let revocation_schema = include_str!("../migrations/0002_token_revocation.sql");
+    sqlx::raw_sql(revocation_schema)
+        .execute(pool)
+        .await
+        .expect("Failed to run token revocation migration");
+
+    let _ = sqlx::query(
+        "INSERT OR IGNORE INTO _pms_migrations (version) VALUES ('0002_token_revocation')",
+    )
+    .execute(pool)
+    .await;
+
     // Ensure site_sections default entries exist (runs for new and existing databases)
     sqlx::query(
         r#"
         INSERT OR IGNORE INTO site_sections (section_key, title, subtitle, content, badge, extra_json) VALUES
         ('home_hero', 'Advancing Materials Science & Metallurgy at PIEAS', 'The official academic society of the Department of Metallurgy & Materials Engineering (DMME), PIEAS. Connecting students with research, practical engineering, and career development.', 'Advancing materials science and metallurgy at PIEAS.', 'DMME • PIEAS Islamabad', '{"cta_primary_text": "Join PMS", "cta_primary_url": "/join", "cta_secondary_text": "Student Resources", "cta_secondary_url": "/resources"}'),
-        ('home_activities', 'Bridging Theory and Materials Engineering', 'PMS organizes initiatives designed to support metallurgy students in academic research and industrial engineering.', 'Society Portfolios', 'Society Portfolios', '[{"title":"Technical Seminars","desc":"Technical lectures by researchers and engineers on advanced materials, characterization, and metallurgical processing.","icon":"Atom"},{"title":"Hands-On Workshops","desc":"Practical training on metallurgical tools including Thermo-Calc, optical metallography, hardness testing, and computational modeling.","icon":"Cpu"},{"title":"Competitions & Olympiads","desc":"Materials design competitions, metallography contests, technical poster sessions, and engineering quizzes.","icon":"Award"},{"title":"Industrial & Lab Visits","desc":"Organized educational visits to metallurgical manufacturing units, testing laboratories, and research facilities.","icon":"Building"}]'),
+        ('home_activities', 'Bridging Theory and Materials Engineering', 'Society Portfolios', 'PMS organizes initiatives designed to support metallurgy students in academic research and industrial engineering.', 'Society Portfolios', '[{"title":"Technical Seminars","desc":"Technical lectures by researchers and engineers on advanced materials, characterization, and metallurgical processing.","icon":"Atom"},{"title":"Hands-On Workshops","desc":"Practical training on metallurgical tools including Thermo-Calc, optical metallography, hardness testing, and computational modeling.","icon":"Cpu"},{"title":"Competitions & Olympiads","desc":"Materials design competitions, metallography contests, technical poster sessions, and engineering quizzes.","icon":"Award"},{"title":"Industrial & Lab Visits","desc":"Organized educational visits to metallurgical manufacturing units, testing laboratories, and research facilities.","icon":"Building"}]'),
         ('about_mission', 'Our Mission', 'Theory into Metallurgical Practice', 'To bridge academic metallurgical theory with practical industry applications. PMS equips students with hands-on exposure to phase diagrams, materials characterization, failure analysis, and professional engineering standards.', 'Mission', NULL),
         ('about_vision', 'Our Vision', 'Collaborative Community', 'To cultivate a collaborative community of materials engineers and researchers at PIEAS who contribute meaningfully to academia, strategic industries, and advanced manufacturing.', 'Vision', NULL),
         ('about_story', 'About PMS and DMME', 'Department & Society', 'The Department of Metallurgy & Materials Engineering (DMME) at PIEAS is dedicated to education and research in metallurgy, materials characterization, and advanced manufacturing. PMS was founded by students and faculty to provide an active extracurricular platform for technical workshops, guest lectures, industrial tours, and peer mentorship.', 'Department & Society', NULL),
-        ('team_guidance', 'Council Portfolios & Responsibilities', 'Overview of responsibilities for executive positions within the PIEAS Materials Society.', 'Portfolios', 'Portfolios', '[{"title":"President","scope":"Executive Leadership & External Representation","desc":"Liaises with DMME faculty, administration, and partner institutions. Sets the society roadmap and coordinates executive initiatives."},{"title":"General Secretary","scope":"Operational Coordination & Administration","desc":"Manages society communications, official documentation, event venue permissions, and meeting agendas."},{"title":"Treasurer","scope":"Financial Governance & Budgeting","desc":"Maintains society accounts, event budgets, equipment disbursements, and financial records."},{"title":"Technical & Academic Head","scope":"Workshops & Academic Support","desc":"Coordinates technical workshops, guest lectures, and student academic resources for DMME coursework."},{"title":"Media & Publications Head","scope":"Visual Communication & Publications","desc":"Oversees event announcements, photography, technical articles, and society social media channels."},{"title":"Event Coordinator & Logistics Head","scope":"Event Management & Logistics","desc":"Coordinates logistics, equipment, venue setups, and industrial visits for society events."}]'),
+        ('team_guidance', 'Council Portfolios & Responsibilities', 'Overview of responsibilities for executive positions within the PIEAS Materials Society.', 'Overview of responsibilities for executive positions within the PIEAS Materials Society.', 'Portfolios', '[{"title":"President","scope":"Executive Leadership & External Representation","desc":"Liaises with DMME faculty, administration, and partner institutions. Sets the society roadmap and coordinates executive initiatives."},{"title":"General Secretary","scope":"Operational Coordination & Administration","desc":"Manages society communications, official documentation, event venue permissions, and meeting agendas."},{"title":"Treasurer","scope":"Financial Governance & Budgeting","desc":"Maintains society accounts, event budgets, equipment disbursements, and financial records."},{"title":"Technical & Academic Head","scope":"Workshops & Academic Support","desc":"Coordinates technical workshops, guest lectures, and student academic resources for DMME coursework."},{"title":"Media & Publications Head","scope":"Visual Communication & Publications","desc":"Oversees event announcements, photography, technical articles, and society social media channels."},{"title":"Event Coordinator & Logistics Head","scope":"Event Management & Logistics","desc":"Coordinates logistics, equipment, venue setups, and industrial visits for society events."}]'),
         ('resources_standards', 'Materials Testing & Cheatsheets', 'ASTM & Metallography Protocols', 'Essential testing protocols and lab safety procedures referenced across DMME undergraduate coursework.', 'Standards', '[{"code":"ASTM E8 / E8M","title":"Tension Testing of Metallic Materials","detail":"Yield strength, UTS & elongation protocol"},{"code":"ASTM E112","title":"Determining Average Grain Size","detail":"Heyn lineal intercept & comparison charts"},{"code":"ASTM E23","title":"Charpy V-Notch Impact Testing","detail":"Ductile-to-brittle transition behavior (DBTT)"},{"code":"Acid Safety","title":"Nital & Kroll''s Reagents","detail":"HNO3 in ethanol (≤5%) & HF fume hood rules"}]'),
         ('sponsors_pitch', 'Partner with PIEAS Materials Society', 'Collaboration', 'Connect with materials engineering students at PIEAS for technical seminars, research projects, and campus engagement.', 'Collaboration', '[{"title":"Direct Talent Linkages","desc":"Engage directly with graduating metallurgy and materials engineering students for internships, trainee programs, and recruitment."},{"title":"Technical Event Visibility","desc":"Prominent organizational presence at society workshops, annual symposia, conference proceedings, and student competitions."},{"title":"Collaborative Projects","desc":"Support student research initiatives, industrial testing challenges, and metallurgical case studies with DMME faculty guidance."}]')
         "#
@@ -56,6 +68,27 @@ pub async fn run_migrations(pool: &SqlitePool) {
     .execute(pool)
     .await
     .expect("Failed to seed default site_sections");
+
+    // Align content and subtitle for home_activities and team_guidance if placeholder exists
+    let _ = sqlx::query(
+        r#"
+        UPDATE site_sections
+        SET content = subtitle, subtitle = badge
+        WHERE section_key = 'home_activities' AND content = 'Society Portfolios'
+        "#,
+    )
+    .execute(pool)
+    .await;
+
+    let _ = sqlx::query(
+        r#"
+        UPDATE site_sections
+        SET content = subtitle
+        WHERE section_key = 'team_guidance' AND content = 'Portfolios'
+        "#,
+    )
+    .execute(pool)
+    .await;
 
     // Normalize existing emails to lowercase safely, skipping and logging collisions to preserve data
     let colliding_admins: Vec<(i64, String)> = sqlx::query_as(

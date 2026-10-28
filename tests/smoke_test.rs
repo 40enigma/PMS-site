@@ -755,3 +755,147 @@ async fn test_email_lowercasing_migration_handles_mixed_case_duplicates_without_
     let _ = std::fs::remove_file(format!("{}-wal", temp_db_path));
     let _ = std::fs::remove_file(format!("{}-shm", temp_db_path));
 }
+
+#[tokio::test]
+async fn test_token_revocation_on_logout() {
+    let app = setup_test_app().await;
+
+    // Generate valid token for admin user 1
+    let token = create_token(1, "admin@pieas.edu.pk").unwrap();
+
+    // 1. Calling GET /api/auth/me with Bearer token works
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/api/auth/me")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // 2. Call POST /api/auth/logout with Bearer token
+    let req_logout = Request::builder()
+        .method(Method::POST)
+        .uri("/api/auth/logout")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+
+    let res_logout = app.clone().oneshot(req_logout).await.unwrap();
+    assert_eq!(res_logout.status(), StatusCode::OK);
+
+    // 3. Calling GET /api/auth/me with the same Bearer token is now rejected with 401
+    let req_again = Request::builder()
+        .method(Method::GET)
+        .uri("/api/auth/me")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+
+    let res_again = app.oneshot(req_again).await.unwrap();
+    assert_eq!(res_again.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_ipv6_subnet_rate_limiting() {
+    use pms_platform::rate_limit::canonicalize_rate_limit_ip;
+    use std::net::IpAddr;
+
+    let ip1: IpAddr = "2001:db8:abcd:0012:0000:0000:0000:0001".parse().unwrap();
+    let ip2: IpAddr = "2001:db8:abcd:0012:ffff:ffff:ffff:ffff".parse().unwrap();
+    let ip3: IpAddr = "2001:db8:abcd:0013:0000:0000:0000:0001".parse().unwrap();
+
+    let c1 = canonicalize_rate_limit_ip(ip1);
+    let c2 = canonicalize_rate_limit_ip(ip2);
+    let c3 = canonicalize_rate_limit_ip(ip3);
+
+    assert_eq!(
+        c1, c2,
+        "IPs within the same /64 subnet must canonicalize to the same prefix"
+    );
+    assert_ne!(
+        c1, c3,
+        "IPs in different /64 subnets must have distinct canonical prefixes"
+    );
+
+    // Also verify Cloudflare CF-Connecting-IP extraction
+    std::env::set_var("TRUST_PROXY", "true");
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert("CF-Connecting-IP", "203.0.113.88".parse().unwrap());
+    headers.insert(
+        "X-Forwarded-For",
+        "203.0.113.88, 172.68.1.1".parse().unwrap(),
+    );
+
+    let extracted = pms_platform::rate_limit::client_ip_from_headers(&headers);
+    assert_eq!(extracted, "203.0.113.88".parse::<IpAddr>().unwrap());
+    std::env::remove_var("TRUST_PROXY");
+}
+
+#[tokio::test]
+async fn test_stats_negative_number_validation() {
+    let app = setup_test_app().await;
+    let token = create_token(1, "admin@pieas.edu.pk").unwrap();
+
+    let payload = serde_json::json!({
+        "active_members": -10,
+        "events_held": 5
+    });
+
+    let req = Request::builder()
+        .method(Method::PUT)
+        .uri("/api/admin/stats")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+        .unwrap();
+
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_text_plain_upload_validation() {
+    let app = setup_test_app().await;
+    let token = create_token(1, "admin@pieas.edu.pk").unwrap();
+
+    // 1. Text upload with HTML/script should be rejected
+    let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
+    let body_bad = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"notes.txt\"\r\nContent-Type: text/plain\r\n\r\n<script>alert(1)</script>\r\n--{boundary}--\r\n"
+    );
+
+    let req_bad = Request::builder()
+        .method(Method::POST)
+        .uri("/api/admin/upload")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .body(Body::from(body_bad))
+        .unwrap();
+
+    let res_bad = app.clone().oneshot(req_bad).await.unwrap();
+    assert_eq!(res_bad.status(), StatusCode::BAD_REQUEST);
+
+    // 2. Pure plaintext should be accepted
+    let body_good = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"report.txt\"\r\nContent-Type: text/plain\r\n\r\nASTM E8 tensile test results: Yield strength 450 MPa\r\n--{boundary}--\r\n"
+    );
+
+    let req_good = Request::builder()
+        .method(Method::POST)
+        .uri("/api/admin/upload")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .body(Body::from(body_good))
+        .unwrap();
+
+    let res_good = app.oneshot(req_good).await.unwrap();
+    assert_eq!(res_good.status(), StatusCode::OK);
+}

@@ -48,6 +48,7 @@
       <button class="btn btn-outline btn-sm res-filter active" data-cat="">All Toolkit Items</button>
       <button class="btn btn-outline btn-sm res-filter" data-cat="Standards">Standards (ASTM)</button>
       <button class="btn btn-outline btn-sm res-filter" data-cat="Software">Software &amp; Tools</button>
+      <button class="btn btn-outline btn-sm res-filter" data-cat="Books">Books &amp; Guides</button>
       <button class="btn btn-outline btn-sm res-filter" data-cat="Safety">Lab Safety</button>
       <button class="btn btn-outline btn-sm res-filter" data-cat="Databases">Databases</button>
     </div>
@@ -140,6 +141,12 @@ function renderFilteredResources(category) {
         if (!r.category) return false;
         const rCat = r.category.toLowerCase();
         const target = category.toLowerCase();
+        if (target === 'software') {
+          return rCat.includes('software') || rCat.includes('tool');
+        }
+        if (target === 'books') {
+          return rCat.includes('book') || rCat.includes('guide');
+        }
         return rCat === target || rCat.includes(target) || target.includes(rCat);
       })
     : allResources;
@@ -168,7 +175,7 @@ async function loadAstmStrip() {
     if (sec) {
       if (sec.badge) document.getElementById('astm-badge').textContent = sec.badge;
       if (sec.title) document.getElementById('astm-title').textContent = sec.title;
-      if (sec.subtitle) document.getElementById('astm-desc').textContent = sec.subtitle;
+      if (sec.content || sec.subtitle) document.getElementById('astm-desc').textContent = sec.content || sec.subtitle;
 
       if (sec.extra_json) {
         try {

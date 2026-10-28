@@ -146,7 +146,7 @@
     if (sec) {
       if (sec.badge) document.getElementById('pitch-badge').textContent = sec.badge;
       if (sec.title) document.getElementById('pitch-title').textContent = sec.title;
-      if (sec.subtitle || sec.content) document.getElementById('pitch-desc').textContent = sec.subtitle || sec.content;
+      if (sec.content || sec.subtitle) document.getElementById('pitch-desc').textContent = sec.content || sec.subtitle;
 
       if (sec.extra_json) {
         try {

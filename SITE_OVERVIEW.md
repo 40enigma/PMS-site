@@ -94,9 +94,9 @@ The database schema is defined in `migrations/0001_initial_schema.sql` and initi
 3. **`site_stats`**: Departmental metrics (`id` PRIMARY KEY, `active_members`, `events_held`, `years_active`, `industrial_partners`, `constitution_pdf_url`, `office_location`, `contact_email`).
 4. **`events`**: Technical workshops and seminars (`id`, `title`, `slug`, `date`, `time_range`, `venue`, `category`, `short_description`, `full_summary`, `poster_url`, `registration_link`, `speaker_or_organizer`, `is_past`, `is_featured`).
 5. **`event_registrations`**: Participant registrations (`id`, `event_id` REFERENCES events, `student_name`, `roll_number`, `batch`, `department`, `email`, `phone`, `certificate_code`, `created_at`).
-6. **`team_members`**: Executive council & faculty advisors (`id`, `name`, `role`, `role_responsibility`, `photo_url`, `batch`, `tenure_year`, `is_current`, `is_faculty_advisor`, `bio`, `linkedin_url`, `display_order`).
+6. **`team_members`**: Executive council & faculty advisors (`id`, `name`, `role`, `role_responsibility`, `photo_url`, `batch`, `tenure_year`, `is_current`, `is_faculty_advisor`, `bio`, `linkedin_url`, `email`, `display_order`).
 7. **`gallery_images`**: Micrograph repository and event photos (`id`, `image_url`, `caption`, `event_name`, `year`, `event_id`, `created_at`).
-8. **`posts`**: Technical explainers and blog articles (`id`, `title`, `slug` UNIQUE, `category`, `excerpt`, `body_markdown`, `material_formula`, `crystal_structure`, `cover_image_url`, `author_name`, `author_role`, `published_at`, `read_time_minutes`, `is_featured`).
+8. **`posts`**: Technical explainers and blog articles (`id`, `title`, `slug` UNIQUE, `category`, `excerpt`, `body_markdown`, `material_formula`, `crystal_structure`, `cover_image_url`, `author_name`, `author_role`, `author_batch`, `published_at`, `read_time_minutes`, `is_featured`).
 9. **`resources`**: Undergraduate toolkit, ASTM standards, software links (`id`, `title`, `category`, `description`, `url`, `software_tag`, `is_pinned`, `created_at`).
 10. **`opportunities`**: Internships, scholarships, research postings (`id`, `title`, `organization`, `opportunity_type`, `location`, `deadline`, `description`, `apply_url`, `is_active`, `posted_by_alumnus`, `created_at`).
 11. **`alumni`**: Departmental alumni directory (`id`, `name`, `graduating_batch`, `current_role`, `current_organization`, `industry_sector`, `location`, `quote_testimonial`, `linkedin_url`, `photo_url`).
@@ -105,6 +105,7 @@ The database schema is defined in `migrations/0001_initial_schema.sql` and initi
 14. **`faqs`**: Frequently asked questions (`id`, `question`, `answer`, `category`, `display_order`).
 15. **`membership_applications`**: Student society membership submissions (`id`, `full_name`, `roll_number`, `batch`, `department`, `email`, `phone`, `interests`, `why_join`, `status`, `created_at`).
 16. **`site_sections`**: Dynamic editable page content and portfolio blocks (`id`, `section_key` UNIQUE, `title`, `subtitle`, `content`, `badge`, `extra_json`, `updated_at`).
+17. **`revoked_tokens`**: Token revocation denylist for invalidated administrator sessions (`token_hash` PRIMARY KEY, `expires_at`).
 
 *(Plus auxiliary tracking tables: `contact_messages`, `newsletter_subscribers`).*
 
@@ -121,7 +122,7 @@ The database schema is defined in `migrations/0001_initial_schema.sql` and initi
    - Allowed origins are enforced via `ALLOWED_ORIGINS`. In production mode (`RUST_ENV=production`), missing origins result in an immediate fail-fast exit.
    - `x-forwarded-for` and `x-real-ip` headers are stripped from CORS `allow_headers`.
 3. **Modern Security Headers**:
-   - `Content-Security-Policy`: Restricts scripts, styles, Google Fonts (`https://fonts.googleapis.com`, `https://fonts.gstatic.com`), and approved image hosts (`https://images.unsplash.com`, `'self'`, `data:`).
+   - `Content-Security-Policy`: Restricts scripts (`'self' 'unsafe-inline'`), styles (`'self' 'unsafe-inline' https://fonts.googleapis.com`), Google Fonts (`https://fonts.gstatic.com`), and approved image hosts (`'self'`, `data:`, `https:` for external sponsor logos and micrographs).
    - `Referrer-Policy: strict-origin-when-cross-origin`.
    - `X-Content-Type-Options: nosniff`.
    - `X-Frame-Options: SAMEORIGIN`.

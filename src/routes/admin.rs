@@ -237,7 +237,44 @@ pub async fn login(
 }
 
 #[axum::debug_handler]
-pub async fn logout(jar: CookieJar) -> (CookieJar, Json<serde_json::Value>) {
+pub async fn logout(
+    State(pool): State<SqlitePool>,
+    jar: CookieJar,
+    headers: axum::http::HeaderMap,
+) -> (CookieJar, Json<serde_json::Value>) {
+    // Extract token from cookie or Authorization header to revoke it
+    let token_opt = if let Some(cookie) = jar.get(jwt_cookie_name()) {
+        Some(cookie.value().to_string())
+    } else if let Some(auth) = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+    {
+        auth.strip_prefix("Bearer ").map(|t| t.to_string())
+    } else {
+        None
+    };
+
+    if let Some(token) = token_opt {
+        let th = crate::auth::hash_token(&token);
+        let expires_at = match crate::auth::verify_token(&token) {
+            Ok(claims) => claims.exp as i64,
+            Err(_) => chrono::Utc::now().timestamp() + 86400,
+        };
+        let _ = sqlx::query(
+            "INSERT OR IGNORE INTO revoked_tokens (token_hash, expires_at) VALUES (?1, ?2)",
+        )
+        .bind(&th)
+        .bind(expires_at)
+        .execute(&pool)
+        .await;
+
+        let now = chrono::Utc::now().timestamp();
+        let _ = sqlx::query("DELETE FROM revoked_tokens WHERE expires_at < ?1")
+            .bind(now)
+            .execute(&pool)
+            .await;
+    }
+
     let removal = Cookie::build((jwt_cookie_name(), ""))
         .path("/")
         .http_only(true)
@@ -324,8 +361,25 @@ async fn upload_file(
         // Sniff the actual MIME type from magic bytes.
         let sniffed_mime = if let Some(t) = infer::get(&data) {
             t.mime_type()
-        } else if lower.ends_with(".txt") && std::str::from_utf8(&data).is_ok() {
-            "text/plain"
+        } else if lower.ends_with(".txt") {
+            match std::str::from_utf8(&data) {
+                Ok(s) => {
+                    let s_lower = s.to_lowercase();
+                    if s_lower.contains("<script")
+                        || s_lower.contains("<html")
+                        || s_lower.contains("<?php")
+                        || s_lower.contains("<!doctype")
+                        || s_lower.contains("<svg")
+                        || s_lower.contains("<iframe")
+                    {
+                        return Err(AppError::BadRequest(
+                            "Text file contains disallowed script or markup content".into(),
+                        ));
+                    }
+                    "text/plain"
+                }
+                Err(_) => "application/octet-stream",
+            }
         } else {
             "application/octet-stream"
         };
@@ -550,6 +604,35 @@ async fn update_stats(
     State(pool): State<SqlitePool>,
     Json(p): Json<UpdateSiteStats>,
 ) -> Result<Json<DeleteResponse>, AppError> {
+    if let Some(m) = p.active_members {
+        if m < 0 {
+            return Err(AppError::BadRequest(
+                "active_members cannot be negative".into(),
+            ));
+        }
+    }
+    if let Some(e) = p.events_held {
+        if e < 0 {
+            return Err(AppError::BadRequest(
+                "events_held cannot be negative".into(),
+            ));
+        }
+    }
+    if let Some(y) = p.years_active {
+        if y < 0 {
+            return Err(AppError::BadRequest(
+                "years_active cannot be negative".into(),
+            ));
+        }
+    }
+    if let Some(i) = p.industrial_partners {
+        if i < 0 {
+            return Err(AppError::BadRequest(
+                "industrial_partners cannot be negative".into(),
+            ));
+        }
+    }
+
     let res = sqlx::query(
         "UPDATE site_stats SET \
          active_members=COALESCE(?1,active_members), \

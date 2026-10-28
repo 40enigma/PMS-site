@@ -137,9 +137,9 @@ function renderFilteredTeam(mode) {
   if (mode === 'current') {
     filtered = allMembers.filter(m => m.is_current && !m.is_faculty_advisor);
   } else if (mode === 'faculty') {
-    filtered = allMembers.filter(m => m.is_faculty_advisor);
+    filtered = allMembers.filter(m => m.is_faculty_advisor && m.is_current);
   } else if (mode === 'past') {
-    filtered = allMembers.filter(m => !m.is_current);
+    filtered = allMembers.filter(m => !m.is_current && !m.is_faculty_advisor);
   }
   grid.innerHTML = filtered.length
     ? filtered.map((m, idx) => PMS.teamCard(m, idx)).join('')
@@ -165,7 +165,7 @@ async function loadTeamGuidance() {
     if (sec) {
       if (sec.badge) document.getElementById('guidance-badge').textContent = sec.badge;
       if (sec.title) document.getElementById('guidance-title').textContent = sec.title;
-      if (sec.subtitle) document.getElementById('guidance-desc').textContent = sec.subtitle;
+      if (sec.content || sec.subtitle) document.getElementById('guidance-desc').textContent = sec.content || sec.subtitle;
 
       if (sec.extra_json) {
         try {

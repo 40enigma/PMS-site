@@ -107,7 +107,7 @@
         <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">
           <span class="badge">${PMS.escHtml(o.opportunity_type)}</span>
           ${o.deadline ? `<span class="badge badge-accent">⏰ Deadline: ${PMS.escHtml(o.deadline)}</span>` : ''}
-          ${o.posted_by_alumnus ? `<span class="badge" style="background:rgba(14,165,233,.15);color:var(--secondary);border-color:rgba(14,165,233,.3)">🎓 Alumnus Shared</span>` : ''}
+          ${o.posted_by_alumnus ? `<span class="badge" style="background:rgba(14,165,233,.15);color:var(--secondary);border-color:rgba(14,165,233,.3)">🎓 Shared by ${PMS.escHtml(o.posted_by_alumnus)}</span>` : ''}
         </div>
         <h2 style="font-size:1.15rem;margin-bottom:.35rem">${PMS.escHtml(o.title)}</h2>
         <p style="color:var(--primary-light);font-size:.875rem;font-weight:600;margin-bottom:.5rem">${PMS.escHtml(o.organization)}</p>

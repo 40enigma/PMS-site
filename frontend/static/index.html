@@ -204,8 +204,8 @@
     if (heroSec) {
       if (heroSec.badge) document.getElementById('hero-badge').textContent = heroSec.badge;
       if (heroSec.title) document.getElementById('hero-heading').textContent = heroSec.title;
-      if (heroSec.subtitle || heroSec.content) {
-        document.getElementById('hero-desc').textContent = heroSec.subtitle || heroSec.content;
+      if (heroSec.content || heroSec.subtitle) {
+        document.getElementById('hero-desc').textContent = heroSec.content || heroSec.subtitle;
       }
       if (heroSec.extra_json) {
         try {
@@ -224,7 +224,7 @@
     if (actSec && actGrid) {
       if (actSec.badge) document.getElementById('activities-badge').textContent = actSec.badge;
       if (actSec.title) document.getElementById('activities-heading').textContent = actSec.title;
-      if (actSec.subtitle) document.getElementById('activities-desc').textContent = actSec.subtitle;
+      if (actSec.content || actSec.subtitle) document.getElementById('activities-desc').textContent = actSec.content || actSec.subtitle;
 
       let rendered = false;
       if (actSec.extra_json) {

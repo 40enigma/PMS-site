@@ -6,12 +6,20 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use sha2::{Digest, Sha256};
 
 use crate::error::AppError;
 use crate::models::AdminClaims;
 
 /// Default cookie name used to store the admin JWT token in the browser.
 pub const JWT_COOKIE_NAME: &str = "pms_admin_token";
+
+/// Compute SHA-256 hash of a JWT string for revocation tracking.
+pub fn hash_token(token: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
 
 static RESOLVED_JWT_SECRET: OnceLock<String> = OnceLock::new();
 static RESOLVED_COOKIE_NAME: OnceLock<String> = OnceLock::new();
@@ -107,20 +115,24 @@ where
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        let (claims, is_cookie_auth) = if let Some(auth_header) = parts
+        let (token_str, claims, is_cookie_auth) = if let Some(auth_header) = parts
             .headers
             .get(header::AUTHORIZATION)
             .and_then(|v| v.to_str().ok())
         {
             if let Some(token) = auth_header.strip_prefix("Bearer ") {
-                (verify_token(token)?, false)
+                (token.to_string(), verify_token(token)?, false)
             } else {
                 return Err(AppError::Unauthorized);
             }
         } else {
             let jar = CookieJar::from_headers(&parts.headers);
             if let Some(cookie) = jar.get(jwt_cookie_name()) {
-                (verify_token(cookie.value())?, true)
+                (
+                    cookie.value().to_string(),
+                    verify_token(cookie.value())?,
+                    true,
+                )
             } else {
                 return Err(AppError::Unauthorized);
             }
@@ -145,8 +157,20 @@ where
             }
         }
 
-        // If database pool is available in request extensions, verify user account still exists
+        // If database pool is available in request extensions, verify token is not revoked and user exists
         if let Some(pool) = parts.extensions.get::<sqlx::SqlitePool>() {
+            let token_h = hash_token(&token_str);
+            let is_revoked: Option<(String,)> =
+                sqlx::query_as("SELECT token_hash FROM revoked_tokens WHERE token_hash = ?1")
+                    .bind(&token_h)
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(|e| AppError::Internal(e.to_string()))?;
+
+            if is_revoked.is_some() {
+                return Err(AppError::Unauthorized);
+            }
+
             let exists: Option<(i64,)> = sqlx::query_as("SELECT id FROM admin_users WHERE id = ?1")
                 .bind(claims.sub)
                 .fetch_optional(pool)

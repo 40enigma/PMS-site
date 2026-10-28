@@ -83,11 +83,12 @@ function escHtml(str) {
 function safeUrl(url) {
   if (!url || typeof url !== 'string') return '#';
   const trimmed = url.trim();
+  const lower = trimmed.toLowerCase();
   if (
-    trimmed.startsWith('https://') ||
-    trimmed.startsWith('http://') ||
-    trimmed.startsWith('mailto:') ||
-    trimmed.startsWith('/') ||
+    lower.startsWith('https://') ||
+    lower.startsWith('http://') ||
+    lower.startsWith('mailto:') ||
+    (trimmed.startsWith('/') && !trimmed.startsWith('//')) ||
     trimmed.startsWith('#')
   ) {
     return escHtml(trimmed);
@@ -99,11 +100,18 @@ function setLoading(el, loading) {
   if (!el) return;
   if (loading) {
     el.disabled = true;
-    el.dataset.orig = el.textContent;
+    if (!el.dataset.orig) {
+      el.dataset.orig = el.textContent;
+    }
     el.textContent = 'Loading…';
   } else {
     el.disabled = false;
-    el.textContent = el.dataset.orig || 'Submit';
+    if (el.dataset.orig !== undefined) {
+      el.textContent = el.dataset.orig;
+      delete el.dataset.orig;
+    } else {
+      el.textContent = 'Submit';
+    }
   }
 }
 
@@ -130,6 +138,7 @@ function renderMarkdown(md) {
 
   const codeBlocks = [];
   const inlineCodes = [];
+  const links = [];
 
   // 1. Protect fenced code blocks (```lang ... ```)
   let text = md.replace(/```([a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
@@ -148,22 +157,32 @@ function renderMarkdown(md) {
   // Escape HTML characters in markdown body to prevent XSS
   text = escHtml(text);
 
-  // 3. Headings
-  text = text.replace(/^### (.*$)/gim, '<h3 style="font-size:1.15rem;margin:1.35rem 0 .5rem;color:var(--text)">$1</h3>');
-  text = text.replace(/^## (.*$)/gim, '<h2 style="font-size:1.35rem;margin:1.6rem 0 .6rem;color:var(--text)">$1</h2>');
-  text = text.replace(/^# (.*$)/gim, '<h1 style="font-size:1.65rem;margin:1.85rem 0 .75rem;color:var(--primary-light)">$1</h1>');
+  // 3. Protect Links [text](url) - handles parentheses in URL & prevents bold/italic asterisks from corrupting URLs
+  text = text.replace(/\[([^\]]+)\]\(((?:[^\s()]+|\([^\s()]*\))+)\)/g, (_, linkText, url) => {
+    const idx = links.length;
+    const target = safeUrl(url.replace(/&amp;/g, '&'));
+    links.push({ linkText, target });
+    return `__PMS_LINK_${idx}__`;
+  });
 
-  // 4. Bold & Italics
+  // 4. Headings (padded with blank lines for block paragraph separation)
+  text = text.replace(/^### (.*$)/gim, '\n\n<h3 style="font-size:1.15rem;margin:1.35rem 0 .5rem;color:var(--text)">$1</h3>\n\n');
+  text = text.replace(/^## (.*$)/gim, '\n\n<h2 style="font-size:1.35rem;margin:1.6rem 0 .6rem;color:var(--text)">$1</h2>\n\n');
+  text = text.replace(/^# (.*$)/gim, '\n\n<h1 style="font-size:1.65rem;margin:1.85rem 0 .75rem;color:var(--primary-light)">$1</h1>\n\n');
+
+  // 5. Bold & Italics
   text = text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
   text = text.replace(/(^|[^\w*])\*([^*\n\s](?:[^*\n]*?[^*\n\s])?)\*(?=[^\w*]|$)/g, '$1<em>$2</em>');
 
-  // 5. Links [text](url)
-  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, linkText, url) => {
-    return `<a href="${safeUrl(url.replace(/&amp;/g, '&'))}" target="_blank" rel="noopener" style="color:var(--primary-light);text-decoration:underline">${linkText}</a>`;
+  // 6. Blockquotes (group consecutive > or &gt; lines into a single blockquote)
+  text = text.replace(/(?:^(?:>|&gt;)[ \t]?(.*)(?:\r?\n|$))+/gm, match => {
+    const inner = match
+      .trim()
+      .split(/\r?\n/)
+      .map(line => line.replace(/^(?:>|&gt;)[ \t]?/, ''))
+      .join('<br>');
+    return `\n\n<blockquote style="border-left:3px solid var(--accent);padding-left:1rem;margin:1.2rem 0;color:var(--text-muted);font-style:italic">${inner}</blockquote>\n\n`;
   });
-
-  // 6. Blockquotes
-  text = text.replace(/^> (.*$)/gim, '<blockquote style="border-left:3px solid var(--accent);padding-left:1rem;margin:1.2rem 0;color:var(--text-muted);font-style:italic">$1</blockquote>');
 
   // 7. Group consecutive list items into <ul> without orphan <li>
   text = text.replace(/(?:^\s*[-*]\s+.*(?:\r?\n|$))+/gm, match => {
@@ -175,7 +194,7 @@ function renderMarkdown(md) {
         return `<li style="margin-bottom:.4rem">${itemContent}</li>`;
       })
       .join('');
-    return `<ul style="margin:1rem 0 1rem 1.75rem;color:var(--text);line-height:1.6">${items}</ul>`;
+    return `\n\n<ul style="margin:1rem 0 1rem 1.75rem;color:var(--text);line-height:1.6">${items}</ul>\n\n`;
   });
 
   // 8. Paragraphs
@@ -196,12 +215,21 @@ function renderMarkdown(md) {
     })
     .join('');
 
-  // 9. Restore inline code
+  // 9. Restore links (supporting inline bold/italics in link text)
+  text = text.replace(/__PMS_LINK_(\d+)__/g, (_, idx) => {
+    const item = links[idx];
+    let formattedText = item.linkText
+      .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[^\w*])\*([^*\n\s](?:[^*\n]*?[^*\n\s])?)\*(?=[^\w*]|$)/g, '$1<em>$2</em>');
+    return `<a href="${item.target}" target="_blank" rel="noopener" style="color:var(--primary-light);text-decoration:underline">${formattedText}</a>`;
+  });
+
+  // 10. Restore inline code
   text = text.replace(/__PMS_INLINE_CODE_(\d+)__/g, (_, idx) => {
     return `<code style="background:rgba(255,255,255,.08);padding:.2rem .45rem;border-radius:4px;font-size:.875em;color:#93c5fd">${escHtml(inlineCodes[idx])}</code>`;
   });
 
-  // 10. Restore code blocks
+  // 11. Restore code blocks
   text = text.replace(/__PMS_CODE_BLOCK_(\d+)__/g, (_, idx) => {
     const item = codeBlocks[idx];
     return `<pre class="code-block" style="background:#050811;padding:1.1rem;border-radius:10px;overflow-x:auto;margin:1.25rem 0;border:1px solid var(--border);box-shadow:inset 0 2px 4px rgba(0,0,0,.5)"><code style="font-family:monospace;font-size:.875rem;line-height:1.55;color:#e2e8f0">${escHtml(item.code)}</code></pre>`;
@@ -412,15 +440,25 @@ function teamCard(m, idx = 0) {
         ? `<img src="${safeUrl(m.photo_url)}" alt="${escHtml(m.name)}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;margin:0 auto .75rem;border:3px solid var(--primary)">`
         : `<div style="width:80px;height:80px;border-radius:50%;background:var(--gradient-card);display:flex;align-items:center;justify-content:center;font-size:2rem;margin:0 auto .75rem">👤</div>`}
       <h3 style="font-size:1rem;margin-bottom:.25rem">${escHtml(m.name)}</h3>
-      <p style="color:var(--primary-light);font-size:.85rem;font-weight:600;margin-bottom:.5rem">${escHtml(m.role)}</p>
+      <p style="color:var(--primary-light);font-size:.85rem;font-weight:600;margin-bottom:.35rem">${escHtml(m.role)}</p>
+      ${m.role_responsibility ? `<p style="color:var(--secondary);font-size:.78rem;margin-bottom:.35rem;font-style:italic">${escHtml(m.role_responsibility)}</p>` : ''}
       ${m.batch ? `<p style="color:var(--text-dim);font-size:.78rem">Batch ${escHtml(m.batch)}</p>` : ''}
       ${m.bio ? `<p style="color:var(--text-muted);font-size:.8rem;margin-top:.5rem">${escHtml(m.bio)}</p>` : ''}
-      ${m.linkedin_url ? `<a href="${safeUrl(m.linkedin_url)}" target="_blank" rel="noopener" style="font-size:.8rem;margin-top:.5rem;display:inline-block">LinkedIn →</a>` : ''}
+      <div style="display:flex;justify-content:center;gap:.75rem;margin-top:.5rem;flex-wrap:wrap">
+        ${m.email ? `<a href="mailto:${escHtml(m.email)}" style="font-size:.8rem;color:var(--text-muted)">✉️ Email</a>` : ''}
+        ${m.linkedin_url ? `<a href="${safeUrl(m.linkedin_url)}" target="_blank" rel="noopener" style="font-size:.8rem">LinkedIn →</a>` : ''}
+      </div>
     </article>`;
 }
 
 function postCard(p, idx = 0) {
   const delay = idx * 60;
+  const authorInfo = [
+    p.author_name || 'PMS',
+    p.author_role,
+    p.author_batch ? `Batch ${p.author_batch}` : null
+  ].filter(Boolean).map(escHtml).join(' · ');
+
   return `
     <article class="card fade-up ${p.is_featured ? 'card-featured' : ''}" style="animation-delay:${delay}ms">
       ${p.cover_image_url ? `<img src="${safeUrl(p.cover_image_url)}" alt="${escHtml(p.title)}" style="width:100%;height:160px;object-fit:cover;border-radius:8px;margin-bottom:1rem">` : ''}
@@ -432,9 +470,9 @@ function postCard(p, idx = 0) {
       <h3 style="margin-bottom:.5rem">${escHtml(p.title)}</h3>
       <p style="color:var(--text-muted);font-size:.875rem;margin-bottom:.75rem">${escHtml(p.excerpt || '')}</p>
       ${p.crystal_structure ? `<p style="color:var(--text-dim);font-size:.78rem;margin-bottom:.5rem">Structure: ${escHtml(p.crystal_structure)}</p>` : ''}
-      <div style="display:flex;justify-content:space-between;align-items:center;font-size:.78rem;color:var(--text-dim);margin-bottom:.75rem">
-        <span>${escHtml(p.author_name || 'PMS')}</span>
-        <span>${fmtDate(p.published_at)}</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:.78rem;color:var(--text-dim);margin-bottom:.75rem;flex-wrap:wrap;gap:.25rem">
+        <span>${authorInfo}</span>
+        <span>${p.read_time_minutes ? `⏱️ ${p.read_time_minutes} min · ` : ''}${fmtDate(p.published_at)}</span>
       </div>
       <button class="btn btn-outline btn-sm btn-read-article" data-slug="${escHtml(p.slug)}" style="width:100%">Read Article →</button>
     </article>`;
@@ -505,7 +543,11 @@ function openRegistrationModal(eventId, eventTitle) {
     document.body.appendChild(modal);
   }
 
-  // Set fields and reset alert
+  // Reset form inputs, set fields and reset alert
+  const form = modal.querySelector('#reg-form');
+  if (form) {
+    form.reset();
+  }
   const titleEl = modal.querySelector('#reg-modal-title');
   if (titleEl) titleEl.textContent = eventTitle ? `Register: ${eventTitle}` : 'Register for Event';
   const idEl = modal.querySelector('#reg-event-id');

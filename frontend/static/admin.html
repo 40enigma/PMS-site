@@ -179,10 +179,11 @@ const SCHEMAS = {
     title: 'Events',
     api: '/api/admin/events',
     singular: 'Event',
-    columns: ['id', 'title', 'category', 'date', 'speaker_or_organizer', 'is_past'],
+    columns: ['id', 'title', 'slug', 'category', 'date', 'speaker_or_organizer', 'is_past'],
     canCreate: true,
     fields: [
       { name: 'title', label: 'Event Title *', type: 'text', required: true },
+      { name: 'slug', label: 'Slug / URL Key (Leave empty to auto-generate)', type: 'text', placeholder: 'e.g. annual-metallurgy-symposium-2026' },
       { name: 'category', label: 'Category', type: 'select', options: ['Seminar', 'Workshop', 'Competition', 'Industrial Visit', 'Symposium', 'Lab Visit', 'Alumni Talk'] },
       { name: 'date', label: 'Event Date * (YYYY-MM-DD)', type: 'text', required: true, placeholder: '2026-10-25' },
       { name: 'time_range', label: 'Time Range', type: 'text', placeholder: 'e.g. 10:00 AM – 1:00 PM' },
@@ -229,10 +230,11 @@ const SCHEMAS = {
     title: 'Technical Posts & Articles',
     api: '/api/admin/posts',
     singular: 'Post',
-    columns: ['id', 'title', 'category', 'author_name', 'material_formula', 'published_at'],
+    columns: ['id', 'title', 'slug', 'category', 'author_name', 'material_formula', 'published_at'],
     canCreate: true,
     fields: [
       { name: 'title', label: 'Article Title *', type: 'text', required: true },
+      { name: 'slug', label: 'Slug / URL Key (Leave empty to auto-generate)', type: 'text', placeholder: 'e.g. titanium-alloys-aerospace' },
       { name: 'category', label: 'Category', type: 'select', options: ['Material of the Month', 'Explainer', 'Technical', 'Alloy Highlight', 'Characterization', 'Additive Manufacturing', 'Student Research'] },
       { name: 'excerpt', label: 'Excerpt Summary *', type: 'textarea', required: true },
       { name: 'body_markdown', label: 'Full Article Markdown *', type: 'textarea', required: true, rows: 10 },
@@ -254,7 +256,7 @@ const SCHEMAS = {
     canCreate: true,
     fields: [
       { name: 'title', label: 'Resource Title *', type: 'text', required: true },
-      { name: 'category', label: 'Category *', type: 'select', options: ['Standards', 'Software', 'Safety', 'Databases', 'Books', 'Tools', 'Software Guides', 'Phase Diagrams & Databases', 'Standards (ASTM/ISO)', 'Lab Safety'] },
+      { name: 'category', label: 'Category *', type: 'select', options: ['Standards', 'Software', 'Safety', 'Databases', 'Books', 'Tools'] },
       { name: 'description', label: 'Description', type: 'textarea' },
       { name: 'url', label: 'URL / Document Link *', type: 'text', required: true },
       { name: 'software_tag', label: 'Software / Sub-Tag', type: 'text', placeholder: 'e.g. Thermo-Calc, ASTM E8, ImageJ' },
@@ -516,7 +518,10 @@ async function loadSection(tab) {
       return;
     }
 
+    let savedRegFilter = '';
     if (tab === 'registrations') {
+      const existingFilter = document.getElementById('reg-event-filter');
+      if (existingFilter) savedRegFilter = existingFilter.value;
       const uniqueEvents = Object.keys(eventsMap).map(id => ({ id, title: eventsMap[id] }));
       const opts = uniqueEvents.map(e => `<option value="${e.id}">${PMS.escHtml(e.title)}</option>`).join('');
       toolbar.innerHTML = `
@@ -592,6 +597,10 @@ async function loadSection(tab) {
           displayed = val ? data.filter(d => String(d.event_id) === String(val)) : data;
           document.getElementById('table-body').innerHTML = displayed.map(renderRow).join('');
         };
+        if (savedRegFilter) {
+          filterEl.value = savedRegFilter;
+          filterEl.dispatchEvent(new Event('change'));
+        }
       }
 
       if (exportBtn) {
@@ -705,19 +714,19 @@ async function renderStatsEditor(container) {
       <div class="grid grid-2" style="gap:1rem">
         <div class="form-group">
           <label class="form-label" for="stat-members">Active Members Count</label>
-          <input id="stat-members" type="number" class="form-control" value="${stats.active_members || 0}">
+          <input id="stat-members" type="number" min="0" class="form-control" value="${stats.active_members || 0}">
         </div>
         <div class="form-group">
           <label class="form-label" for="stat-events">Total Events Held</label>
-          <input id="stat-events" type="number" class="form-control" value="${stats.events_held || 0}">
+          <input id="stat-events" type="number" min="0" class="form-control" value="${stats.events_held || 0}">
         </div>
         <div class="form-group">
           <label class="form-label" for="stat-years">Years Active</label>
-          <input id="stat-years" type="number" class="form-control" value="${stats.years_active || 0}">
+          <input id="stat-years" type="number" min="0" class="form-control" value="${stats.years_active || 0}">
         </div>
         <div class="form-group">
           <label class="form-label" for="stat-partners">Industrial Partners Count</label>
-          <input id="stat-partners" type="number" class="form-control" value="${stats.industrial_partners || 0}">
+          <input id="stat-partners" type="number" min="0" class="form-control" value="${stats.industrial_partners || 0}">
         </div>
         <div class="form-group" style="grid-column:1/-1">
           <label class="form-label" for="stat-pdf">Constitution PDF URL</label>
@@ -741,13 +750,24 @@ async function renderStatsEditor(container) {
     ev.preventDefault();
     const btn = document.getElementById('stats-save-btn');
     const msg = document.getElementById('stats-msg');
+
+    const active_members = parseInt(document.getElementById('stat-members').value, 10) || 0;
+    const events_held = parseInt(document.getElementById('stat-events').value, 10) || 0;
+    const years_active = parseInt(document.getElementById('stat-years').value, 10) || 0;
+    const industrial_partners = parseInt(document.getElementById('stat-partners').value, 10) || 0;
+
+    if (active_members < 0 || events_held < 0 || years_active < 0 || industrial_partners < 0) {
+      PMS.showAlert(msg, 'Statistic counts cannot be negative numbers.');
+      return;
+    }
+
     PMS.setLoading(btn, true);
     try {
       await PMS.apiPut('/api/admin/stats', {
-        active_members: parseInt(document.getElementById('stat-members').value, 10) || 0,
-        events_held: parseInt(document.getElementById('stat-events').value, 10) || 0,
-        years_active: parseInt(document.getElementById('stat-years').value, 10) || 0,
-        industrial_partners: parseInt(document.getElementById('stat-partners').value, 10) || 0,
+        active_members,
+        events_held,
+        years_active,
+        industrial_partners,
         constitution_pdf_url: document.getElementById('stat-pdf').value.trim() || null,
         office_location: document.getElementById('stat-loc').value.trim() || null,
         contact_email: document.getElementById('stat-email').value.trim() || null,
@@ -863,7 +883,7 @@ function renderFields(fields, currentData) {
           <select id="f-${f.name}" class="form-control">${opts}</select>
         </div>`;
     }
-    if (f.name.endsWith('_url')) {
+    if (f.name.endsWith('_url') || f.name === 'url') {
       return `
         <div class="form-group">
           <label class="form-label" for="f-${f.name}">${PMS.escHtml(f.label)}</label>
@@ -890,9 +910,11 @@ document.getElementById('crud-fields').addEventListener('change', async ev => {
   if (!fileInput || !fileInput.files || !fileInput.files[0]) return;
   const file = fileInput.files[0];
   const targetId = fileInput.dataset.targetInput;
-  const targetEl = document.getElementById(targetId);
   const labelEl = fileInput.closest('.inline-upload-label');
   const statusSpan = labelEl ? labelEl.querySelector('.upload-status-text') : null;
+  const expectedEditingId = currentEditingId;
+  const expectedTab = currentTab;
+
   if (statusSpan) statusSpan.textContent = '⏳ Uploading…';
   try {
     const fd = new FormData();
@@ -912,11 +934,16 @@ document.getElementById('crud-fields').addEventListener('change', async ev => {
       throw new Error(errDetail || `Upload failed (HTTP ${res.status})`);
     }
     const data = await res.json();
-    if (targetEl) targetEl.value = data.url;
-    if (statusSpan) statusSpan.textContent = '✅ Uploaded';
+    if (modal.open && currentEditingId === expectedEditingId && currentTab === expectedTab) {
+      const targetEl = document.getElementById(targetId);
+      if (targetEl) targetEl.value = data.url;
+      if (statusSpan) statusSpan.textContent = '✅ Uploaded';
+    }
   } catch (err) {
-    alert('Upload failed: ' + err.message);
-    if (statusSpan) statusSpan.textContent = '📁 Upload';
+    if (modal.open && currentEditingId === expectedEditingId && currentTab === expectedTab) {
+      alert('Upload failed: ' + err.message);
+      if (statusSpan) statusSpan.textContent = '📁 Upload';
+    }
   } finally {
     fileInput.value = '';
   }

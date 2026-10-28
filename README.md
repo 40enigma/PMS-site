@@ -319,13 +319,17 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header CF-Connecting-IP $http_cf_connecting_ip;
     }
 
-    # Static uploads with caching
+    # Static uploads with caching and security headers
     location /uploads/ {
         alias /var/www/pms-platform/uploads/;
         expires 30d;
         add_header Cache-Control "public, no-transform";
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'; sandbox" always;
+        add_header X-Frame-Options "DENY" always;
     }
 }
 ```
