@@ -10,8 +10,15 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/assets/style.css">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://pms.pieas.edu.pk/projects">
+  <meta property="og:title" content="Student Projects &amp; FYP Showcase – PIEAS Materials Society">
+  <meta property="og:description" content="Final Year Projects (FYP) and student metallurgical research at the Department of Metallurgy & Materials Engineering (DMME), PIEAS.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://pms.pieas.edu.pk/projects">
+  <meta property="og:image" content="https://pms.pieas.edu.pk/pms-logo.jpeg">
 </head>
 <body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
 <div id="announcement-banner" class="banner" style="display:none"></div>
 
 <!-- Navbar -->
@@ -38,11 +45,12 @@
   </div>
 </nav>
 
+<main id="main-content">
 <section class="hero" style="padding:3.5rem 0 2.5rem">
   <div class="container hero-content">
     <span class="badge">Research &amp; FYP</span>
     <h1 class="fade-up">Student Projects &amp; Research Archive</h1>
-    <p class="hero-desc fade-up fade-up-delay-1">Final Year Projects (FYP), additive manufacturing prototypes, and nuclear metallurgy investigations conducted by DMME students.</p>
+    <p class="hero-desc fade-up">Final Year Projects (FYP), additive manufacturing prototypes, and nuclear metallurgy investigations conducted by DMME students.</p>
   </div>
 </section>
 
@@ -53,6 +61,7 @@
     </div>
   </div>
 </section>
+</main>
 
 <!-- Unified Footer -->
 <footer>
@@ -95,32 +104,7 @@
   </div>
 </footer>
 
-<script src="/assets/app.js"></script>
-<script>
-(async () => {
-  const grid = document.getElementById('projects-grid');
-  grid.innerHTML = PMS.skeletonGrid(2);
-  try {
-    const projects = await PMS.apiFetch('/api/projects');
-    grid.innerHTML = projects.length ? projects.map((p, idx) => `
-      <article class="card fade-up" style="animation-delay:${idx * 60}ms">
-        ${p.image_url ? `<img src="${PMS.safeUrl(p.image_url)}" alt="${PMS.escHtml(p.title)}" style="width:100%;height:160px;object-fit:cover;border-radius:8px;margin-bottom:1rem">` : ''}
-        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">
-          <span class="badge">${PMS.escHtml(p.project_type)}</span>
-          <span class="badge badge-accent">Batch ${PMS.escHtml(p.batch)}</span>
-        </div>
-        <h2 style="font-size:1.15rem;margin-bottom:.5rem">${PMS.escHtml(p.title)}</h2>
-        ${p.students ? `<p style="color:var(--primary-light);font-size:.85rem;margin-bottom:.35rem">👥 Investigators: ${PMS.escHtml(p.students)}</p>` : ''}
-        ${p.supervisors ? `<p style="color:var(--text-dim);font-size:.8rem;margin-bottom:.5rem">🔬 Supervisors: ${PMS.escHtml(p.supervisors)}</p>` : ''}
-        <p style="color:var(--text-muted);font-size:.875rem;line-height:1.6;margin-bottom:.75rem">${PMS.escHtml(p.abstract || '')}</p>
-        ${p.tags ? `<div style="display:flex;gap:.35rem;flex-wrap:wrap;margin:.6rem 0">${p.tags.split(',').map(t => `<span class="tag">${PMS.escHtml(t.trim())}</span>`).join('')}</div>` : ''}
-        ${p.paper_or_repo_url ? `<div style="margin-top:1rem"><a href="${PMS.safeUrl(p.paper_or_repo_url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">View Paper / Repo ↗</a></div>` : ''}
-      </article>`).join('') : '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No student projects listed.</p>';
-    PMS.observeFadeElements(grid);
-  } catch(e) {
-    grid.innerHTML = '<p style="color:var(--danger);grid-column:1/-1;text-align:center">Could not load projects.</p>';
-  }
-})();
-</script>
+<script src="/assets/app.js" defer></script>
+<script src="/assets/pages/projects.js" defer></script>
 </body>
 </html>

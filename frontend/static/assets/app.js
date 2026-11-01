@@ -4,6 +4,9 @@
  * frontend/static/assets/app.js
  */
 
+document.documentElement.classList.add('js');
+document.documentElement.classList.remove('no-js');
+
 /* ── API base ── */
 const API = ''; // Same-origin: requests go to /api/*
 
@@ -12,10 +15,16 @@ const API = ''; // Same-origin: requests go to /api/*
  * Returns parsed JSON or throws an Error with a safe message.
  */
 async function apiFetch(path, options = {}) {
+  const { headers: customHeaders, ...restOptions } = options;
+  const mergedHeaders = {
+    'Content-Type': 'application/json',
+    'X-Requested-With': 'PMS-Client',
+    ...(customHeaders || {}),
+  };
   const res = await fetch(`${API}${path}`, {
     credentials: 'include', // send cookies for authenticated requests
-    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'PMS-Client', ...(options.headers || {}) },
-    ...options,
+    ...restOptions,
+    headers: mergedHeaders,
   });
 
   if (!res.ok) {
@@ -34,7 +43,7 @@ async function apiFetch(path, options = {}) {
   try {
     return JSON.parse(text);
   } catch (_) {
-    return {};
+    throw new Error('Invalid JSON response from server');
   }
 }
 
@@ -79,8 +88,9 @@ function escHtml(str) {
 /**
  * Sanitize URL to protect against javascript: and malicious data: XSS vectors.
  * Strictly permits http://, https://, mailto:, relative /, or #.
+ * Returns raw unescaped string for assignment to DOM properties (.href, .src).
  */
-function safeUrl(url) {
+function safeUrlRaw(url) {
   if (!url || typeof url !== 'string') return '#';
   const trimmed = url.trim();
   const lower = trimmed.toLowerCase();
@@ -91,9 +101,16 @@ function safeUrl(url) {
     (trimmed.startsWith('/') && !trimmed.startsWith('//')) ||
     trimmed.startsWith('#')
   ) {
-    return escHtml(trimmed);
+    return trimmed;
   }
   return '#';
+}
+
+/**
+ * HTML-escaped safeUrl for interpolation into HTML template literals.
+ */
+function safeUrl(url) {
+  return escHtml(safeUrlRaw(url));
 }
 
 function setLoading(el, loading) {
@@ -131,13 +148,14 @@ function fmtDate(iso) {
  * Robust, safe Markdown parser for technical articles.
  * Extracts fenced code blocks & inline code first using unique placeholders
  * so regexes for headings/bold/italics/lists never corrupt Python comments (#)
- * or C pointers (*ptr). Wraps lists in <ul> without orphan <li> elements.
+ * or C pointers (*ptr). Supports ordered lists, unordered lists, rules, and images.
  */
 function renderMarkdown(md) {
   if (!md) return '';
 
   const codeBlocks = [];
   const inlineCodes = [];
+  const images = [];
   const links = [];
 
   // 1. Protect fenced code blocks (```lang ... ```)
@@ -157,17 +175,126 @@ function renderMarkdown(md) {
   // Escape HTML characters in markdown body to prevent XSS
   text = escHtml(text);
 
-  // 3. Protect Links [text](url) - handles parentheses in URL & prevents bold/italic asterisks from corrupting URLs
+  // 3. Protect Images ![alt](url)
+  text = text.replace(/!\[([^\]]*)\]\(((?:[^\s()]+|\([^\s()]*\))+)\)/g, (_, alt, url) => {
+    const idx = images.length;
+    const cleanUrl = url.replace(/&amp;/g, '&');
+    const target = safeUrlRaw(cleanUrl);
+    images.push({ alt, target: escHtml(target) });
+    return `\n\n__PMS_IMAGE_${idx}__\n\n`;
+  });
+
+  // 4. Protect Links [text](url) - handles parentheses in URL & prevents bold/italic asterisks from corrupting URLs
   text = text.replace(/\[([^\]]+)\]\(((?:[^\s()]+|\([^\s()]*\))+)\)/g, (_, linkText, url) => {
     const idx = links.length;
-    const target = safeUrl(url.replace(/&amp;/g, '&'));
+    const cleanUrl = url.replace(/&amp;/g, '&');
+    const target = safeUrl(cleanUrl);
     links.push({ linkText, target });
     return `__PMS_LINK_${idx}__`;
   });
 
-  // 4. Headings (padded with blank lines for block paragraph separation)
+  // 5. Horizontal Rules (--- or *** or ___)
+  text = text.replace(/^(?:---|—{3,}|\*\*\*|___)\s*$/gm, '\n\n<hr style="border:0;border-top:1px solid var(--border);margin:2rem 0">\n\n');
+
+  // 6. Headings (padded with blank lines for block paragraph separation)
   text = text.replace(/^### (.*$)/gim, '\n\n<h3 style="font-size:1.15rem;margin:1.35rem 0 .5rem;color:var(--text)">$1</h3>\n\n');
   text = text.replace(/^## (.*$)/gim, '\n\n<h2 style="font-size:1.35rem;margin:1.6rem 0 .6rem;color:var(--text)">$1</h2>\n\n');
+  text = text.replace(/^# (.*$)/gim, '\n\n<h1 style="font-size:1.65rem;margin:1.85rem 0 .75rem;color:var(--primary-light)">$1</h1>\n\n');
+
+  // 7. Bold & Italics
+  text = text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  text = text.replace(/(^|[^\w*])\*([^*\n\s](?:[^*\n]*?[^*\n\s])?)\*(?=[^\w*]|$)/g, '$1<em>$2</em>');
+
+  // 8. Blockquotes (group consecutive > or &gt; lines into a single blockquote)
+  text = text.replace(/(?:^(?:>|&gt;)[ \t]?(.*)(?:\r?\n|$))+/gm, match => {
+    const inner = match
+      .trim()
+      .split(/\r?\n/)
+      .map(line => line.replace(/^(?:>|&gt;)[ \t]?/, ''))
+      .join('<br>');
+    return `\n\n<blockquote style="border-left:3px solid var(--accent);padding-left:1rem;margin:1.2rem 0;color:var(--text-muted);font-style:italic">${inner}</blockquote>\n\n`;
+  });
+
+  // 9. Group consecutive ordered list items into <ol> without orphan <li>
+  text = text.replace(/(?:^\s*\d+\.\s+.*(?:\r?\n|$))+/gm, match => {
+    const items = match
+      .trim()
+      .split(/\r?\n/)
+      .map(line => {
+        const itemContent = line.replace(/^\s*\d+\.\s+/, '');
+        return `<li style="margin-bottom:.4rem">${itemContent}</li>`;
+      })
+      .join('');
+    return `\n\n<ol style="margin:1rem 0 1rem 1.75rem;color:var(--text);line-height:1.6">${items}</ol>\n\n`;
+  });
+
+  // 10. Group consecutive unordered list items into <ul> without orphan <li>
+  text = text.replace(/(?:^\s*[-*]\s+.*(?:\r?\n|$))+/gm, match => {
+    const items = match
+      .trim()
+      .split(/\r?\n/)
+      .map(line => {
+        const itemContent = line.replace(/^\s*[-*]\s+/, '');
+        return `<li style="margin-bottom:.4rem">${itemContent}</li>`;
+      })
+      .join('');
+    return `\n\n<ul style="margin:1rem 0 1rem 1.75rem;color:var(--text);line-height:1.6">${items}</ul>\n\n`;
+  });
+
+  // 11. Paragraphs
+  const blocks = text.split(/\n\s*\n/);
+  text = blocks
+    .map(b => {
+      b = b.trim();
+      if (!b) return '';
+      if (
+        b.startsWith('<h') ||
+        b.startsWith('__PMS_CODE_BLOCK_') ||
+        b.startsWith('__PMS_IMAGE_') ||
+        b.startsWith('<blockquote') ||
+        b.startsWith('<ul') ||
+        b.startsWith('<ol') ||
+        b.startsWith('<hr')
+      ) {
+        return b;
+      }
+      return `<p style="margin-bottom:1.1rem;line-height:1.75;color:var(--text)">${b}</p>`;
+    })
+    .join('');
+
+  // 12. Restore links (supporting inline bold/italics in link text) with guarded placeholder restoration
+  text = text.replace(/__PMS_LINK_(\d+)__/g, (match, idx) => {
+    const item = links[idx];
+    if (!item) return match;
+    let formattedText = item.linkText
+      .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[^\w*])\*([^*\n\s](?:[^*\n]*?[^*\n\s])?)\*(?=[^\w*]|$)/g, '$1<em>$2</em>');
+    return `<a href="${item.target}" target="_blank" rel="noopener" style="color:var(--primary-light);text-decoration:underline">${formattedText}</a>`;
+  });
+
+  // 13. Restore images
+  text = text.replace(/__PMS_IMAGE_(\d+)__/g, (match, idx) => {
+    const item = images[idx];
+    if (!item) return match;
+    return `<img src="${item.target}" alt="${item.alt}" style="max-width:100%;height:auto;border-radius:8px;margin:1rem 0;display:block" loading="lazy">`;
+  });
+
+  // 14. Restore inline code
+  text = text.replace(/__PMS_INLINE_CODE_(\d+)__/g, (match, idx) => {
+    const item = inlineCodes[idx];
+    if (item === undefined) return match;
+    return `<code style="background:rgba(255,255,255,.08);padding:.2rem .45rem;border-radius:4px;font-size:.875em;color:#93c5fd">${escHtml(item)}</code>`;
+  });
+
+  // 15. Restore code blocks
+  text = text.replace(/__PMS_CODE_BLOCK_(\d+)__/g, (match, idx) => {
+    const item = codeBlocks[idx];
+    if (!item) return match;
+    return `<pre class="code-block" style="background:#050811;padding:1.1rem;border-radius:10px;overflow-x:auto;margin:1.25rem 0;border:1px solid var(--border);box-shadow:inset 0 2px 4px rgba(0,0,0,.5)"><code style="font-family:monospace;font-size:.875rem;line-height:1.55;color:#e2e8f0">${escHtml(item.code)}</code></pre>`;
+  });
+
+  return text;
+}
   text = text.replace(/^# (.*$)/gim, '\n\n<h1 style="font-size:1.65rem;margin:1.85rem 0 .75rem;color:var(--primary-light)">$1</h1>\n\n');
 
   // 5. Bold & Italics
@@ -377,7 +504,7 @@ async function loadStats(container) {
     // Populate contact and constitution details wherever mapped
     qsa('[data-stat="constitution"], .pms-constitution-link').forEach(el => {
       if (s.constitution_pdf_url) {
-        el.href = safeUrl(s.constitution_pdf_url);
+        el.href = safeUrlRaw(s.constitution_pdf_url);
         el.style.display = 'inline-block';
       }
     });
@@ -408,7 +535,7 @@ function skeletonGrid(count = 3) {
 function eventCard(e, idx = 0) {
   const delay = idx * 60;
   return `
-    <article class="card fade-up ${e.is_featured ? 'card-featured' : ''}" style="animation-delay:${delay}ms">
+    <article class="card fade-up ${e.is_featured ? 'card-featured' : ''}" style="transition-delay:${delay}ms">
       ${e.poster_url ? `<img src="${safeUrl(e.poster_url)}" alt="${escHtml(e.title)}" style="width:100%;height:180px;object-fit:cover;border-radius:10px;margin-bottom:1rem;">` : ''}
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem;">
         <span class="badge">${escHtml(e.category)}</span>
@@ -435,12 +562,12 @@ function eventCard(e, idx = 0) {
 function teamCard(m, idx = 0) {
   const delay = idx * 60;
   return `
-    <article class="card fade-up" style="text-align:center;animation-delay:${delay}ms">
+    <article class="card fade-up" style="text-align:center;transition-delay:${delay}ms">
       ${m.photo_url
         ? `<img src="${safeUrl(m.photo_url)}" alt="${escHtml(m.name)}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;margin:0 auto .75rem;border:3px solid var(--primary)">`
         : `<div style="width:80px;height:80px;border-radius:50%;background:var(--gradient-card);display:flex;align-items:center;justify-content:center;font-size:2rem;margin:0 auto .75rem">👤</div>`}
       <h3 style="font-size:1rem;margin-bottom:.25rem">${escHtml(m.name)}</h3>
-      <p style="color:var(--primary-light);font-size:.85rem;font-weight:600;margin-bottom:.35rem">${escHtml(m.role)}</p>
+      <p style="color:var(--primary-light);font-size:.85rem;font-weight:600;margin-bottom:.35rem">${!m.is_current ? '<span class="badge" style="margin-right:.35rem;font-size:.7rem">Former</span>' : ''}${escHtml(m.role)}</p>
       ${m.role_responsibility ? `<p style="color:var(--secondary);font-size:.78rem;margin-bottom:.35rem;font-style:italic">${escHtml(m.role_responsibility)}</p>` : ''}
       ${m.batch ? `<p style="color:var(--text-dim);font-size:.78rem">Batch ${escHtml(m.batch)}</p>` : ''}
       ${m.bio ? `<p style="color:var(--text-muted);font-size:.8rem;margin-top:.5rem">${escHtml(m.bio)}</p>` : ''}
@@ -460,7 +587,7 @@ function postCard(p, idx = 0) {
   ].filter(Boolean).map(escHtml).join(' · ');
 
   return `
-    <article class="card fade-up ${p.is_featured ? 'card-featured' : ''}" style="animation-delay:${delay}ms">
+    <article class="card fade-up ${p.is_featured ? 'card-featured' : ''}" style="transition-delay:${delay}ms">
       ${p.cover_image_url ? `<img src="${safeUrl(p.cover_image_url)}" alt="${escHtml(p.title)}" style="width:100%;height:160px;object-fit:cover;border-radius:8px;margin-bottom:1rem">` : ''}
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">
         <span class="badge">${escHtml(p.category)}</span>
@@ -481,7 +608,7 @@ function postCard(p, idx = 0) {
 function resourceCard(r, idx = 0) {
   const delay = idx * 60;
   return `
-    <article class="card fade-up ${r.is_pinned ? 'card-featured' : ''}" style="animation-delay:${delay}ms">
+    <article class="card fade-up ${r.is_pinned ? 'card-featured' : ''}" style="transition-delay:${delay}ms">
       ${r.is_pinned ? '<span class="badge badge-accent" style="margin-bottom:.75rem">📌 Pinned</span>' : ''}
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.5rem">
         <span class="badge">${escHtml(r.category)}</span>
@@ -499,6 +626,7 @@ function openRegistrationModal(eventId, eventTitle) {
   if (!modal) {
     modal = document.createElement('dialog');
     modal.id = 'reg-modal';
+    modal.setAttribute('aria-labelledby', 'reg-modal-title');
     modal.style.cssText = 'background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);color:var(--text);max-width:540px;width:92%;padding:2rem;box-shadow:0 25px 50px -12px rgba(0,0,0,.7);';
     modal.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem">
@@ -541,6 +669,10 @@ function openRegistrationModal(eventId, eventTitle) {
       </form>
     `;
     document.body.appendChild(modal);
+
+    modal.addEventListener('click', e => {
+      if (e.target === modal) modal.close();
+    });
   }
 
   // Reset form inputs, set fields and reset alert
@@ -554,6 +686,20 @@ function openRegistrationModal(eventId, eventTitle) {
   if (idEl) idEl.value = eventId;
   const msgBox = modal.querySelector('#reg-msg');
   if (msgBox) msgBox.innerHTML = '';
+
+  // Check if code is already stored in localStorage
+  let savedCode = null;
+  try {
+    savedCode = localStorage.getItem(`pms_cert_${eventId}`);
+  } catch (_) {}
+  if (savedCode && msgBox) {
+    showAlert(
+      msgBox,
+      `ℹ️ You registered previously for this event. Your saved verification code: <br><strong style="font-size:1.1rem;color:#6ee7b7">${escHtml(savedCode)}</strong>`,
+      'info',
+      true
+    );
+  }
 
   // Ensure submit button is re-enabled and visible on opening modal
   const submitBtn = modal.querySelector('#reg-submit');
@@ -570,9 +716,9 @@ function openRegistrationModal(eventId, eventTitle) {
       b.onclick = () => modal.close();
     });
 
-    const form = modal.querySelector('#reg-form');
-    if (form) {
-      form.addEventListener('submit', async ev => {
+    const formEl = modal.querySelector('#reg-form');
+    if (formEl) {
+      formEl.addEventListener('submit', async ev => {
         ev.preventDefault();
         const curSubmitBtn = modal.querySelector('#reg-submit');
         const curMsgBox = modal.querySelector('#reg-msg');
@@ -612,13 +758,36 @@ function openRegistrationModal(eventId, eventTitle) {
             email,
             phone: phone || null,
           });
+
+          const code = result.certificate_code;
+          try {
+            localStorage.setItem(`pms_cert_${curEventId}`, code);
+          } catch (_) {}
+
           showAlert(
             curMsgBox,
-            `✅ Registration confirmed! Your digital participation verification code is: <br><strong style="font-size:1.15rem;letter-spacing:1px;color:#6ee7b7">${escHtml(result.certificate_code)}</strong><br><small>Save this code to verify your certificate on this portal.</small>`,
+            `✅ Registration confirmed! Your digital participation verification code is: <br><strong style="font-size:1.15rem;letter-spacing:1px;color:#6ee7b7" id="cert-code-text">${escHtml(code)}</strong><br><button type="button" class="btn btn-outline btn-sm" id="btn-copy-cert-code" style="margin:.5rem 0 .25rem;padding:.3rem .75rem;font-size:.8rem">📋 Copy Code</button><br><small>Save this code to verify your certificate on this portal.</small>`,
             'success',
             true
           );
-          form.reset();
+
+          const copyBtn = modal.querySelector('#btn-copy-cert-code');
+          if (copyBtn) {
+            copyBtn.onclick = () => {
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(code).then(() => {
+                  copyBtn.textContent = '✅ Copied!';
+                  setTimeout(() => { copyBtn.textContent = '📋 Copy Code'; }, 2000);
+                }).catch(() => {
+                  prompt('Copy your code:', code);
+                });
+              } else {
+                prompt('Copy your code:', code);
+              }
+            };
+          }
+
+          formEl.reset();
           isSuccess = true;
           // Hide and disable submit button to prevent accidental double-registration
           curSubmitBtn.disabled = true;
@@ -648,21 +817,26 @@ function openLightbox(imageUrl, title, caption = '') {
     modal = document.createElement('dialog');
     modal.id = 'lightbox-modal';
     modal.className = 'lightbox-modal';
+    modal.setAttribute('aria-labelledby', 'lightbox-title');
     modal.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
         <h3 id="lightbox-title" style="font-size:1.15rem;color:var(--text)">Micrograph</h3>
         <button id="lightbox-close-btn" class="btn btn-outline btn-sm" style="padding:.25rem .6rem">✕ Close</button>
       </div>
-      <img id="lightbox-img" src="" alt="Micrograph">
-      <p id="lightbox-caption" style="color:var(--text-muted);font-size:.9rem;line-height:1.6"></p>
+      <img id="lightbox-img" src="" alt="Micrograph" style="max-width:100%;max-height:70vh;object-fit:contain;border-radius:8px">
+      <p id="lightbox-caption" style="color:var(--text-muted);font-size:.9rem;line-height:1.6;margin-top:.75rem"></p>
     `;
     document.body.appendChild(modal);
     modal.querySelector('#lightbox-close-btn').onclick = () => modal.close();
+    modal.addEventListener('click', e => {
+      if (e.target === modal) modal.close();
+    });
   }
 
-  modal.querySelector('#lightbox-img').src = safeUrl(imageUrl);
-  modal.querySelector('#lightbox-title').textContent = title || 'Micrograph Detail';
-  modal.querySelector('#lightbox-caption').textContent = caption;
+  const cleanCaption = caption && caption !== 'null' ? caption : '';
+  modal.querySelector('#lightbox-img').src = safeUrlRaw(imageUrl);
+  modal.querySelector('#lightbox-title').textContent = title && title !== 'null' ? title : 'Micrograph Detail';
+  modal.querySelector('#lightbox-caption').textContent = cleanCaption;
   modal.showModal();
 }
 
@@ -673,8 +847,13 @@ async function openArticleModal(slug) {
   if (!modal) {
     modal = document.createElement('dialog');
     modal.id = 'article-reader-modal';
+    modal.setAttribute('aria-labelledby', 'article-reader-title');
     modal.style.cssText = 'background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);color:var(--text);max-width:780px;width:95%;padding:2rem;max-height:85vh;overflow-y:auto;box-shadow:0 25px 60px rgba(0,0,0,.8);';
     document.body.appendChild(modal);
+
+    modal.addEventListener('click', e => {
+      if (e.target === modal) modal.close();
+    });
   }
 
   // Deep linking: update URL query parameter ?article=<slug>
@@ -686,7 +865,7 @@ async function openArticleModal(slug) {
     }
   } catch (_) {}
 
-  // Clear query parameter on modal close
+  // Clear query parameter on modal close using replaceState
   if (!modal.dataset.hasCloseHandler) {
     modal.dataset.hasCloseHandler = 'true';
     modal.addEventListener('close', () => {
@@ -695,7 +874,7 @@ async function openArticleModal(slug) {
         if (url.searchParams.has('article')) {
           url.searchParams.delete('article');
           const cleanUrl = url.pathname + (url.search ? url.search : '') + url.hash;
-          history.pushState(null, '', cleanUrl);
+          history.replaceState(null, '', cleanUrl);
         }
       } catch (_) {}
     });
@@ -723,7 +902,7 @@ async function openArticleModal(slug) {
         ${post.material_formula ? `<span class="tag">🧪 ${escHtml(post.material_formula)}</span>` : ''}
         ${post.crystal_structure ? `<span class="tag">💎 ${escHtml(post.crystal_structure)}</span>` : ''}
       </div>
-      <h1 style="font-size:1.8rem;margin-bottom:.75rem;color:var(--text)">${escHtml(post.title)}</h1>
+      <h1 id="article-reader-title" style="font-size:1.8rem;margin-bottom:.75rem;color:var(--text)">${escHtml(post.title)}</h1>
       <div style="display:flex;gap:1.5rem;font-size:.85rem;color:var(--text-muted);border-bottom:1px solid var(--border);padding-bottom:1rem;margin-bottom:1.5rem;flex-wrap:wrap">
         <span>✍️ <strong>${escHtml(post.author_name || 'PMS Technical Council')}</strong> ${post.author_role ? '· ' + escHtml(post.author_role) : ''}</span>
         <span>📅 ${fmtDate(post.published_at)}</span>
@@ -770,6 +949,21 @@ document.addEventListener('click', ev => {
   }
 });
 
+/* ── Keyboard accessibility for interactive gallery cards ── */
+document.addEventListener('keydown', ev => {
+  if (ev.key === 'Enter' || ev.key === ' ') {
+    const lbTrigger = document.activeElement && document.activeElement.closest('.micrograph-lightbox-trigger');
+    if (lbTrigger) {
+      ev.preventDefault();
+      openLightbox(
+        lbTrigger.dataset.imgUrl,
+        lbTrigger.dataset.imgTitle,
+        lbTrigger.dataset.imgCaption
+      );
+    }
+  }
+});
+
 /* ── Popstate handler for back/forward navigation with article deep links ── */
 window.addEventListener('popstate', () => {
   const articleSlug = new URLSearchParams(window.location.search).get('article');
@@ -802,6 +996,7 @@ window.PMS = {
   apiPut,
   apiDelete,
   escHtml,
+  safeUrlRaw,
   safeUrl,
   fmtDate,
   renderMarkdown,

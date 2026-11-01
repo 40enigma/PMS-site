@@ -35,6 +35,10 @@ static GLOBAL_RATE_LIMIT: OnceLock<RateLimitState> = OnceLock::new();
 pub struct RateLimitState {
     pub login: Arc<KeyedLimiter>,
     pub submit: Arc<KeyedLimiter>,
+    pub register: Arc<KeyedLimiter>,
+    pub contact: Arc<KeyedLimiter>,
+    pub newsletter: Arc<KeyedLimiter>,
+    pub membership: Arc<KeyedLimiter>,
     pub certificate_verify: Arc<KeyedLimiter>,
 }
 
@@ -50,7 +54,7 @@ fn env_rpm(var: &str, default: u32) -> NonZeroU32 {
 /// For IPv4: keeps the 32-bit address.
 /// For IPv6: masks to a /64 prefix to prevent /128 address rotation attacks and state exhaustion.
 pub fn canonicalize_rate_limit_ip(ip: IpAddr) -> IpAddr {
-    match ip {
+    match ip.to_canonical() {
         IpAddr::V4(v4) => IpAddr::V4(v4),
         IpAddr::V6(v6) => {
             let seg = v6.segments();
@@ -65,22 +69,38 @@ impl RateLimitState {
     pub fn new() -> Self {
         let login_rpm = env_rpm("RATE_LIMIT_LOGIN_RPM", 10);
         let submit_rpm = env_rpm("RATE_LIMIT_SUBMIT_RPM", 30);
+        let register_rpm = env_rpm("RATE_LIMIT_REGISTER_RPM", 60);
+        let contact_rpm = env_rpm("RATE_LIMIT_CONTACT_RPM", 10);
+        let newsletter_rpm = env_rpm("RATE_LIMIT_NEWSLETTER_RPM", 10);
+        let membership_rpm = env_rpm("RATE_LIMIT_MEMBERSHIP_RPM", 15);
         let cert_verify_rpm = env_rpm("RATE_LIMIT_CERT_VERIFY_RPM", 60);
 
         tracing::info!(
             login_rpm = login_rpm.get(),
             submit_rpm = submit_rpm.get(),
+            register_rpm = register_rpm.get(),
+            contact_rpm = contact_rpm.get(),
+            newsletter_rpm = newsletter_rpm.get(),
+            membership_rpm = membership_rpm.get(),
             cert_verify_rpm = cert_verify_rpm.get(),
             "Rate limiter initialised"
         );
 
         let login_quota = Quota::per_minute(login_rpm);
         let submit_quota = Quota::per_minute(submit_rpm);
+        let register_quota = Quota::per_minute(register_rpm);
+        let contact_quota = Quota::per_minute(contact_rpm);
+        let newsletter_quota = Quota::per_minute(newsletter_rpm);
+        let membership_quota = Quota::per_minute(membership_rpm);
         let cert_verify_quota = Quota::per_minute(cert_verify_rpm);
 
         let state = Self {
             login: Arc::new(RateLimiter::keyed(login_quota)),
             submit: Arc::new(RateLimiter::keyed(submit_quota)),
+            register: Arc::new(RateLimiter::keyed(register_quota)),
+            contact: Arc::new(RateLimiter::keyed(contact_quota)),
+            newsletter: Arc::new(RateLimiter::keyed(newsletter_quota)),
+            membership: Arc::new(RateLimiter::keyed(membership_quota)),
             certificate_verify: Arc::new(RateLimiter::keyed(cert_verify_quota)),
         };
 
@@ -88,6 +108,10 @@ impl RateLimitState {
         // preventing unbounded memory growth under unique IP load.
         let login_limiter = Arc::clone(&state.login);
         let submit_limiter = Arc::clone(&state.submit);
+        let register_limiter = Arc::clone(&state.register);
+        let contact_limiter = Arc::clone(&state.contact);
+        let newsletter_limiter = Arc::clone(&state.newsletter);
+        let membership_limiter = Arc::clone(&state.membership);
         let cert_limiter = Arc::clone(&state.certificate_verify);
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(300));
@@ -97,6 +121,14 @@ impl RateLimitState {
                 login_limiter.shrink_to_fit();
                 submit_limiter.retain_recent();
                 submit_limiter.shrink_to_fit();
+                register_limiter.retain_recent();
+                register_limiter.shrink_to_fit();
+                contact_limiter.retain_recent();
+                contact_limiter.shrink_to_fit();
+                newsletter_limiter.retain_recent();
+                newsletter_limiter.shrink_to_fit();
+                membership_limiter.retain_recent();
+                membership_limiter.shrink_to_fit();
                 cert_limiter.retain_recent();
                 cert_limiter.shrink_to_fit();
             }
@@ -126,22 +158,44 @@ impl RateLimitState {
             .map_err(|_| AppError::TooManyRequests)
     }
 
+    /// Check event registration rate limit for the given IP. Returns `Err(AppError::TooManyRequests)` if exceeded.
+    pub fn check_register(&self, ip: IpAddr) -> Result<(), AppError> {
+        let key = canonicalize_rate_limit_ip(ip);
+        self.register
+            .check_key(&key)
+            .map_err(|_| AppError::TooManyRequests)
+    }
+
+    /// Check contact message rate limit for the given IP. Returns `Err(AppError::TooManyRequests)` if exceeded.
+    pub fn check_contact(&self, ip: IpAddr) -> Result<(), AppError> {
+        let key = canonicalize_rate_limit_ip(ip);
+        self.contact
+            .check_key(&key)
+            .map_err(|_| AppError::TooManyRequests)
+    }
+
+    /// Check newsletter subscription rate limit for the given IP. Returns `Err(AppError::TooManyRequests)` if exceeded.
+    pub fn check_newsletter(&self, ip: IpAddr) -> Result<(), AppError> {
+        let key = canonicalize_rate_limit_ip(ip);
+        self.newsletter
+            .check_key(&key)
+            .map_err(|_| AppError::TooManyRequests)
+    }
+
+    /// Check membership application rate limit for the given IP. Returns `Err(AppError::TooManyRequests)` if exceeded.
+    pub fn check_membership(&self, ip: IpAddr) -> Result<(), AppError> {
+        let key = canonicalize_rate_limit_ip(ip);
+        self.membership
+            .check_key(&key)
+            .map_err(|_| AppError::TooManyRequests)
+    }
+
     /// Check certificate verification rate limit for the given IP. Returns `Err(AppError::TooManyRequests)` if exceeded.
     pub fn check_certificate_verify(&self, ip: IpAddr) -> Result<(), AppError> {
         let key = canonicalize_rate_limit_ip(ip);
         self.certificate_verify
             .check_key(&key)
             .map_err(|_| AppError::TooManyRequests)
-    }
-
-    /// Manually prune recent entries and shrink memory allocations (useful for testing or ad-hoc cleanup).
-    pub fn cleanup(&self) {
-        self.login.retain_recent();
-        self.login.shrink_to_fit();
-        self.submit.retain_recent();
-        self.submit.shrink_to_fit();
-        self.certificate_verify.retain_recent();
-        self.certificate_verify.shrink_to_fit();
     }
 }
 
@@ -158,23 +212,38 @@ pub fn is_trust_proxy() -> bool {
         .unwrap_or(false)
 }
 
+/// Check if TRUST_CLOUDFLARE is enabled.
+pub fn is_trust_cloudflare() -> bool {
+    std::env::var("TRUST_CLOUDFLARE")
+        .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+        .unwrap_or(false)
+}
+
 /// Extract client IP from HTTP headers ONLY if `TRUST_PROXY=true` is set in the environment.
 ///
 /// When `TRUST_PROXY` is enabled:
-/// 1. Reads `CF-Connecting-IP` or `True-Client-IP` when deployed behind Cloudflare.
-/// 2. Reads the rightmost hop in `X-Forwarded-For` or `X-Real-IP`.
+/// 1. Reads `CF-Connecting-IP` or `True-Client-IP` ONLY if `TRUST_CLOUDFLARE=true`.
+/// 2. Reads `X-Real-IP` (set by Nginx/Caddy) first.
+/// 3. Reads the rightmost hop in `X-Forwarded-For`.
 ///
 /// When `TRUST_PROXY` is NOT enabled, header values are strictly ignored to prevent IP spoofing.
 pub fn client_ip_from_headers(headers: &axum::http::HeaderMap) -> IpAddr {
     if is_trust_proxy() {
-        if let Some(cf_ip) = headers
-            .get("cf-connecting-ip")
-            .or_else(|| headers.get("CF-Connecting-IP"))
-            .or_else(|| headers.get("true-client-ip"))
-            .or_else(|| headers.get("True-Client-IP"))
-            .and_then(|v| v.to_str().ok())
-        {
-            if let Ok(ip) = IpAddr::from_str(cf_ip.trim()) {
+        if is_trust_cloudflare() {
+            if let Some(cf_ip) = headers
+                .get("cf-connecting-ip")
+                .or_else(|| headers.get("CF-Connecting-IP"))
+                .or_else(|| headers.get("true-client-ip"))
+                .or_else(|| headers.get("True-Client-IP"))
+                .and_then(|v| v.to_str().ok())
+            {
+                if let Ok(ip) = IpAddr::from_str(cf_ip.trim()) {
+                    return ip;
+                }
+            }
+        }
+        if let Some(xri) = headers.get("X-Real-IP").and_then(|v| v.to_str().ok()) {
+            if let Ok(ip) = IpAddr::from_str(xri.trim()) {
                 return ip;
             }
         }
@@ -183,11 +252,6 @@ pub fn client_ip_from_headers(headers: &axum::http::HeaderMap) -> IpAddr {
                 if let Ok(ip) = IpAddr::from_str(rightmost.trim()) {
                     return ip;
                 }
-            }
-        }
-        if let Some(xri) = headers.get("X-Real-IP").and_then(|v| v.to_str().ok()) {
-            if let Ok(ip) = IpAddr::from_str(xri.trim()) {
-                return ip;
             }
         }
     }

@@ -78,9 +78,9 @@ The application is engineered as a **self-contained, monolithic Rust service**:
 ```
 
 - **Backend**: Rust using [Axum 0.8](https://github.com/tokio-rs/axum), [SQLx 0.8](https://github.com/launchbadge/sqlx) (SQLite), [Argon2](https://github.com/RustCrypto/password-hashes), [jsonwebtoken](https://github.com/Keats/jsonwebtoken), and [governor](https://github.com/antifuchs/governor) for in-memory rate limiting.
-- **Frontend**: Clean, responsive static HTML5, CSS3, and vanilla modern JavaScript (`frontend/static/`). **No Node.js build step or bundler is required!**
-- **Authentication**: `httpOnly`, `Secure`, `SameSite=Lax` cookie flow for browser clients, with backward-compatible `Authorization: Bearer <token>` support for programmatic API consumers.
-- **Security Headers**: Automatic `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, and `X-XSS-Protection` headers on all responses.
+- **Frontend**: Clean, responsive static HTML5, CSS3, and modular modern JavaScript (`frontend/static/`). **No Node.js build step or bundler is required!** Note: `frontend/static/index.html` is strictly required at runtime; the server verifies its presence at boot and will fail with a clear fatal error if absent.
+- **Authentication**: `httpOnly`, `Secure`, `SameSite=Lax` cookie flow for browser clients, with backward-compatible `Authorization: Bearer <token>` support for programmatic API consumers (pass header `X-Return-Token: 1` during login to receive the token string in JSON).
+- **Security Headers**: Strict `Content-Security-Policy` (with external deferred page scripts and no `'unsafe-inline'` script permissions), `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, and `Strict-Transport-Security` in production.
 
 ---
 
@@ -93,8 +93,11 @@ PMS-site/
 ├── Cargo.toml                 # Rust dependencies & package metadata
 ├── Cargo.lock                 # Deterministic dependency lockfile
 ├── pms.db                     # SQLite database (auto-created on first run)
-├── migrations/                # Database schema migrations
-│   └── 0001_initial_schema.sql# Idempotent SQLite initial schema
+├── migrations/                # Numbered database schema migrations (tracked in _pms_migrations)
+│   ├── 0001_initial_schema.sql# Initial core database schema
+│   ├── 0002_fix_lowercasing.sql# Deprecated placeholder
+│   ├── 0003_email_lowercasing.sql# Lowercase email normalization
+│   └── 0004_event_registrations_attended.sql# Added attended column to event_registrations
 ├── tests/                     # Integration tests
 │   └── smoke_test.rs          # Smoke & security test suite
 ├── src/                       # Rust Backend
@@ -178,8 +181,15 @@ The platform reads all security and networking configurations from `.env` or sys
 | `JWT_COOKIE_NAME` | Name of the authentication cookie | `pms_admin_token` | `pms_admin_token` |
 | `JWT_COOKIE_SECURE` | Force Secure flag on auth cookie (`true`/`false`) | `false` in dev | `true` in production |
 | `RATE_LIMIT_LOGIN_RPM` | Max login requests per minute per IP | `10` | `10` |
-| `RATE_LIMIT_SUBMIT_RPM`| Max form submissions per minute per IP | `30` | `30` |
-| `TRUST_PROXY` | Trust proxy headers (`X-Forwarded-For`/`X-Real-IP`) (`true`/`false`) | `false` | Set `true` behind reverse proxy (Nginx/Caddy) to prevent all users sharing `127.0.0.1` |
+| `RATE_LIMIT_SUBMIT_RPM`| Max generic submissions per minute per IP | `30` | `30` |
+| `RATE_LIMIT_REGISTER_RPM`| Max event registrations per minute per IP | `60` | `60` |
+| `RATE_LIMIT_CONTACT_RPM` | Max contact form messages per minute per IP | `10` | `10` |
+| `RATE_LIMIT_NEWSLETTER_RPM`| Max newsletter subscriptions per minute per IP | `10` | `10` |
+| `RATE_LIMIT_MEMBERSHIP_RPM`| Max membership applications per minute per IP | `15` | `15` |
+| `RATE_LIMIT_CERT_VERIFY_RPM`| Max certificate verification checks per minute per IP | `30` | `30` |
+| `TRUST_PROXY` | Trust proxy headers (`X-Real-IP`, rightmost `X-Forwarded-For`) (`true`/`false`) | `false` | Set `true` behind reverse proxy (Nginx/Caddy) to prevent all users sharing `127.0.0.1` |
+| `TRUST_CLOUDFLARE` | Trust `CF-Connecting-IP` / `True-Client-IP` when `TRUST_PROXY=true` | `false` | Set `true` only if deployed directly behind Cloudflare |
+| `UPLOAD_DIR` | Directory to store uploaded media assets | `uploads` | `/var/www/pms-platform/uploads` |
 
 ### Generating a Secure JWT Secret
 Run the following command on Linux/macOS to generate a cryptographically strong 256-bit hexadecimal key:
@@ -319,7 +329,9 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header CF-Connecting-IP $http_cf_connecting_ip;
+        # Clear Cloudflare headers unless PMS is deployed directly behind Cloudflare
+        proxy_set_header CF-Connecting-IP "";
+        proxy_set_header True-Client-IP "";
     }
 
     # Static uploads with caching and security headers
@@ -334,30 +346,69 @@ server {
 }
 ```
 
+### SQLite Database Backup Command
+Because SQLite is used in Write-Ahead Logging (WAL) mode, safe online backups can be performed without interrupting ongoing write transactions:
+
+```bash
+# Ad-hoc point-in-time database snapshot
+sqlite3 pms.db ".backup 'pms-backup-$(date +%F).db'"
+```
+
+**Recommended Nightly Cron Task**:
+```cron
+0 2 * * * sqlite3 /var/www/pms-platform/pms.db ".backup '/var/backups/pms/pms-$(date +\%F).db'"
+```
+
 ---
 
 ## 📡 REST API Reference
 
-### Summary of Core Endpoints
+All list endpoints accept optional pagination query parameters: `limit` (default: 50, maximum: 200) and `offset` (default: 0). The response format is a direct JSON array.
 
-- `GET /api/stats` — Society metrics (active members, events held, years active)
-- `GET /api/announcements` — Active ticker announcements
-- `GET /api/events` — Upcoming and past symposiums & workshops
-- `POST /api/events/{id}/register` — Register for an event (rate-limited)
-- `GET /api/certificates/verify?code=...` — Verify digital certificate validity
-- `GET /api/team` — Current executive council and faculty advisor profiles
-- `GET /api/resources` — ASTM testing guides and computational tools
-- `GET /api/posts` — Technical articles and explainers
-- `POST /api/membership` — Submit student membership application (rate-limited)
-- `POST /api/contact` — Send society inquiry message (rate-limited)
-- `POST /api/newsletter` — Subscribe to newsletter (rate-limited)
-- `POST /api/auth/login` — Administrator authentication & httpOnly cookie issuance (rate-limited)
-- `POST /api/auth/logout` — Admin logout & cookie clearing
-- `POST /api/admin/upload` — Multipart file & image uploader (hardened, authenticated)
-- `GET/POST/PUT/DELETE /api/admin/*` — Protected CMS CRUD operations
+### Public Endpoints
+
+| Method | Endpoint | Description | Rate Limit |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/healthz` | Service health status (`{"status":"ok"}`) after `SELECT 1` ping | Unthrottled |
+| `GET` | `/sitemap.xml` | Dynamic XML sitemap listing canonical static and content URLs | Unthrottled |
+| `GET` | `/api/stats` | Society metrics (active members, events held, years active, contact) | Cached 60s |
+| `GET` | `/api/announcements` | Active announcement banners | Cached 60s |
+| `GET` | `/api/events` | Event listings. Filters: `is_past=false` (sorted ASC) or `is_past=true` (sorted DESC), `is_featured=true` | Unthrottled |
+| `GET` | `/api/events/{slug}` | Detailed event information | Unthrottled |
+| `POST` | `/api/events/{id}/register` | Event registration (trims and lowercases email; issues certificate code) | `RATE_LIMIT_REGISTER_RPM` (60) |
+| `GET` | `/api/certificates/verify?code=...` | Verify participation certificate (`valid: true` only if `attended = 1`) | `RATE_LIMIT_CERT_VERIFY_RPM` (30) |
+| `GET` | `/api/team` | Team directory and council members | Unthrottled |
+| `GET` | `/api/resources` | Categorized ASTM standards and academic guides | Unthrottled |
+| `GET` | `/api/posts` | Technical articles summary list (omits `body_markdown` for bandwidth efficiency) | Unthrottled |
+| `GET` | `/api/posts/{slug}` | Full article details including `body_markdown` | Unthrottled |
+| `GET` | `/api/opportunities` | Active opportunities (automatically hides opportunities with `deadline < today`) | Unthrottled |
+| `GET` | `/api/alumni` | Alumni profiles and testimonials | Unthrottled |
+| `GET` | `/api/projects` | Student FYPs and research projects | Unthrottled |
+| `GET` | `/api/gallery` | Micrographs and gallery items | Unthrottled |
+| `GET` | `/api/sponsors` | Active industry partners and sponsors | Unthrottled |
+| `GET` | `/api/faqs` | Published frequently asked questions | Unthrottled |
+| `GET` | `/api/sections` | Dynamic site content sections | Cached 60s |
+| `POST` | `/api/membership` | Submit membership application (trims and lowercases email) | `RATE_LIMIT_MEMBERSHIP_RPM` (15) |
+| `POST` | `/api/contact` | Submit inquiry message to the council | `RATE_LIMIT_CONTACT_RPM` (10) |
+| `POST` | `/api/newsletter` | Subscribe to newsletter bulletin | `RATE_LIMIT_NEWSLETTER_RPM` (10) |
+
+### Authentication & Admin Endpoints
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/api/auth/login` | Administrator login via Argon2 (`{"email", "password"}`). Issues httpOnly session cookie. Pass header `X-Return-Token: 1` to also receive JWT in JSON body for programmatic clients. |
+| `POST` | `/api/auth/logout` | Revokes the current verified JWT session in `revoked_tokens` and clears session cookie. |
+| `GET` | `/api/auth/me` | Returns current admin profile. |
+| `POST` | `/api/admin/upload` | Multipart file upload (validates MIME bytes: PNG/JPG/WebP/PDF/TXT; stores as `{uuid}.{ext}`). |
+| `GET` | `/api/admin/registrations` | Admin list of event registrations (supports `limit` and `offset`). |
+| `PUT` | `/api/admin/registrations/{id}` | Toggle participant attendance (`{"attended": true \| false}`). |
+| `GET` | `/api/admin/memberships` | Admin list of membership applications (supports `limit` and `offset`). |
+| `GET` | `/api/admin/contacts` | Admin list of contact messages (supports `limit` and `offset`). |
+| `GET` | `/api/admin/newsletter` | Admin list of newsletter subscribers (supports `limit` and `offset`). |
+| `GET/POST/PUT/DELETE`| `/api/admin/*` | Secured CMS CRUD endpoints for announcements, events, posts, team, resources, opportunities, alumni, projects, gallery, sponsors, faqs, sections, and stats. |
 
 ---
 
 ## 📜 License
 
-Developed for the **Department of Metallurgy & Materials Engineering (DMME)**, **Pakistan Institute of Engineering and Applied Sciences (PIEAS)**. All rights reserved. Available for academic and student society operations.
+Distributed under the [MIT License](LICENSE). Developed for the **Department of Metallurgy & Materials Engineering (DMME)**, **Pakistan Institute of Engineering and Applied Sciences (PIEAS)**.

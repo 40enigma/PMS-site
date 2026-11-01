@@ -1,6 +1,6 @@
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use axum::{
-    extract::{DefaultBodyLimit, Multipart, Path, State},
+    extract::{DefaultBodyLimit, Multipart, Path, Query, State},
     routing::{delete, get, post, put},
     Json, Router,
 };
@@ -12,6 +12,7 @@ use crate::auth::{create_token, jwt_cookie_name};
 use crate::error::AppError;
 use crate::models::*;
 use crate::rate_limit::{ClientIp, RateLimitState};
+use crate::util::{is_unique_violation, slugify};
 
 // ---------------------------------------------------------------------------
 // Allowed MIME types for file uploads
@@ -60,7 +61,10 @@ pub fn admin_routes() -> Router<SqlitePool> {
             put(update_event).delete(delete_event),
         )
         .route("/api/admin/registrations", get(list_registrations))
-        .route("/api/admin/registrations/{id}", delete(delete_registration))
+        .route(
+            "/api/admin/registrations/{id}",
+            put(update_registration).delete(delete_registration),
+        )
         .route("/api/admin/team", get(list_team).post(create_team_member))
         .route(
             "/api/admin/team/{id}",
@@ -172,6 +176,7 @@ pub async fn login(
     State(pool): State<SqlitePool>,
     jar: CookieJar,
     ClientIp(ip): ClientIp,
+    headers: axum::http::HeaderMap,
     Json(payload): Json<LoginRequest>,
 ) -> Result<(CookieJar, Json<LoginResponse>), AppError> {
     // Enforce rate limiting per client IP
@@ -204,13 +209,20 @@ pub async fn login(
         ),
     };
 
-    let parsed_hash = PasswordHash::new(&hash_to_verify)
-        .map_err(|_| AppError::Internal("Hash parse error".into()))?;
-    let verify_res = Argon2::default().verify_password(payload.password.as_bytes(), &parsed_hash);
+    let password = payload.password.clone();
+    let verify_res = tokio::task::spawn_blocking(move || {
+        let parsed_hash = PasswordHash::new(&hash_to_verify)
+            .map_err(|_| AppError::Internal("Hash parse error".into()))?;
+        Argon2::default()
+            .verify_password(password.as_bytes(), &parsed_hash)
+            .map_err(|_| AppError::Unauthorized)
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))?;
 
     let user = match user {
         Some(u) => {
-            verify_res.map_err(|_| AppError::Unauthorized)?;
+            verify_res?;
             u
         }
         None => {
@@ -224,12 +236,20 @@ pub async fn login(
     let cookie = build_auth_cookie(token.clone());
     let updated_jar = jar.add(cookie);
 
+    let return_token = headers
+        .get("x-return-token")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.trim() == "1")
+        .unwrap_or(false);
+
+    let response_token = if return_token { Some(token) } else { None };
+
     tracing::info!(user_id = user.id, email = %user.email, "Admin login successful");
 
     Ok((
         updated_jar,
         Json(LoginResponse {
-            token,
+            token: response_token,
             name: user.name,
             email: user.email,
         }),
@@ -240,8 +260,12 @@ pub async fn login(
 pub async fn logout(
     State(pool): State<SqlitePool>,
     jar: CookieJar,
+    ClientIp(ip): ClientIp,
     headers: axum::http::HeaderMap,
-) -> (CookieJar, Json<serde_json::Value>) {
+) -> Result<(CookieJar, Json<serde_json::Value>), AppError> {
+    // Apply submit rate limiting to logout
+    RateLimitState::global().check_submit(ip)?;
+
     // Extract token from cookie or Authorization header to revoke it
     let token_opt = if let Some(cookie) = jar.get(jwt_cookie_name()) {
         Some(cookie.value().to_string())
@@ -255,24 +279,18 @@ pub async fn logout(
     };
 
     if let Some(token) = token_opt {
-        let th = crate::auth::hash_token(&token);
-        let expires_at = match crate::auth::verify_token(&token) {
-            Ok(claims) => claims.exp as i64,
-            Err(_) => chrono::Utc::now().timestamp() + 86400,
-        };
-        let _ = sqlx::query(
-            "INSERT OR IGNORE INTO revoked_tokens (token_hash, expires_at) VALUES (?1, ?2)",
-        )
-        .bind(&th)
-        .bind(expires_at)
-        .execute(&pool)
-        .await;
-
-        let now = chrono::Utc::now().timestamp();
-        let _ = sqlx::query("DELETE FROM revoked_tokens WHERE expires_at < ?1")
-            .bind(now)
+        // Only insert into revoked_tokens if verify_token succeeds (use its real exp).
+        // Never insert unverifiable strings.
+        if let Ok(claims) = crate::auth::verify_token(&token) {
+            let th = crate::auth::hash_token(&token);
+            let _ = sqlx::query(
+                "INSERT OR IGNORE INTO revoked_tokens (token_hash, expires_at) VALUES (?1, ?2)",
+            )
+            .bind(&th)
+            .bind(claims.exp as i64)
             .execute(&pool)
             .await;
+        }
     }
 
     let removal = Cookie::build((jwt_cookie_name(), ""))
@@ -284,10 +302,10 @@ pub async fn logout(
         .build();
 
     let updated_jar = jar.remove(removal);
-    (
+    Ok((
         updated_jar,
         Json(serde_json::json!({"message": "Logged out successfully"})),
-    )
+    ))
 }
 
 #[axum::debug_handler]
@@ -304,7 +322,7 @@ pub async fn verify_session(
     .ok_or(AppError::Unauthorized)?;
 
     Ok(Json(LoginResponse {
-        token: String::new(),
+        token: None,
         name: user.name,
         email: user.email,
     }))
@@ -361,37 +379,46 @@ async fn upload_file(
         // Sniff the actual MIME type from magic bytes.
         let sniffed_mime = if let Some(t) = infer::get(&data) {
             t.mime_type()
-        } else if lower.ends_with(".txt") {
-            match std::str::from_utf8(&data) {
-                Ok(s) => {
-                    let s_lower = s.to_lowercase();
-                    if s_lower.contains("<script")
-                        || s_lower.contains("<html")
-                        || s_lower.contains("<?php")
-                        || s_lower.contains("<!doctype")
-                        || s_lower.contains("<svg")
-                        || s_lower.contains("<iframe")
-                    {
-                        return Err(AppError::BadRequest(
-                            "Text file contains disallowed script or markup content".into(),
-                        ));
-                    }
-                    "text/plain"
-                }
-                Err(_) => "application/octet-stream",
+        } else if let Ok(s) = std::str::from_utf8(&data) {
+            let s_lower = s.to_lowercase();
+            if s_lower.contains("<script")
+                || s_lower.contains("<html")
+                || s_lower.contains("<?php")
+                || s_lower.contains("<!doctype")
+                || s_lower.contains("<svg")
+                || s_lower.contains("<iframe")
+            {
+                return Err(AppError::BadRequest(
+                    "Text file contains disallowed script or markup content".into(),
+                ));
+            }
+            if declared_ct.as_deref() == Some("text/plain")
+                || lower.ends_with(".txt")
+                || !data.contains(&0)
+            {
+                "text/plain"
+            } else {
+                "application/octet-stream"
             }
         } else {
             "application/octet-stream"
         };
 
-        // Allow only the whitelisted MIME types.
-        if !ALLOWED_MIME_TYPES.contains(&sniffed_mime) {
-            return Err(AppError::BadRequest(format!(
-                "File content type '{}' is not allowed. Allowed: {}",
-                sniffed_mime,
-                ALLOWED_MIME_TYPES.join(", ")
-            )));
-        }
+        // Derive the extension from the sniffed MIME type (png/jpg/webp/pdf/txt)
+        let ext = match sniffed_mime {
+            "image/png" => "png",
+            "image/jpeg" => "jpg",
+            "image/webp" => "webp",
+            "application/pdf" => "pdf",
+            "text/plain" => "txt",
+            _ => {
+                return Err(AppError::BadRequest(format!(
+                    "File content type '{}' is not allowed. Allowed: {}",
+                    sniffed_mime,
+                    ALLOWED_MIME_TYPES.join(", ")
+                )));
+            }
+        };
 
         // Cross-check declared vs sniffed content type (informational log).
         if let Some(ref declared) = declared_ct {
@@ -404,9 +431,9 @@ async fn upload_file(
             }
         }
 
-        // Generate a safe filename (UUID prefix + original name, no path components).
+        // Do not use client-supplied filename; name files {uuid}.{ext}
         let upload_directory = crate::upload_dir();
-        let safe_name = format!("{}_{}", uuid::Uuid::new_v4(), file_name);
+        let safe_name = format!("{}.{}", uuid::Uuid::new_v4(), ext);
         let path = format!("{}/{}", upload_directory, safe_name);
 
         tokio::fs::write(&path, &data)
@@ -639,9 +666,9 @@ async fn update_stats(
          events_held=COALESCE(?2,events_held), \
          years_active=COALESCE(?3,years_active), \
          industrial_partners=COALESCE(?4,industrial_partners), \
-         constitution_pdf_url=?5, \
-         office_location=?6, \
-         contact_email=?7 \
+         constitution_pdf_url=CASE WHEN ?5 = '' THEN NULL ELSE COALESCE(?5,constitution_pdf_url) END, \
+         office_location=CASE WHEN ?6 = '' THEN NULL ELSE COALESCE(?6,office_location) END, \
+         contact_email=CASE WHEN ?7 = '' THEN NULL ELSE COALESCE(?7,contact_email) END \
          WHERE id=1",
     )
     .bind(p.active_members)
@@ -786,11 +813,47 @@ async fn delete_event(
 async fn list_registrations(
     _claims: AdminClaims,
     State(pool): State<SqlitePool>,
+    Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<Vec<EventRegistration>>, AppError> {
     let rows = sqlx::query_as::<_, EventRegistration>(
-        "SELECT id, event_id, student_name, roll_number, batch, department, email, phone, certificate_code, created_at FROM event_registrations ORDER BY id DESC"
-    ).fetch_all(&pool).await?;
+        "SELECT id, event_id, student_name, roll_number, batch, department, email, phone, certificate_code, attended, created_at FROM event_registrations ORDER BY id DESC LIMIT ?1 OFFSET ?2"
+    )
+    .bind(pagination.limit())
+    .bind(pagination.offset())
+    .fetch_all(&pool).await?;
     Ok(Json(rows))
+}
+
+#[axum::debug_handler]
+async fn update_registration(
+    _claims: AdminClaims,
+    State(pool): State<SqlitePool>,
+    Path(id): Path<i64>,
+    Json(payload): Json<UpdateEventRegistration>,
+) -> Result<Json<EventRegistration>, AppError> {
+    let current: Option<(bool,)> =
+        sqlx::query_as("SELECT attended FROM event_registrations WHERE id = ?1")
+            .bind(id)
+            .fetch_optional(&pool)
+            .await?;
+
+    let (current_attended,) = current.ok_or(AppError::NotFound)?;
+    let new_attended = payload.attended.unwrap_or(!current_attended);
+
+    sqlx::query("UPDATE event_registrations SET attended = ?1 WHERE id = ?2")
+        .bind(new_attended)
+        .bind(id)
+        .execute(&pool)
+        .await?;
+
+    let updated = sqlx::query_as::<_, EventRegistration>(
+        "SELECT id, event_id, student_name, roll_number, batch, department, email, phone, certificate_code, attended, created_at FROM event_registrations WHERE id = ?1"
+    )
+    .bind(id)
+    .fetch_one(&pool)
+    .await?;
+
+    Ok(Json(updated))
 }
 
 #[axum::debug_handler]
@@ -1583,10 +1646,14 @@ async fn delete_faq(
 async fn list_membership(
     _claims: AdminClaims,
     State(pool): State<SqlitePool>,
+    Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<Vec<MembershipApplication>>, AppError> {
     let rows = sqlx::query_as::<_, MembershipApplication>(
-        "SELECT id, full_name, roll_number, batch, department, email, phone, interests, why_join, status, created_at FROM membership_applications ORDER BY id DESC"
-    ).fetch_all(&pool).await?;
+        "SELECT id, full_name, roll_number, batch, department, email, phone, interests, why_join, status, created_at FROM membership_applications ORDER BY id DESC LIMIT ?1 OFFSET ?2"
+    )
+    .bind(pagination.limit())
+    .bind(pagination.offset())
+    .fetch_all(&pool).await?;
     Ok(Json(rows))
 }
 
@@ -1647,10 +1714,14 @@ async fn delete_membership(
 async fn list_contacts(
     _claims: AdminClaims,
     State(pool): State<SqlitePool>,
+    Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<Vec<ContactMessage>>, AppError> {
     let rows = sqlx::query_as::<_, ContactMessage>(
-        "SELECT id, name, email, subject, message, created_at FROM contact_messages ORDER BY id DESC"
-    ).fetch_all(&pool).await?;
+        "SELECT id, name, email, subject, message, created_at FROM contact_messages ORDER BY id DESC LIMIT ?1 OFFSET ?2"
+    )
+    .bind(pagination.limit())
+    .bind(pagination.offset())
+    .fetch_all(&pool).await?;
     Ok(Json(rows))
 }
 
@@ -1680,10 +1751,13 @@ async fn delete_contact(
 async fn list_newsletter(
     _claims: AdminClaims,
     State(pool): State<SqlitePool>,
+    Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<Vec<NewsletterSubscriber>>, AppError> {
     let rows = sqlx::query_as::<_, NewsletterSubscriber>(
-        "SELECT id, email, subscribed_at FROM newsletter_subscribers ORDER BY id DESC",
+        "SELECT id, email, subscribed_at FROM newsletter_subscribers ORDER BY id DESC LIMIT ?1 OFFSET ?2",
     )
+    .bind(pagination.limit())
+    .bind(pagination.offset())
     .fetch_all(&pool)
     .await?;
     Ok(Json(rows))
@@ -1716,25 +1790,33 @@ async fn create_membership_from_admin(
     if payload.full_name.trim().is_empty() {
         return Err(AppError::BadRequest("full_name is required".into()));
     }
-    if payload.email.trim().is_empty() || !payload.email.contains('@') {
+    let email = payload.email.trim().to_lowercase();
+    if email.is_empty() || !email.contains('@') {
         return Err(AppError::BadRequest("A valid email is required".into()));
     }
-    sqlx::query(
+    let res = sqlx::query(
         "INSERT INTO membership_applications (full_name, roll_number, batch, department, email, phone, interests, why_join) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"
     )
     .bind(&payload.full_name)
     .bind(&payload.roll_number)
     .bind(&payload.batch)
     .bind(&payload.department)
-    .bind(&payload.email)
+    .bind(&email)
     .bind(&payload.phone)
     .bind(&payload.interests)
     .bind(&payload.why_join)
     .execute(&pool)
-    .await?;
-    Ok(Json(DeleteResponse {
-        message: "Created membership record".into(),
-    }))
+    .await;
+
+    match res {
+        Ok(_) => Ok(Json(DeleteResponse {
+            message: "Created membership record".into(),
+        })),
+        Err(err) if is_unique_violation(&err) => Err(AppError::Conflict(
+            "An application with this Roll Number or Email already exists".into(),
+        )),
+        Err(err) => Err(AppError::Database(err)),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1767,17 +1849,24 @@ async fn create_section(
             return Err(AppError::BadRequest("extra_json must be valid JSON".into()));
         }
     }
-    sqlx::query("INSERT INTO site_sections (section_key, title, subtitle, content, badge, extra_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
+    let res = sqlx::query("INSERT INTO site_sections (section_key, title, subtitle, content, badge, extra_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
         .bind(&p.section_key)
         .bind(&p.title)
         .bind(&p.subtitle)
         .bind(&p.content)
         .bind(&p.badge)
         .bind(&p.extra_json)
-        .execute(&pool).await?;
-    Ok(Json(DeleteResponse {
-        message: "Created section".into(),
-    }))
+        .execute(&pool).await;
+
+    match res {
+        Ok(_) => Ok(Json(DeleteResponse {
+            message: "Created section".into(),
+        })),
+        Err(err) if is_unique_violation(&err) => Err(AppError::Conflict(
+            "A section with this section_key already exists".into(),
+        )),
+        Err(err) => Err(AppError::Database(err)),
+    }
 }
 
 #[axum::debug_handler]
@@ -1794,7 +1883,14 @@ async fn update_section(
         }
     }
     let res = sqlx::query(
-        "UPDATE site_sections SET title=COALESCE(?1,title), subtitle=?2, content=COALESCE(?3,content), badge=?4, extra_json=?5, updated_at=datetime('now') WHERE id=?6"
+        "UPDATE site_sections SET \
+         title=COALESCE(?1,title), \
+         subtitle=CASE WHEN ?2 = '' THEN NULL ELSE COALESCE(?2,subtitle) END, \
+         content=COALESCE(?3,content), \
+         badge=CASE WHEN ?4 = '' THEN NULL ELSE COALESCE(?4,badge) END, \
+         extra_json=CASE WHEN ?5 = '' THEN NULL ELSE COALESCE(?5,extra_json) END, \
+         updated_at=datetime('now') \
+         WHERE id=?6",
     )
     .bind(&p.title)
     .bind(&p.subtitle)
@@ -1802,7 +1898,8 @@ async fn update_section(
     .bind(&p.badge)
     .bind(&p.extra_json)
     .bind(id)
-    .execute(&pool).await?;
+    .execute(&pool)
+    .await?;
     if res.rows_affected() == 0 {
         return Err(AppError::NotFound);
     }
@@ -1827,35 +1924,4 @@ async fn delete_section(
     Ok(Json(DeleteResponse {
         message: "Deleted section".into(),
     }))
-}
-
-// ---------------------------------------------------------------------------
-// Utility
-// ---------------------------------------------------------------------------
-
-fn slugify(s: &str) -> String {
-    let slug = s
-        .to_lowercase()
-        .chars()
-        .map(|c| if c.is_alphanumeric() { c } else { '-' })
-        .collect::<String>()
-        .split('-')
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<&str>>()
-        .join("-");
-
-    if slug.is_empty() {
-        uuid::Uuid::new_v4().to_string()[..8].to_string()
-    } else {
-        slug
-    }
-}
-
-fn is_unique_violation(err: &sqlx::Error) -> bool {
-    if let sqlx::Error::Database(db_err) = err {
-        if db_err.is_unique_violation() {
-            return true;
-        }
-    }
-    err.to_string().contains("UNIQUE constraint failed")
 }

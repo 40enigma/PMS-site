@@ -9,6 +9,7 @@ use sqlx::SqlitePool;
 use crate::error::AppError;
 use crate::models::*;
 use crate::rate_limit::{ClientIp, RateLimitState};
+use crate::util::is_unique_violation;
 
 /// Query parameters for filtering
 #[derive(Debug, Deserialize)]
@@ -16,40 +17,54 @@ pub struct EventFilter {
     pub category: Option<String>,
     pub is_past: Option<bool>,
     pub is_featured: Option<bool>,
+    #[serde(flatten)]
+    pub pagination: PaginationParams,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct TeamFilter {
     pub tenure_year: Option<String>,
     pub is_current: Option<bool>,
+    #[serde(flatten)]
+    pub pagination: PaginationParams,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct PostFilter {
     pub category: Option<String>,
+    #[serde(flatten)]
+    pub pagination: PaginationParams,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ResourceFilter {
     pub category: Option<String>,
     pub software_tag: Option<String>,
+    #[serde(flatten)]
+    pub pagination: PaginationParams,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct OpportunityFilter {
     pub opportunity_type: Option<String>,
+    #[serde(flatten)]
+    pub pagination: PaginationParams,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ProjectFilter {
     pub project_type: Option<String>,
     pub batch: Option<String>,
+    #[serde(flatten)]
+    pub pagination: PaginationParams,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct GalleryFilter {
     pub year: Option<String>,
     pub event_name: Option<String>,
+    #[serde(flatten)]
+    pub pagination: PaginationParams,
 }
 
 #[derive(Debug, Deserialize)]
@@ -106,10 +121,13 @@ pub fn public_routes() -> Router<SqlitePool> {
 #[axum::debug_handler]
 pub async fn get_announcements(
     State(pool): State<SqlitePool>,
+    Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<Vec<Announcement>>, AppError> {
     let rows = sqlx::query_as::<_, Announcement>(
-        "SELECT id, message, link_text, link_url, priority, is_active, created_at FROM announcements WHERE is_active = 1 ORDER BY created_at DESC"
+        "SELECT id, message, link_text, link_url, priority, is_active, created_at FROM announcements WHERE is_active = 1 ORDER BY created_at DESC LIMIT ?1 OFFSET ?2"
     )
+    .bind(pagination.limit())
+    .bind(pagination.offset())
     .fetch_all(&pool)
     .await?;
     Ok(Json(rows))
@@ -131,18 +149,67 @@ pub async fn get_events(
     State(pool): State<SqlitePool>,
     Query(filter): Query<EventFilter>,
 ) -> Result<Json<Vec<Event>>, AppError> {
-    let rows = sqlx::query_as::<_, Event>(
-        "SELECT id, title, slug, date, time_range, venue, category, short_description, full_summary, poster_url, registration_link, speaker_or_organizer, is_past, is_featured FROM events
-         WHERE (?1 IS NULL OR category = ?1)
-           AND (?2 IS NULL OR is_past = ?2)
-           AND (?3 IS NULL OR is_featured = ?3)
-         ORDER BY date DESC"
-    )
-    .bind(&filter.category)
-    .bind(filter.is_past)
-    .bind(filter.is_featured)
-    .fetch_all(&pool)
-    .await?;
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+
+    let mut rows = match filter.is_past {
+        Some(true) => {
+            sqlx::query_as::<_, Event>(
+                "SELECT id, title, slug, date, time_range, venue, category, short_description, full_summary, poster_url, registration_link, speaker_or_organizer, is_past, is_featured FROM events
+                 WHERE (?1 IS NULL OR category = ?1)
+                   AND (?2 IS NULL OR is_featured = ?2)
+                   AND (is_past = 1 OR date < ?3)
+                 ORDER BY date DESC
+                 LIMIT ?4 OFFSET ?5",
+            )
+            .bind(&filter.category)
+            .bind(filter.is_featured)
+            .bind(&today)
+            .bind(filter.pagination.limit())
+            .bind(filter.pagination.offset())
+            .fetch_all(&pool)
+            .await?
+        }
+        Some(false) => {
+            sqlx::query_as::<_, Event>(
+                "SELECT id, title, slug, date, time_range, venue, category, short_description, full_summary, poster_url, registration_link, speaker_or_organizer, is_past, is_featured FROM events
+                 WHERE (?1 IS NULL OR category = ?1)
+                   AND (?2 IS NULL OR is_featured = ?2)
+                   AND (is_past = 0 AND date >= ?3)
+                 ORDER BY date ASC
+                 LIMIT ?4 OFFSET ?5",
+            )
+            .bind(&filter.category)
+            .bind(filter.is_featured)
+            .bind(&today)
+            .bind(filter.pagination.limit())
+            .bind(filter.pagination.offset())
+            .fetch_all(&pool)
+            .await?
+        }
+        None => {
+            sqlx::query_as::<_, Event>(
+                "SELECT id, title, slug, date, time_range, venue, category, short_description, full_summary, poster_url, registration_link, speaker_or_organizer, is_past, is_featured FROM events
+                 WHERE (?1 IS NULL OR category = ?1)
+                   AND (?2 IS NULL OR is_featured = ?2)
+                 ORDER BY CASE WHEN (is_past = 1 OR date < ?3) THEN 1 ELSE 0 END ASC,
+                          CASE WHEN (is_past = 1 OR date < ?3) THEN '' ELSE date END ASC,
+                          date DESC
+                 LIMIT ?4 OFFSET ?5",
+            )
+            .bind(&filter.category)
+            .bind(filter.is_featured)
+            .bind(&today)
+            .bind(filter.pagination.limit())
+            .bind(filter.pagination.offset())
+            .fetch_all(&pool)
+            .await?
+        }
+    };
+
+    for row in &mut rows {
+        row.is_past = row.is_past || row.date < today;
+    }
+
     Ok(Json(rows))
 }
 
@@ -151,13 +218,17 @@ pub async fn get_event(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
 ) -> Result<Json<Event>, AppError> {
-    let row = sqlx::query_as::<_, Event>(
+    let mut row = sqlx::query_as::<_, Event>(
         "SELECT id, title, slug, date, time_range, venue, category, short_description, full_summary, poster_url, registration_link, speaker_or_organizer, is_past, is_featured FROM events WHERE id = ?1"
     )
     .bind(id)
     .fetch_optional(&pool)
     .await?
     .ok_or(AppError::NotFound)?;
+
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    row.is_past = row.is_past || row.date < today;
+
     Ok(Json(row))
 }
 
@@ -168,7 +239,9 @@ pub async fn register_for_event(
     ClientIp(ip): ClientIp,
     Json(payload): Json<CreateEventRegistration>,
 ) -> Result<Json<EventRegistration>, AppError> {
-    RateLimitState::global().check_submit(ip)?;
+    RateLimitState::global().check_register(ip)?;
+
+    let email = payload.email.trim().to_lowercase();
 
     // Input validation
     if payload.student_name.trim().is_empty() {
@@ -179,10 +252,10 @@ pub async fn register_for_event(
             "student_name is too long (max 200 chars)".into(),
         ));
     }
-    if payload.email.trim().is_empty() || !payload.email.contains('@') {
+    if email.is_empty() || !email.contains('@') {
         return Err(AppError::BadRequest("A valid email is required".into()));
     }
-    if payload.email.len() > 254 {
+    if email.len() > 254 {
         return Err(AppError::BadRequest("email is too long".into()));
     }
     if payload.roll_number.trim().is_empty() {
@@ -217,14 +290,16 @@ pub async fn register_for_event(
         }
     }
 
-    // Check event exists and is not past
-    let (is_past,): (bool,) = sqlx::query_as("SELECT is_past FROM events WHERE id = ?1")
-        .bind(event_id)
-        .fetch_optional(&pool)
-        .await?
-        .ok_or(AppError::NotFound)?;
+    // Check event exists and is not past (both flag and date)
+    let (is_past, date): (bool, String) =
+        sqlx::query_as("SELECT is_past, date FROM events WHERE id = ?1")
+            .bind(event_id)
+            .fetch_optional(&pool)
+            .await?
+            .ok_or(AppError::NotFound)?;
 
-    if is_past {
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    if is_past || date < today {
         return Err(AppError::BadRequest(
             "Registration is closed for past events".into(),
         ));
@@ -237,14 +312,14 @@ pub async fn register_for_event(
     );
 
     let insert_res = sqlx::query(
-        "INSERT INTO event_registrations (event_id, student_name, roll_number, batch, department, email, phone, certificate_code) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"
+        "INSERT INTO event_registrations (event_id, student_name, roll_number, batch, department, email, phone, certificate_code, attended) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0)"
     )
     .bind(event_id)
     .bind(&payload.student_name)
     .bind(&payload.roll_number)
     .bind(&payload.batch)
     .bind(&payload.department)
-    .bind(&payload.email)
+    .bind(&email)
     .bind(&payload.phone)
     .bind(&cert_code)
     .execute(&pool)
@@ -260,7 +335,7 @@ pub async fn register_for_event(
     }
 
     let reg = sqlx::query_as::<_, EventRegistration>(
-        "SELECT id, event_id, student_name, roll_number, batch, department, email, phone, certificate_code, created_at FROM event_registrations WHERE certificate_code = ?1"
+        "SELECT id, event_id, student_name, roll_number, batch, department, email, phone, certificate_code, attended, created_at FROM event_registrations WHERE certificate_code = ?1"
     )
     .bind(&cert_code)
     .fetch_one(&pool)
@@ -278,21 +353,21 @@ pub async fn verify_certificate(
     RateLimitState::global().check_certificate_verify(ip)?;
 
     let code_trimmed = q.code.trim();
-    let result = sqlx::query_as::<_, (String, String, String)>(
-        "SELECT er.student_name, e.title, er.certificate_code FROM event_registrations er JOIN events e ON er.event_id = e.id WHERE er.certificate_code = ?1 COLLATE NOCASE"
+    let result = sqlx::query_as::<_, (String, String, String, bool)>(
+        "SELECT er.student_name, e.title, er.certificate_code, er.attended FROM event_registrations er JOIN events e ON er.event_id = e.id WHERE er.certificate_code = ?1 COLLATE NOCASE"
     )
     .bind(code_trimmed)
     .fetch_optional(&pool)
     .await?;
 
     match result {
-        Some((name, title, code)) => Ok(Json(CertificateVerification {
+        Some((name, title, code, attended)) if attended => Ok(Json(CertificateVerification {
             valid: true,
             student_name: Some(name),
             event_title: Some(title),
             certificate_code: Some(code),
         })),
-        None => Ok(Json(CertificateVerification {
+        _ => Ok(Json(CertificateVerification {
             valid: false,
             student_name: None,
             event_title: None,
@@ -310,10 +385,13 @@ pub async fn get_team(
         "SELECT id, name, role, role_responsibility, photo_url, batch, tenure_year, is_current, is_faculty_advisor, bio, linkedin_url, email, display_order FROM team_members
          WHERE (?1 IS NULL OR tenure_year = ?1)
            AND (?2 IS NULL OR is_current = ?2)
-         ORDER BY display_order ASC"
+         ORDER BY display_order ASC
+         LIMIT ?3 OFFSET ?4"
     )
     .bind(&filter.tenure_year)
     .bind(filter.is_current)
+    .bind(filter.pagination.limit())
+    .bind(filter.pagination.offset())
     .fetch_all(&pool)
     .await?;
     Ok(Json(rows))
@@ -328,10 +406,13 @@ pub async fn get_gallery(
         "SELECT id, image_url, caption, event_id, event_name, year, created_at FROM gallery_images
          WHERE (?1 IS NULL OR year = ?1)
            AND (?2 IS NULL OR event_name = ?2)
-         ORDER BY created_at DESC",
+         ORDER BY created_at DESC
+         LIMIT ?3 OFFSET ?4",
     )
     .bind(&filter.year)
     .bind(&filter.event_name)
+    .bind(filter.pagination.limit())
+    .bind(filter.pagination.offset())
     .fetch_all(&pool)
     .await?;
     Ok(Json(rows))
@@ -343,11 +424,14 @@ pub async fn get_posts(
     Query(filter): Query<PostFilter>,
 ) -> Result<Json<Vec<Post>>, AppError> {
     let rows = sqlx::query_as::<_, Post>(
-        "SELECT id, title, slug, excerpt, body_markdown, author_name, author_role, author_batch, cover_image_url, category, material_formula, crystal_structure, read_time_minutes, is_featured, published_at FROM posts
+        "SELECT id, title, slug, excerpt, CAST(NULL AS TEXT) as body_markdown, author_name, author_role, author_batch, cover_image_url, category, material_formula, crystal_structure, read_time_minutes, is_featured, published_at FROM posts
          WHERE (?1 IS NULL OR category = ?1)
-         ORDER BY published_at DESC"
+         ORDER BY published_at DESC
+         LIMIT ?2 OFFSET ?3"
     )
     .bind(&filter.category)
+    .bind(filter.pagination.limit())
+    .bind(filter.pagination.offset())
     .fetch_all(&pool)
     .await?;
     Ok(Json(rows))
@@ -377,10 +461,13 @@ pub async fn get_resources(
         "SELECT id, title, url, category, software_tag, description, is_pinned FROM resources
          WHERE (?1 IS NULL OR category = ?1)
            AND (?2 IS NULL OR software_tag = ?2)
-         ORDER BY is_pinned DESC, title ASC",
+         ORDER BY is_pinned DESC, title ASC
+         LIMIT ?3 OFFSET ?4",
     )
     .bind(&filter.category)
     .bind(&filter.software_tag)
+    .bind(filter.pagination.limit())
+    .bind(filter.pagination.offset())
     .fetch_all(&pool)
     .await?;
     Ok(Json(rows))
@@ -391,23 +478,34 @@ pub async fn get_opportunities(
     State(pool): State<SqlitePool>,
     Query(filter): Query<OpportunityFilter>,
 ) -> Result<Json<Vec<Opportunity>>, AppError> {
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
     let rows = sqlx::query_as::<_, Opportunity>(
         "SELECT id, title, organization, opportunity_type, location, deadline, apply_url, description, posted_by_alumnus, is_active, created_at FROM opportunities
          WHERE is_active = 1
            AND (?1 IS NULL OR opportunity_type = ?1)
-         ORDER BY deadline ASC"
+           AND (deadline IS NULL OR deadline >= ?2)
+         ORDER BY CASE WHEN deadline IS NULL THEN 1 ELSE 0 END ASC, deadline ASC
+         LIMIT ?3 OFFSET ?4"
     )
     .bind(&filter.opportunity_type)
+    .bind(&today)
+    .bind(filter.pagination.limit())
+    .bind(filter.pagination.offset())
     .fetch_all(&pool)
     .await?;
     Ok(Json(rows))
 }
 
 #[axum::debug_handler]
-pub async fn get_alumni(State(pool): State<SqlitePool>) -> Result<Json<Vec<Alumnus>>, AppError> {
+pub async fn get_alumni(
+    State(pool): State<SqlitePool>,
+    Query(pagination): Query<PaginationParams>,
+) -> Result<Json<Vec<Alumnus>>, AppError> {
     let rows = sqlx::query_as::<_, Alumnus>(
-        "SELECT id, name, graduating_batch, current_role, current_organization, industry_sector, location, photo_url, quote_testimonial, linkedin_url FROM alumni ORDER BY graduating_batch DESC"
+        "SELECT id, name, graduating_batch, current_role, current_organization, industry_sector, location, photo_url, quote_testimonial, linkedin_url FROM alumni ORDER BY graduating_batch DESC LIMIT ?1 OFFSET ?2"
     )
+    .bind(pagination.limit())
+    .bind(pagination.offset())
     .fetch_all(&pool)
     .await?;
     Ok(Json(rows))
@@ -422,30 +520,43 @@ pub async fn get_projects(
         "SELECT id, title, students, batch, supervisors, project_type, abstract, image_url, paper_or_repo_url, tags FROM projects
          WHERE (?1 IS NULL OR project_type = ?1)
            AND (?2 IS NULL OR batch = ?2)
-         ORDER BY batch DESC, title ASC"
+         ORDER BY batch DESC, title ASC
+         LIMIT ?3 OFFSET ?4"
     )
     .bind(&filter.project_type)
     .bind(&filter.batch)
+    .bind(filter.pagination.limit())
+    .bind(filter.pagination.offset())
     .fetch_all(&pool)
     .await?;
     Ok(Json(rows))
 }
 
 #[axum::debug_handler]
-pub async fn get_sponsors(State(pool): State<SqlitePool>) -> Result<Json<Vec<Sponsor>>, AppError> {
+pub async fn get_sponsors(
+    State(pool): State<SqlitePool>,
+    Query(pagination): Query<PaginationParams>,
+) -> Result<Json<Vec<Sponsor>>, AppError> {
     let rows = sqlx::query_as::<_, Sponsor>(
-        "SELECT id, name, logo_url, website_url, tier, since_year, display_order FROM sponsors ORDER BY display_order ASC, CASE tier WHEN 'Platinum' THEN 1 WHEN 'Gold' THEN 2 WHEN 'Silver' THEN 3 ELSE 4 END"
+        "SELECT id, name, logo_url, website_url, tier, since_year, display_order FROM sponsors ORDER BY display_order ASC, CASE tier WHEN 'Platinum' THEN 1 WHEN 'Gold' THEN 2 WHEN 'Silver' THEN 3 ELSE 4 END LIMIT ?1 OFFSET ?2"
     )
+    .bind(pagination.limit())
+    .bind(pagination.offset())
     .fetch_all(&pool)
     .await?;
     Ok(Json(rows))
 }
 
 #[axum::debug_handler]
-pub async fn get_faqs(State(pool): State<SqlitePool>) -> Result<Json<Vec<Faq>>, AppError> {
+pub async fn get_faqs(
+    State(pool): State<SqlitePool>,
+    Query(pagination): Query<PaginationParams>,
+) -> Result<Json<Vec<Faq>>, AppError> {
     let rows = sqlx::query_as::<_, Faq>(
-        "SELECT id, question, answer, category, display_order FROM faqs ORDER BY display_order ASC",
+        "SELECT id, question, answer, category, display_order FROM faqs ORDER BY display_order ASC LIMIT ?1 OFFSET ?2",
     )
+    .bind(pagination.limit())
+    .bind(pagination.offset())
     .fetch_all(&pool)
     .await?;
     Ok(Json(rows))
@@ -461,7 +572,9 @@ pub async fn submit_membership(
     ClientIp(ip): ClientIp,
     Json(payload): Json<CreateMembershipApplication>,
 ) -> Result<Json<MembershipApplication>, AppError> {
-    RateLimitState::global().check_submit(ip)?;
+    RateLimitState::global().check_membership(ip)?;
+
+    let email = payload.email.trim().to_lowercase();
 
     // Input validation
     if payload.full_name.trim().is_empty() {
@@ -472,10 +585,10 @@ pub async fn submit_membership(
             "full_name is too long (max 200 chars)".into(),
         ));
     }
-    if payload.email.trim().is_empty() || !payload.email.contains('@') {
+    if email.is_empty() || !email.contains('@') {
         return Err(AppError::BadRequest("A valid email is required".into()));
     }
-    if payload.email.len() > 254 {
+    if email.len() > 254 {
         return Err(AppError::BadRequest("email is too long".into()));
     }
     if payload.roll_number.trim().is_empty() {
@@ -531,7 +644,7 @@ pub async fn submit_membership(
     .bind(&payload.roll_number)
     .bind(&payload.batch)
     .bind(&payload.department)
-    .bind(&payload.email)
+    .bind(&email)
     .bind(&payload.phone)
     .bind(&payload.interests)
     .bind(&payload.why_join)
@@ -568,7 +681,7 @@ pub async fn submit_contact(
     ClientIp(ip): ClientIp,
     Json(payload): Json<CreateContactMessage>,
 ) -> Result<Json<ContactMessage>, AppError> {
-    RateLimitState::global().check_submit(ip)?;
+    RateLimitState::global().check_contact(ip)?;
 
     // Input validation
     if payload.name.trim().is_empty() {
@@ -620,7 +733,7 @@ pub async fn subscribe_newsletter(
     ClientIp(ip): ClientIp,
     Json(payload): Json<CreateNewsletterSubscriber>,
 ) -> Result<Json<NewsletterSubscriber>, AppError> {
-    RateLimitState::global().check_submit(ip)?;
+    RateLimitState::global().check_newsletter(ip)?;
 
     let email = payload.email.trim().to_lowercase();
 
@@ -650,20 +763,14 @@ pub async fn subscribe_newsletter(
 #[axum::debug_handler]
 pub async fn get_sections(
     State(pool): State<SqlitePool>,
+    Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<Vec<SiteSection>>, AppError> {
     let rows = sqlx::query_as::<_, SiteSection>(
-        "SELECT id, section_key, title, subtitle, content, badge, extra_json, updated_at FROM site_sections ORDER BY id ASC"
+        "SELECT id, section_key, title, subtitle, content, badge, extra_json, updated_at FROM site_sections ORDER BY id ASC LIMIT ?1 OFFSET ?2"
     )
+    .bind(pagination.limit())
+    .bind(pagination.offset())
     .fetch_all(&pool)
     .await?;
     Ok(Json(rows))
-}
-
-fn is_unique_violation(err: &sqlx::Error) -> bool {
-    if let sqlx::Error::Database(db_err) = err {
-        if db_err.is_unique_violation() {
-            return true;
-        }
-    }
-    err.to_string().contains("UNIQUE constraint failed")
 }

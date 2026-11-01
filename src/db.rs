@@ -24,32 +24,80 @@ pub async fn init_pool() -> SqlitePool {
     pool
 }
 
-/// Run all CREATE TABLE IF NOT EXISTS migrations and track version.
+/// Run all migrations and track version in _pms_migrations.
 pub async fn run_migrations(pool: &SqlitePool) {
-    let schema = include_str!("../migrations/0001_initial_schema.sql");
-    sqlx::raw_sql(schema)
-        .execute(pool)
-        .await
-        .expect("Failed to run migrations");
-
-    // Track migration version in _pms_migrations
-    let _ = sqlx::query(
-        "INSERT OR IGNORE INTO _pms_migrations (version) VALUES ('0001_initial_schema')",
+    // Ensure migration tracking table exists
+    sqlx::raw_sql(
+        "CREATE TABLE IF NOT EXISTS _pms_migrations (
+            version TEXT PRIMARY KEY,
+            applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );",
     )
     .execute(pool)
-    .await;
+    .await
+    .expect("Failed to initialize _pms_migrations table");
 
-    let revocation_schema = include_str!("../migrations/0002_token_revocation.sql");
-    sqlx::raw_sql(revocation_schema)
+    let applied: std::collections::HashSet<String> =
+        sqlx::query_scalar("SELECT version FROM _pms_migrations")
+            .fetch_all(pool)
+            .await
+            .expect("Failed to fetch applied migrations")
+            .into_iter()
+            .collect();
+
+    let migrations: &[(&str, &str)] = &[
+        (
+            "0001_initial_schema",
+            include_str!("../migrations/0001_initial_schema.sql"),
+        ),
+        (
+            "0002_token_revocation",
+            include_str!("../migrations/0002_token_revocation.sql"),
+        ),
+        (
+            "0003_email_lowercasing",
+            include_str!("../migrations/0003_email_lowercasing.sql"),
+        ),
+        (
+            "0004_event_registrations_attended",
+            include_str!("../migrations/0004_event_registrations_attended.sql"),
+        ),
+    ];
+
+    for (version, sql) in migrations {
+        if !applied.contains(*version) {
+            let mut tx = pool
+                .begin()
+                .await
+                .expect("Failed to begin transaction for migration");
+
+            sqlx::raw_sql(sql)
+                .execute(&mut *tx)
+                .await
+                .unwrap_or_else(|e| panic!("Failed running migration {}: {}", version, e));
+
+            sqlx::query("INSERT INTO _pms_migrations (version) VALUES (?1)")
+                .bind(version)
+                .execute(&mut *tx)
+                .await
+                .unwrap_or_else(|e| panic!("Failed recording migration {}: {}", version, e));
+
+            tx.commit()
+                .await
+                .expect("Failed committing migration transaction");
+
+            tracing::info!(version = version, "Applied migration");
+        }
+    }
+
+    // Ensure site_stats default row (id=1) exists so /api/stats works when SEED_DATA=false
+    sqlx::query("INSERT OR IGNORE INTO site_stats (id) VALUES (1)")
         .execute(pool)
         .await
-        .expect("Failed to run token revocation migration");
+        .expect("Failed to initialize site_stats row");
 
-    let _ = sqlx::query(
-        "INSERT OR IGNORE INTO _pms_migrations (version) VALUES ('0002_token_revocation')",
-    )
-    .execute(pool)
-    .await;
+    // Startup prune for expired revoked tokens
+    prune_expired_revoked_tokens(pool).await;
 
     // Ensure site_sections default entries exist (runs for new and existing databases)
     sqlx::query(
@@ -68,94 +116,6 @@ pub async fn run_migrations(pool: &SqlitePool) {
     .execute(pool)
     .await
     .expect("Failed to seed default site_sections");
-
-    // Align content and subtitle for home_activities and team_guidance if placeholder exists
-    let _ = sqlx::query(
-        r#"
-        UPDATE site_sections
-        SET content = subtitle, subtitle = badge
-        WHERE section_key = 'home_activities' AND content = 'Society Portfolios'
-        "#,
-    )
-    .execute(pool)
-    .await;
-
-    let _ = sqlx::query(
-        r#"
-        UPDATE site_sections
-        SET content = subtitle
-        WHERE section_key = 'team_guidance' AND content = 'Portfolios'
-        "#,
-    )
-    .execute(pool)
-    .await;
-
-    // Normalize existing emails to lowercase safely, skipping and logging collisions to preserve data
-    let colliding_admins: Vec<(i64, String)> = sqlx::query_as(
-        r#"
-        SELECT id, email FROM admin_users
-        WHERE email != lower(email)
-          AND lower(email) IN (
-            SELECT lower(email) FROM admin_users GROUP BY lower(email) HAVING count(*) > 1
-          )
-        "#,
-    )
-    .fetch_all(pool)
-    .await
-    .unwrap_or_default();
-
-    for (id, email) in colliding_admins {
-        tracing::warn!(
-            "Skipping email lowercasing for admin_users id={} email='{}': collision with existing email",
-            id, email
-        );
-    }
-
-    let _ = sqlx::query(
-        r#"
-        UPDATE admin_users
-        SET email = lower(email)
-        WHERE email != lower(email)
-          AND lower(email) NOT IN (
-            SELECT lower(email) FROM admin_users GROUP BY lower(email) HAVING count(*) > 1
-          )
-        "#,
-    )
-    .execute(pool)
-    .await;
-
-    let colliding_subscribers: Vec<(i64, String)> = sqlx::query_as(
-        r#"
-        SELECT id, email FROM newsletter_subscribers
-        WHERE email != lower(email)
-          AND lower(email) IN (
-            SELECT lower(email) FROM newsletter_subscribers GROUP BY lower(email) HAVING count(*) > 1
-          )
-        "#,
-    )
-    .fetch_all(pool)
-    .await
-    .unwrap_or_default();
-
-    for (id, email) in colliding_subscribers {
-        tracing::warn!(
-            "Skipping email lowercasing for newsletter_subscribers id={} email='{}': collision with existing email",
-            id, email
-        );
-    }
-
-    let _ = sqlx::query(
-        r#"
-        UPDATE newsletter_subscribers
-        SET email = lower(email)
-        WHERE email != lower(email)
-          AND lower(email) NOT IN (
-            SELECT lower(email) FROM newsletter_subscribers GROUP BY lower(email) HAVING count(*) > 1
-          )
-        "#,
-    )
-    .execute(pool)
-    .await;
 
     tracing::info!("✅ Database migrations complete");
 }
@@ -198,8 +158,8 @@ pub async fn seed_data(pool: &SqlitePool) {
                 .expect("Failed to hash password")
                 .to_string();
 
-            sqlx::query(
-                "INSERT INTO admin_users (email, password_hash, name) VALUES (?1, ?2, ?3) ON CONFLICT(email) DO UPDATE SET password_hash = excluded.password_hash, name = excluded.name",
+            let res = sqlx::query(
+                "INSERT INTO admin_users (email, password_hash, name) VALUES (?1, ?2, ?3) ON CONFLICT(email) DO NOTHING",
             )
             .bind(&admin_email)
             .bind(&password_hash)
@@ -208,7 +168,11 @@ pub async fn seed_data(pool: &SqlitePool) {
             .await
             .expect("Failed to seed admin user");
 
-            tracing::info!(email = %admin_email, "✅ Admin user seeded (SEED_ADMIN=true)");
+            if res.rows_affected() == 0 {
+                tracing::info!(email = %admin_email, "Admin user already exists (skipped creation)");
+            } else {
+                tracing::info!(email = %admin_email, "✅ Admin user seeded (SEED_ADMIN=true)");
+            }
         }
     } else {
         tracing::info!(
@@ -218,9 +182,28 @@ pub async fn seed_data(pool: &SqlitePool) {
         );
     }
 
+    // Gate table seeding on _db_metadata.initial_seed_done
+    let already_seeded: Option<(String,)> =
+        sqlx::query_as("SELECT value FROM _db_metadata WHERE key = 'initial_seed_done'")
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None);
+
+    if let Some((v,)) = already_seeded {
+        if v == "1" || v.eq_ignore_ascii_case("true") {
+            tracing::info!(
+                "Database already seeded (initial_seed_done=1), skipping table seeding."
+            );
+            return;
+        }
+    }
+
+    let is_production =
+        std::env::var("RUST_ENV").unwrap_or_default().to_lowercase() == "production";
+    let default_seed_data = !is_production;
     let seed_data = std::env::var("SEED_DATA")
-        .map(|v| v.to_lowercase() != "false")
-        .unwrap_or(true);
+        .map(|v| v.to_lowercase() != "false" && v != "0")
+        .unwrap_or(default_seed_data);
 
     if !seed_data {
         tracing::info!("SEED_DATA=false, skipping database seeding.");
@@ -229,8 +212,9 @@ pub async fn seed_data(pool: &SqlitePool) {
 
     tracing::info!("Checking and seeding database with initial academic society records...");
 
+    // Seed constitution_pdf_url as NULL so footer link remains hidden until uploaded
     sqlx::query(
-        "INSERT OR IGNORE INTO site_stats (id, active_members, events_held, years_active, industrial_partners, constitution_pdf_url, office_location, contact_email) VALUES (1, 85, 42, 6, 12, '/uploads/pms-constitution.pdf', 'Department of Metallurgy & Materials Engineering (DMME) Block, PIEAS, Nilore, Islamabad', 'pms@pieas.edu.pk')"
+        "INSERT OR IGNORE INTO site_stats (id, active_members, events_held, years_active, industrial_partners, constitution_pdf_url, office_location, contact_email) VALUES (1, 85, 42, 6, 12, NULL, 'Department of Metallurgy & Materials Engineering (DMME) Block, PIEAS, Nilore, Islamabad', 'pms@pieas.edu.pk')"
     )
     .execute(pool)
     .await
@@ -500,7 +484,7 @@ The Continuous Cooling Transformation diagram maps these transformations as a fu
             ('Is there a membership fee?', 'PMS membership is completely free. We believe in making technical knowledge and networking opportunities accessible to all PIEAS students without financial barriers.', 'Membership', 2),
             ('How do I apply to become a PMS council member?', 'Council elections are held annually, typically in September. Interested students must submit a candidacy form, deliver a short presentation to the general body outlining their vision for their desired portfolio, and win a majority vote. Watch for announcements at the start of each academic year.', 'Council', 3),
             ('Can non-DMME students attend PMS events?', 'Absolutely! All PMS technical seminars, workshops, and industrial visits are open to the entire PIEAS student community. Some hands-on workshops may have limited seats due to lab capacity, so early registration is recommended.', 'Events', 4),
-            ('Does PMS provide certificates for events?', 'Yes, PMS issues verifiable participation certificates for all workshops, competitions, and seminars. Each certificate has a unique verification code that can be validated on our website under the Events page.', 'Certificates', 5),
+            ('Does PMS provide certificates for events?', 'Yes, PMS issues verifiable participation certificates for all workshops, competitions, and seminars. Each certificate has a unique verification code that can be validated on our website under the Events page. Note that certificates are only valid after attendance has been confirmed by event organizers.', 'Certificates', 5),
             ('How can industry professionals or alumni collaborate with PMS?', 'We welcome collaborations! Industry partners can sponsor events, deliver guest lectures, offer internship positions, or co-organize competitions. Alumni can contribute by sharing career experiences, mentoring students, or posting opportunities. Contact us at pms@pieas.edu.pk or use the Contact form on our website.', 'Collaboration', 6)"#
         )
         .execute(pool)
@@ -538,4 +522,28 @@ The Continuous Cooling Transformation diagram maps these transformations as a fu
     .await;
 
     tracing::info!("Database seeding complete.");
+}
+
+/// Prune expired revoked tokens from the database.
+pub async fn prune_expired_revoked_tokens(pool: &SqlitePool) {
+    let now = chrono::Utc::now().timestamp();
+    let _ = sqlx::query("DELETE FROM revoked_tokens WHERE expires_at < ?1")
+        .bind(now)
+        .execute(pool)
+        .await;
+}
+
+/// Start background tokio task that deletes expired revoked_tokens every 10 minutes,
+/// and executes an immediate startup prune.
+pub fn spawn_revoked_token_pruner(pool: SqlitePool) {
+    tokio::spawn(async move {
+        // Startup prune
+        prune_expired_revoked_tokens(&pool).await;
+
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(600));
+        loop {
+            interval.tick().await;
+            prune_expired_revoked_tokens(&pool).await;
+        }
+    });
 }

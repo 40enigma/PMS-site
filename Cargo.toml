@@ -17,8 +17,7 @@ tokio = { version = "1.43", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "macros", "chrono", "uuid"] }
-tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "fs", "trace", "compression-gzip"] }
+tower-http = { version = "0.6", features = ["cors", "fs", "trace", "compression-gzip", "compression-br"] }
 jsonwebtoken = "9.3"
 argon2 = "0.5"
 rand_core = { version = "0.6", features = ["getrandom"] }
@@ -42,3 +41,10 @@ time = "0.3"
 tokio = { version = "1.43", features = ["full", "test-util"] }
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
+serial_test = "3.2"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+

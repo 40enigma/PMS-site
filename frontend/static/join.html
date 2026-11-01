@@ -10,8 +10,15 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/assets/style.css">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://pms.pieas.edu.pk/join">
+  <meta property="og:title" content="Join PMS &amp; Contact Society – PIEAS Materials Society">
+  <meta property="og:description" content="Apply to join PIEAS Materials Society (PMS) or send inquiries to the DMME executive council.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://pms.pieas.edu.pk/join">
+  <meta property="og:image" content="https://pms.pieas.edu.pk/pms-logo.jpeg">
 </head>
 <body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
 <div id="announcement-banner" class="banner" style="display:none"></div>
 
 <!-- Navbar -->
@@ -38,11 +45,12 @@
   </div>
 </nav>
 
+<main id="main-content">
 <section class="hero" style="padding:3.5rem 0 2.5rem">
   <div class="container hero-content">
     <span class="badge">Student Membership</span>
     <h1 class="fade-up">Join PIEAS Materials Society</h1>
-    <p class="hero-desc fade-up fade-up-delay-1">Membership is free and open to all undergraduate and graduate students at PIEAS passionate about materials science.</p>
+    <p class="hero-desc fade-up">Membership is free and open to all undergraduate and graduate students at PIEAS passionate about materials science.</p>
   </div>
 </section>
 
@@ -124,6 +132,7 @@
     </div>
   </div>
 </section>
+</main>
 
 <!-- Unified Footer -->
 <footer>
@@ -166,83 +175,7 @@
   </div>
 </footer>
 
-<script src="/assets/app.js"></script>
-<script>
-document.getElementById('join-form').addEventListener('submit', async ev => {
-  ev.preventDefault();
-  const btn = document.getElementById('join-submit');
-  const msg = document.getElementById('join-msg');
-
-  const fullName = document.getElementById('join-name').value.trim();
-  const rollNumber = document.getElementById('join-roll').value.trim();
-  const batch = document.getElementById('join-batch').value.trim();
-  const department = document.getElementById('join-dept').value.trim();
-  const email = document.getElementById('join-email').value.trim();
-
-  if (!fullName || !rollNumber || !batch || !department || !email) {
-    PMS.showAlert(msg, 'Please complete all required fields (*).');
-    return;
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    PMS.showAlert(msg, 'Please provide a valid email address.');
-    return;
-  }
-
-  PMS.setLoading(btn, true);
-  try {
-    await PMS.apiPost('/api/membership', {
-      full_name:   fullName,
-      roll_number: rollNumber,
-      batch:       batch,
-      department:  department,
-      email:       email,
-      phone:       document.getElementById('join-phone').value.trim() || null,
-      interests:   document.getElementById('join-interests').value.trim() || null,
-      why_join:    document.getElementById('join-why').value.trim() || null,
-    });
-    PMS.showAlert(msg, '🎉 Application submitted successfully! The executive council will review your submission.', 'success');
-    document.getElementById('join-form').reset();
-  } catch(e) {
-    PMS.showAlert(msg, e.message || 'Submission failed. Please try again.');
-  } finally {
-    PMS.setLoading(btn, false);
-  }
-});
-
-document.getElementById('contact-form').addEventListener('submit', async ev => {
-  ev.preventDefault();
-  const btn = document.getElementById('contact-submit');
-  const msg = document.getElementById('contact-msg');
-
-  const name = document.getElementById('contact-name').value.trim();
-  const email = document.getElementById('contact-email').value.trim();
-  const message = document.getElementById('contact-message').value.trim();
-
-  if (!name || !email || !message) {
-    PMS.showAlert(msg, 'Please fill in your name, email, and message.');
-    return;
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    PMS.showAlert(msg, 'Please enter a valid email address.');
-    return;
-  }
-
-  PMS.setLoading(btn, true);
-  try {
-    await PMS.apiPost('/api/contact', {
-      name:    name,
-      email:   email,
-      subject: document.getElementById('contact-subject').value.trim() || null,
-      message: message,
-    });
-    PMS.showAlert(msg, '✉️ Your message has been sent to PMS administration.', 'success');
-    document.getElementById('contact-form').reset();
-  } catch(e) {
-    PMS.showAlert(msg, e.message || 'Message could not be sent. Please try again.');
-  } finally {
-    PMS.setLoading(btn, false);
-  }
-});
-</script>
+<script src="/assets/app.js" defer></script>
+<script src="/assets/pages/join.js" defer></script>
 </body>
 </html>

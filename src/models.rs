@@ -93,6 +93,7 @@ pub struct EventRegistration {
     pub email: String,
     pub phone: Option<String>,
     pub certificate_code: Option<String>,
+    pub attended: bool,
     pub created_at: String,
 }
 
@@ -104,6 +105,28 @@ pub struct CreateEventRegistration {
     pub department: String,
     pub email: String,
     pub phone: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateEventRegistration {
+    pub attended: Option<bool>,
+}
+
+/// Standard pagination parameters for list endpoints.
+#[derive(Debug, Clone, Copy, Deserialize, Default)]
+pub struct PaginationParams {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+impl PaginationParams {
+    pub fn limit(&self) -> i64 {
+        self.limit.unwrap_or(50).clamp(1, 200)
+    }
+
+    pub fn offset(&self) -> i64 {
+        self.offset.unwrap_or(0).max(0)
+    }
 }
 
 // Team Members
@@ -437,7 +460,7 @@ pub struct LoginRequest {
 
 #[derive(Debug, Serialize)]
 pub struct LoginResponse {
-    pub token: String,
+    pub token: Option<String>,
     pub name: String,
     pub email: String,
 }

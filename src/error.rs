@@ -17,6 +17,8 @@ pub enum AppError {
     Conflict(String),
     #[error("Unauthorized")]
     Unauthorized,
+    #[error("Forbidden: {0}")]
+    Forbidden(String),
     #[error("Too Many Requests")]
     TooManyRequests,
     #[error("Database error: {0}")]
@@ -35,6 +37,7 @@ impl IntoResponse for AppError {
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
             AppError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
             AppError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()),
+            AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg.clone()),
             AppError::TooManyRequests => (
                 StatusCode::TOO_MANY_REQUESTS,
                 "Too many requests. Please slow down and try again later.".to_string(),
@@ -72,6 +75,13 @@ impl IntoResponse for AppError {
         });
 
         let mut response = (status, axum::Json(body)).into_response();
+
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            response.headers_mut().insert(
+                axum::http::header::RETRY_AFTER,
+                axum::http::HeaderValue::from_static("60"),
+            );
+        }
 
         // Attach the correlation id as a response header so clients/logs can match it.
         if let Ok(val) = axum::http::HeaderValue::from_str(&correlation_id) {

@@ -10,8 +10,15 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/assets/style.css">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://pms.pieas.edu.pk/resources">
+  <meta property="og:title" content="Undergraduate Toolkit &amp; Resources – PIEAS Materials Society">
+  <meta property="og:description" content="Undergraduate materials engineering toolkit: ASTM standards, metallography etching cheatsheets, Thermo-Calc, and phase diagram software.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://pms.pieas.edu.pk/resources">
+  <meta property="og:image" content="https://pms.pieas.edu.pk/pms-logo.jpeg">
 </head>
 <body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
 <div id="announcement-banner" class="banner" style="display:none"></div>
 
 <!-- Navbar -->
@@ -38,12 +45,13 @@
   </div>
 </nav>
 
+<main id="main-content">
 <!-- Hero Section with Category Filters -->
 <section class="hero" style="padding:3.5rem 0 2.5rem">
   <div class="container hero-content">
     <span class="badge">Academic Toolkit</span>
     <h1 class="fade-up">Student Toolkit &amp; Materials Engineering Resources</h1>
-    <p class="hero-desc fade-up fade-up-delay-1">Curated ASTM testing standards, software tutorials, lab safety protocols, and crystallography databases for DMME students.</p>
+    <p class="hero-desc fade-up">Curated ASTM testing standards, software tutorials, lab safety protocols, and crystallography databases for DMME students.</p>
     <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1.5rem">
       <button class="btn btn-outline btn-sm res-filter active" data-cat="">All Toolkit Items</button>
       <button class="btn btn-outline btn-sm res-filter" data-cat="Standards">Standards (ASTM)</button>
@@ -77,6 +85,7 @@
     </div>
   </div>
 </section>
+</main>
 
 <!-- Unified Footer -->
 <footer>
@@ -119,86 +128,7 @@
   </div>
 </footer>
 
-<script src="/assets/app.js"></script>
-<script>
-let allResources = [];
-
-async function loadResources() {
-  const grid = document.getElementById('resources-grid');
-  grid.innerHTML = PMS.skeletonGrid(3);
-  try {
-    allResources = await PMS.apiFetch('/api/resources');
-    renderFilteredResources('');
-  } catch (e) {
-    grid.innerHTML = '<p style="color:var(--danger);grid-column:1/-1">Failed to load resources.</p>';
-  }
-}
-
-function renderFilteredResources(category) {
-  const grid = document.getElementById('resources-grid');
-  const filtered = category
-    ? allResources.filter(r => {
-        if (!r.category) return false;
-        const rCat = r.category.toLowerCase();
-        const target = category.toLowerCase();
-        if (target === 'software') {
-          return rCat.includes('software') || rCat.includes('tool');
-        }
-        if (target === 'books') {
-          return rCat.includes('book') || rCat.includes('guide');
-        }
-        return rCat === target || rCat.includes(target) || target.includes(rCat);
-      })
-    : allResources;
-
-  grid.innerHTML = filtered.length
-    ? filtered.map((r, idx) => PMS.resourceCard(r, idx)).join('')
-    : '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No resources found in this category.</p>';
-  PMS.observeFadeElements(grid);
-}
-
-// Category filter buttons
-document.querySelectorAll('.res-filter').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.res-filter').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    renderFilteredResources(btn.dataset.cat);
-  });
-});
-
-// Load ASTM standards strip from site_sections
-async function loadAstmStrip() {
-  const strip = document.getElementById('astm-strip');
-  try {
-    const sections = await PMS.apiFetch('/api/sections');
-    const sec = sections.find(s => s.section_key === 'resources_standards');
-    if (sec) {
-      if (sec.badge) document.getElementById('astm-badge').textContent = sec.badge;
-      if (sec.title) document.getElementById('astm-title').textContent = sec.title;
-      if (sec.content || sec.subtitle) document.getElementById('astm-desc').textContent = sec.content || sec.subtitle;
-
-      if (sec.extra_json) {
-        try {
-          const protocols = JSON.parse(sec.extra_json);
-          strip.innerHTML = protocols.map(p => `
-            <div class="card" style="padding:1.25rem;border-left:3px solid var(--primary)">
-              <span class="tag" style="margin-bottom:.5rem;font-weight:700">${PMS.escHtml(p.code)}</span>
-              <h3 style="font-size:.95rem;margin-bottom:.35rem;color:var(--text)">${PMS.escHtml(p.title)}</h3>
-              <p style="font-size:.8rem;color:var(--text-muted);line-height:1.5">${PMS.escHtml(p.detail)}</p>
-            </div>
-          `).join('');
-          return;
-        } catch (_) {}
-      }
-    }
-    strip.innerHTML = '';
-  } catch (_) {
-    strip.innerHTML = '';
-  }
-}
-
-loadResources();
-loadAstmStrip();
-</script>
+<script src="/assets/app.js" defer></script>
+<script src="/assets/pages/resources.js" defer></script>
 </body>
 </html>

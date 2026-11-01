@@ -24,10 +24,22 @@ pub fn hash_token(token: &str) -> String {
 static RESOLVED_JWT_SECRET: OnceLock<String> = OnceLock::new();
 static RESOLVED_COOKIE_NAME: OnceLock<String> = OnceLock::new();
 
+/// Validate JWT secret string against production security standards.
+pub fn validate_jwt_secret_candidate(secret: &str) -> Result<(), &'static str> {
+    if secret.len() < 32 {
+        return Err("JWT_SECRET must be at least 32 characters long");
+    }
+    if secret.contains("replace-with") || secret.contains("placeholder") {
+        return Err("JWT_SECRET must not contain 'replace-with' or 'placeholder'");
+    }
+    Ok(())
+}
+
 /// Retrieve the cached JWT secret from the environment (read once at startup).
 ///
 /// Behaviour:
-/// - If `RUST_ENV=production` and `JWT_SECRET` is unset → panic immediately (fail-fast).
+/// - If `RUST_ENV=production` and `JWT_SECRET` is unset, <32 chars, or contains
+///   "replace-with"/"placeholder" → exit immediately with FATAL message (fail-fast).
 /// - In any other environment, fall back to an insecure placeholder and emit a single warning.
 pub fn jwt_secret() -> &'static str {
     RESOLVED_JWT_SECRET.get_or_init(|| {
@@ -35,7 +47,24 @@ pub fn jwt_secret() -> &'static str {
             std::env::var("RUST_ENV").unwrap_or_default().to_lowercase() == "production";
 
         match std::env::var("JWT_SECRET") {
-            Ok(secret) if !secret.is_empty() => secret,
+            Ok(secret) if !secret.is_empty() => {
+                if is_production {
+                    if let Err(err) = validate_jwt_secret_candidate(&secret) {
+                        eprintln!(
+                            "\n\
+                            ╔══════════════════════════════════════════════════════════╗\n\
+                            ║  FATAL: Insecure JWT_SECRET in production mode:          ║\n\
+                            ║  {:<56}║\n\
+                            ║  Set JWT_SECRET to a cryptographically random value:     ║\n\
+                            ║      openssl rand -hex 32                                ║\n\
+                            ╚══════════════════════════════════════════════════════════╝\n",
+                            err
+                        );
+                        std::process::exit(1);
+                    }
+                }
+                secret
+            }
             _ => {
                 if is_production {
                     eprintln!(
@@ -151,34 +180,36 @@ where
                 .get("x-requested-with")
                 .and_then(|v| v.to_str().ok());
             if req_with != Some("PMS-Client") {
-                return Err(AppError::BadRequest(
+                return Err(AppError::Forbidden(
                     "CSRF protection: missing or invalid X-Requested-With header".into(),
                 ));
             }
         }
 
-        // If database pool is available in request extensions, verify token is not revoked and user exists
-        if let Some(pool) = parts.extensions.get::<sqlx::SqlitePool>() {
-            let token_h = hash_token(&token_str);
-            let is_revoked: Option<(String,)> =
-                sqlx::query_as("SELECT token_hash FROM revoked_tokens WHERE token_hash = ?1")
-                    .bind(&token_h)
-                    .fetch_optional(pool)
-                    .await
-                    .map_err(|e| AppError::Internal(e.to_string()))?;
+        // Database pool must be available in request extensions (fail closed)
+        let pool = parts.extensions.get::<sqlx::SqlitePool>().ok_or_else(|| {
+            AppError::Internal("Database pool missing from request extensions".into())
+        })?;
 
-            if is_revoked.is_some() {
-                return Err(AppError::Unauthorized);
-            }
-
-            let exists: Option<(i64,)> = sqlx::query_as("SELECT id FROM admin_users WHERE id = ?1")
-                .bind(claims.sub)
+        let token_h = hash_token(&token_str);
+        let is_revoked: Option<(String,)> =
+            sqlx::query_as("SELECT token_hash FROM revoked_tokens WHERE token_hash = ?1")
+                .bind(&token_h)
                 .fetch_optional(pool)
                 .await
                 .map_err(|e| AppError::Internal(e.to_string()))?;
-            if exists.is_none() {
-                return Err(AppError::Unauthorized);
-            }
+
+        if is_revoked.is_some() {
+            return Err(AppError::Unauthorized);
+        }
+
+        let exists: Option<(i64,)> = sqlx::query_as("SELECT id FROM admin_users WHERE id = ?1")
+            .bind(claims.sub)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+        if exists.is_none() {
+            return Err(AppError::Unauthorized);
         }
 
         Ok(claims)

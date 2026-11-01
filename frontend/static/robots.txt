@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /admin
+Disallow: /api/
+Allow: /
+
+Sitemap: https://pms.pieas.edu.pk/sitemap.xml
+

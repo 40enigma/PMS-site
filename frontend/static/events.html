@@ -10,8 +10,15 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/assets/style.css">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://pms.pieas.edu.pk/events">
+  <meta property="og:title" content="Events &amp; Seminars – PIEAS Materials Society">
+  <meta property="og:description" content="Browse upcoming and past events organized by PMS PIEAS – seminars, workshops, metallography competitions, industrial visits, and digital certificate verification.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://pms.pieas.edu.pk/events">
+  <meta property="og:image" content="https://pms.pieas.edu.pk/pms-logo.jpeg">
 </head>
 <body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
 <div id="announcement-banner" class="banner" style="display:none"></div>
 
 <!-- Navbar -->
@@ -38,12 +45,13 @@
   </div>
 </nav>
 
+<main id="main-content">
 <!-- Hero Section with Filters -->
 <section class="hero" style="padding:3.5rem 0 2.5rem" aria-labelledby="page-title">
   <div class="container hero-content">
     <span class="badge">Society Programs</span>
     <h1 id="page-title" class="fade-up">Events, Seminars &amp; Workshops</h1>
-    <p class="hero-desc fade-up fade-up-delay-1">Hands-on characterization training, expert industrial seminars, and technical visits organized by PMS.</p>
+    <p class="hero-desc fade-up">Hands-on characterization training, expert industrial seminars, and technical visits organized by PMS.</p>
     <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1.5rem">
       <button class="btn btn-outline btn-sm filter-btn active" data-filter="" id="filter-all">All Events</button>
       <button class="btn btn-outline btn-sm filter-btn" data-filter="false" id="filter-upcoming">Upcoming Programs</button>
@@ -76,7 +84,7 @@
     </form>
   </div>
 </section>
-
+</main>
 
 <!-- Unified Footer -->
 <footer>
@@ -119,56 +127,7 @@
   </div>
 </footer>
 
-<script src="/assets/app.js"></script>
-<script>
-async function loadEvents(isPast) {
-  const grid = document.getElementById('events-grid');
-  grid.innerHTML = PMS.skeletonGrid(3);
-  try {
-    const qs = isPast !== null ? `?is_past=${isPast}` : '';
-    const events = await PMS.apiFetch(`/api/events${qs}`);
-    grid.innerHTML = events.length
-      ? events.map((e, idx) => PMS.eventCard(e, idx)).join('')
-      : '<p style="grid-column:1/-1;text-align:center;color:var(--text-muted);padding:2rem 0">No events found in this category.</p>';
-    PMS.observeFadeElements(grid);
-  } catch(err) {
-    grid.innerHTML = `<p style="color:var(--danger);grid-column:1/-1;text-align:center">Failed to load events.</p>`;
-  }
-}
-
-// Note: Event registration modal & delegation handled globally by PMS.openRegistrationModal in app.js
-
-document.querySelectorAll('.filter-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    const f = btn.dataset.filter;
-    loadEvents(f === '' ? null : f === 'true');
-  });
-});
-
-document.getElementById('verify-form').addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  const btn = document.getElementById('verify-submit');
-  const msgEl = document.getElementById('verify-msg');
-  const code = document.getElementById('verify-code').value.trim();
-  if (!code) { PMS.showAlert(msgEl, 'Please enter a certificate verification code.'); return; }
-  PMS.setLoading(btn, true);
-  try {
-    const res = await PMS.apiFetch(`/api/certificates/verify?code=${encodeURIComponent(code)}`);
-    if (res.valid) {
-      PMS.showAlert(msgEl, `🎓 <strong>Digitally Verified!</strong><br>Participant: <strong>${PMS.escHtml(res.student_name)}</strong><br>Event: <em>${PMS.escHtml(res.event_title)}</em><br>Certificate Code: <code>${PMS.escHtml(res.certificate_code)}</code>`, 'success', true);
-    } else {
-      PMS.showAlert(msgEl, '❌ Invalid certificate code. Please verify code or contact society administration.', 'error');
-    }
-  } catch(e) {
-    PMS.showAlert(msgEl, e.message || 'Verification service error.');
-  } finally {
-    PMS.setLoading(btn, false);
-  }
-});
-
-loadEvents(null);
-</script>
+<script src="/assets/app.js" defer></script>
+<script src="/assets/pages/events.js" defer></script>
 </body>
 </html>

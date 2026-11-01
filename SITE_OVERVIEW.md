@@ -85,15 +85,21 @@ PMS-site/
 
 ---
 
-## 3. Database Schema (16 SQLite Tables)
+## 3. Database Schema (19 Core Tables + Migration Metadata)
 
-The database schema is defined in `migrations/0001_initial_schema.sql` and initialized automatically on startup:
+The database schema is managed via sequential, numbered migrations tracked in `_pms_migrations`:
+- `migrations/0001_initial_schema.sql` — Initial schema establishing all core tables
+- `migrations/0002_fix_lowercasing.sql` — Deprecated placeholder
+- `migrations/0003_email_lowercasing.sql` — Normalized emails to lowercase across all account and submission tables
+- `migrations/0004_event_registrations_attended.sql` — Added `attended` BOOLEAN column to `event_registrations`
+
+### Core Application Tables:
 
 1. **`admin_users`**: Administrative credentials (`id`, `email` UNIQUE, `password_hash` via Argon2, `name`).
 2. **`announcements`**: Top notification banners (`id`, `message`, `link_text`, `link_url`, `priority`, `is_active`, `created_at`).
 3. **`site_stats`**: Departmental metrics (`id` PRIMARY KEY, `active_members`, `events_held`, `years_active`, `industrial_partners`, `constitution_pdf_url`, `office_location`, `contact_email`).
 4. **`events`**: Technical workshops and seminars (`id`, `title`, `slug`, `date`, `time_range`, `venue`, `category`, `short_description`, `full_summary`, `poster_url`, `registration_link`, `speaker_or_organizer`, `is_past`, `is_featured`).
-5. **`event_registrations`**: Participant registrations (`id`, `event_id` REFERENCES events, `student_name`, `roll_number`, `batch`, `department`, `email`, `phone`, `certificate_code`, `created_at`).
+5. **`event_registrations`**: Participant registrations (`id`, `event_id` REFERENCES events, `student_name`, `roll_number`, `batch`, `department`, `email`, `phone`, `certificate_code`, `attended` DEFAULT 0, `created_at`).
 6. **`team_members`**: Executive council & faculty advisors (`id`, `name`, `role`, `role_responsibility`, `photo_url`, `batch`, `tenure_year`, `is_current`, `is_faculty_advisor`, `bio`, `linkedin_url`, `email`, `display_order`).
 7. **`gallery_images`**: Micrograph repository and event photos (`id`, `image_url`, `caption`, `event_name`, `year`, `event_id`, `created_at`).
 8. **`posts`**: Technical explainers and blog articles (`id`, `title`, `slug` UNIQUE, `category`, `excerpt`, `body_markdown`, `material_formula`, `crystal_structure`, `cover_image_url`, `author_name`, `author_role`, `author_batch`, `published_at`, `read_time_minutes`, `is_featured`).
@@ -104,10 +110,12 @@ The database schema is defined in `migrations/0001_initial_schema.sql` and initi
 13. **`sponsors`**: Corporate and industrial partners (`id`, `name`, `tier`, `logo_url`, `website_url`, `since_year`, `display_order`).
 14. **`faqs`**: Frequently asked questions (`id`, `question`, `answer`, `category`, `display_order`).
 15. **`membership_applications`**: Student society membership submissions (`id`, `full_name`, `roll_number`, `batch`, `department`, `email`, `phone`, `interests`, `why_join`, `status`, `created_at`).
-16. **`site_sections`**: Dynamic editable page content and portfolio blocks (`id`, `section_key` UNIQUE, `title`, `subtitle`, `content`, `badge`, `extra_json`, `updated_at`).
-17. **`revoked_tokens`**: Token revocation denylist for invalidated administrator sessions (`token_hash` PRIMARY KEY, `expires_at`).
+16. **`contact_messages`**: Direct inquiries dispatched to the council (`id`, `name`, `email`, `subject`, `message`, `created_at`).
+17. **`newsletter_subscribers`**: Email subscriptions for society bulletins (`id`, `email` UNIQUE, `subscribed_at`).
+18. **`site_sections`**: Dynamic editable page content and portfolio blocks (`id`, `section_key` UNIQUE, `title`, `subtitle`, `content`, `badge`, `extra_json`, `updated_at`).
+19. **`revoked_tokens`**: Token revocation denylist for invalidated administrator sessions (`token_hash` PRIMARY KEY, `expires_at`).
 
-*(Plus auxiliary tracking tables: `contact_messages`, `newsletter_subscribers`).*
+*(System metadata tables: `_pms_migrations` tracks applied schema versions; `_db_metadata` gates initial demo seeding).*
 
 ---
 
@@ -115,24 +123,31 @@ The database schema is defined in `migrations/0001_initial_schema.sql` and initi
 
 1. **IP Rate Limiting & Anti-Spoofing**:
    - `X-Forwarded-For` and `X-Real-IP` are strictly untrusted unless `TRUST_PROXY=true` is explicitly set in production behind Nginx/Caddy.
-   - When `TRUST_PROXY=true`, the rightmost proxy hop is extracted.
-   - For direct TCP connections, `ConnectInfo<SocketAddr>` is extracted from the socket.
-   - Governor's in-memory `DashMapStateStore` is automatically pruned every 5 minutes (`retain_recent()` and `shrink_to_fit()`) to prevent memory exhaustion attacks.
+   - Cloudflare headers (`CF-Connecting-IP`, `True-Client-IP`) are only parsed when both `TRUST_PROXY=true` and `TRUST_CLOUDFLARE=true`.
+   - Separate rate limiting buckets are enforced for login, generic submit, registrations (60 RPM), contacts (10 RPM), newsletter (10 RPM), and membership (15 RPM).
+   - IPv6 addresses are canonicalized and masked to `/64` subnets before bucket lookup.
+   - Governor's in-memory `DashMapStateStore` is automatically pruned every 5 minutes (`retain_recent()` and `shrink_to_fit()`).
 2. **CORS & Origin Isolation**:
-   - Allowed origins are enforced via `ALLOWED_ORIGINS`. In production mode (`RUST_ENV=production`), missing origins result in an immediate fail-fast exit.
-   - `x-forwarded-for` and `x-real-ip` headers are stripped from CORS `allow_headers`.
+   - Allowed origins are enforced via `ALLOWED_ORIGINS`. In production mode (`RUST_ENV=production`), missing origins or weak configurations fail fast.
 3. **Modern Security Headers**:
-   - `Content-Security-Policy`: Restricts scripts (`'self' 'unsafe-inline'`), styles (`'self' 'unsafe-inline' https://fonts.googleapis.com`), Google Fonts (`https://fonts.gstatic.com`), and approved image hosts (`'self'`, `data:`, `https:` for external sponsor logos and micrographs).
+   - `Content-Security-Policy`: Scripts restricted to `'self'` (all page scripts are modular and externalized, zero `'unsafe-inline'`), styles (`'self' 'unsafe-inline' https://fonts.googleapis.com`), Google Fonts (`https://fonts.gstatic.com`), and approved image hosts.
+   - `Strict-Transport-Security: max-age=31536000; includeSubDomains` in production.
    - `Referrer-Policy: strict-origin-when-cross-origin`.
    - `X-Content-Type-Options: nosniff`.
    - `X-Frame-Options: SAMEORIGIN`.
-4. **XSS URL Sanitization**:
-   - Dynamic URLs placed into HTML `href` or `src` attributes are sanitized with `PMS.safeUrl(url)` which strictly permits `https://`, `http://`, `mailto:`, and relative `/` paths, disarming `javascript:` and malicious `data:` URIs.
-5. **Admin Seeding Security**:
-   - Default credentials are never committed or seeded by default. An admin user is only created when `SEED_ADMIN=true` is explicitly passed along with `ADMIN_INITIAL_EMAIL` and `ADMIN_INITIAL_PASSWORD`.
+4. **Runtime Integrity**:
+   - The application verifies that `frontend/static/index.html` exists at startup and halts with a fatal message if static assets are missing.
+5. **XSS URL Sanitization**:
+   - Dynamic URLs placed into HTML properties or attributes use `PMS.safeUrlRaw(url)` and `PMS.safeUrl(url)` which strictly validate permitted protocols (`https:`, `http:`, `mailto:`, `/`), preventing `javascript:` injection.
 
 ---
 
-## 5. API Reference
+## 5. API Reference & Features
 
-All public, authentication, and administrative endpoints are served under `/api/` with JSON payloads and response definitions.
+- **Health Check**: `GET /healthz` checks database connectivity with `SELECT 1` and returns 200 `{"status":"ok"}` (503 on error). Not rate limited.
+- **Sitemap**: `GET /sitemap.xml` dynamically generates XML sitemap including static pages, published posts, and events.
+- **Pagination**: All public and admin list endpoints support `limit` (default: 50, maximum: 200) and `offset` query parameters.
+- **Certificate Verification**: `GET /api/certificates/verify?code=...` only returns `valid: true` if the participant attended the event (`attended = 1`).
+- **Attendance Toggling**: Admins can toggle event attendance via `PUT /api/admin/registrations/{id}` with `{"attended": true | false}`.
+- **Programmatic Logins**: `POST /api/auth/login` supports optional header `X-Return-Token: 1` to receive the JWT token in the JSON body.
+- **File Upload Security**: `/api/admin/upload` sniffs MIME magic bytes, generates safe UUID filenames `{uuid}.{ext}`, and wraps `/uploads` with strict sandbox and cache headers.

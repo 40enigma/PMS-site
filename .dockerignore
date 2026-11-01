@@ -1,0 +1,11 @@
+target/
+.git/
+.github/
+.env
+.env.*
+*.db
+*.db-shm
+*.db-wal
+uploads/
+tests/
+

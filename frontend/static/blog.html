@@ -10,8 +10,15 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/assets/style.css">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://pms.pieas.edu.pk/blog">
+  <meta property="og:title" content="Technical Blog &amp; Explainers – PIEAS Materials Society">
+  <meta property="og:description" content="Technical articles on nuclear metallurgy, aerospace superalloys, high-entropy materials, and characterization techniques by PIEAS DMME students.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://pms.pieas.edu.pk/blog">
+  <meta property="og:image" content="https://pms.pieas.edu.pk/pms-logo.jpeg">
 </head>
 <body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
 <div id="announcement-banner" class="banner" style="display:none"></div>
 
 <!-- Navbar -->
@@ -38,12 +45,13 @@
   </div>
 </nav>
 
+<main id="main-content">
 <!-- Hero -->
 <section class="hero" style="padding:3.5rem 0 2.5rem">
   <div class="container hero-content">
     <span class="badge">Knowledge Hub</span>
     <h1 class="fade-up">Technical Articles &amp; Materials Blog</h1>
-    <p class="hero-desc fade-up fade-up-delay-1">In-depth explainers on critical engineering alloys, phase diagrams, additive manufacturing, and characterization protocols.</p>
+    <p class="hero-desc fade-up">In-depth explainers on critical engineering alloys, phase diagrams, additive manufacturing, and characterization protocols.</p>
   </div>
 </section>
 
@@ -55,6 +63,7 @@
     </div>
   </div>
 </section>
+</main>
 
 <!-- Unified Footer -->
 <footer>
@@ -97,21 +106,7 @@
   </div>
 </footer>
 
-<script src="/assets/app.js"></script>
-<script>
-(async () => {
-  const grid = document.getElementById('posts-grid');
-  grid.innerHTML = PMS.skeletonGrid(3);
-  try {
-    const posts = await PMS.apiFetch('/api/posts');
-    grid.innerHTML = posts.length
-      ? posts.map((p, idx) => PMS.postCard(p, idx)).join('')
-      : '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No articles published yet.</p>';
-    PMS.observeFadeElements(grid);
-  } catch(e) {
-    grid.innerHTML = '<p style="color:var(--danger);grid-column:1/-1;text-align:center">Could not load posts.</p>';
-  }
-})();
-</script>
+<script src="/assets/app.js" defer></script>
+<script src="/assets/pages/blog.js" defer></script>
 </body>
 </html>

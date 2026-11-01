@@ -5,11 +5,11 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use pms_platform::{auth::create_token, create_app, db};
+use serial_test::serial;
 use sqlx::sqlite::SqlitePoolOptions;
 use tower::ServiceExt;
 
-async fn setup_test_app() -> axum::Router {
-    // In-memory SQLite for testing (max_connections(1) so in-memory db is shared across queries)
+async fn setup_test_app_and_pool() -> (axum::Router, sqlx::SqlitePool) {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
         .connect("sqlite::memory:")
@@ -20,7 +20,7 @@ async fn setup_test_app() -> axum::Router {
 
     // Insert dummy stats row (id=1)
     sqlx::query(
-        "INSERT OR IGNORE INTO site_stats (id, active_members, events_held, years_active, industrial_partners) VALUES (1, 150, 30, 8, 12)"
+        "INSERT INTO site_stats (id, active_members, events_held, years_active, industrial_partners) VALUES (1, 150, 30, 8, 12) ON CONFLICT(id) DO UPDATE SET active_members = 150, events_held = 30, years_active = 8, industrial_partners = 12"
     )
     .execute(&pool)
     .await
@@ -34,7 +34,11 @@ async fn setup_test_app() -> axum::Router {
     .await
     .expect("Failed to insert dummy admin");
 
-    create_app(pool)
+    (create_app(pool.clone()), pool)
+}
+
+async fn setup_test_app() -> axum::Router {
+    setup_test_app_and_pool().await.0
 }
 
 #[tokio::test]
@@ -86,11 +90,49 @@ async fn test_static_pages_served() {
 }
 
 #[tokio::test]
+async fn test_sitemap_and_robots_routes() {
+    let app = setup_test_app().await;
+
+    // Test GET /robots.txt
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/robots.txt")
+        .body(Body::empty())
+        .unwrap();
+
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = res.into_body().collect().await.unwrap().to_bytes();
+    let text = String::from_utf8_lossy(&body);
+    assert!(text.contains("Disallow: /admin"));
+
+    // Test GET /sitemap.xml
+    let req2 = Request::builder()
+        .method(Method::GET)
+        .uri("/sitemap.xml")
+        .body(Body::empty())
+        .unwrap();
+
+    let res2 = app.oneshot(req2).await.unwrap();
+    assert_eq!(res2.status(), StatusCode::OK);
+    assert_eq!(
+        res2.headers()
+            .get(axum::http::header::CONTENT_TYPE)
+            .unwrap(),
+        "application/xml; charset=utf-8"
+    );
+    let body2 = res2.into_body().collect().await.unwrap().to_bytes();
+    let xml = String::from_utf8_lossy(&body2);
+    assert!(xml.contains("<urlset"));
+    assert!(xml.contains("/about</loc>"));
+}
+
+#[tokio::test]
+#[serial]
 async fn test_login_invalid_credentials_returns_401_and_rate_limits() {
     let app = setup_test_app().await;
 
-    // Set a custom test IP via X-Forwarded-For to test this specific IP's rate limiter bucket
-    let test_ip = "198.51.100.42";
+    let socket: std::net::SocketAddr = "198.51.100.42:12345".parse().unwrap();
 
     let mut got_429 = false;
     // Attempt multiple invalid logins until rate-limited (max 15 attempts, default quota is 10)
@@ -105,13 +147,17 @@ async fn test_login_invalid_credentials_returns_401_and_rate_limits() {
             .method(Method::POST)
             .uri("/api/auth/login")
             .header(header::CONTENT_TYPE, "application/json")
-            .header("X-Forwarded-For", test_ip)
+            .extension(axum::extract::ConnectInfo(socket))
             .body(Body::from(serde_json::to_vec(&payload).unwrap()))
             .unwrap();
 
         let res = app_clone.oneshot(req).await.unwrap();
         if res.status() == StatusCode::TOO_MANY_REQUESTS {
             got_429 = true;
+            assert!(
+                res.headers().contains_key("retry-after"),
+                "429 response must contain Retry-After header"
+            );
             break;
         } else {
             assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
@@ -191,6 +237,7 @@ async fn test_upload_file_allowed_and_forbidden() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_seed_admin_not_created_without_flag() {
     let pool = SqlitePoolOptions::new()
         .connect("sqlite::memory:")
@@ -406,6 +453,7 @@ async fn test_admin_crud_workflow() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_rate_limiting_ip_spoofing_prevention() {
     use pms_platform::rate_limit::{client_ip_from_headers, client_ip_from_request_parts};
 
@@ -422,13 +470,22 @@ async fn test_rate_limiting_ip_spoofing_prevention() {
         "X-Forwarded-For should be ignored when TRUST_PROXY is not enabled"
     );
 
-    // With TRUST_PROXY=true, rightmost hop is extracted
+    // With TRUST_PROXY=true, X-Real-IP is preferred first
     std::env::set_var("TRUST_PROXY", "true");
     let ip_trusted = client_ip_from_headers(&headers);
     assert_eq!(
         ip_trusted,
+        std::net::IpAddr::V4(std::net::Ipv4Addr::new(198, 51, 100, 17)),
+        "X-Real-IP should be preferred first when TRUST_PROXY=true"
+    );
+
+    // If X-Real-IP is missing, rightmost X-Forwarded-For hop is extracted
+    headers.remove("X-Real-IP");
+    let ip_xff = client_ip_from_headers(&headers);
+    assert_eq!(
+        ip_xff,
         std::net::IpAddr::V4(std::net::Ipv4Addr::new(203, 0, 113, 195)),
-        "X-Forwarded-For should be respected when TRUST_PROXY=true"
+        "Rightmost X-Forwarded-For should be respected when X-Real-IP is absent and TRUST_PROXY=true"
     );
     std::env::remove_var("TRUST_PROXY");
 
@@ -533,7 +590,7 @@ async fn test_csrf_cookie_protection() {
     let res_no_header = app.clone().oneshot(req_no_header).await.unwrap();
     assert_eq!(
         res_no_header.status(),
-        StatusCode::BAD_REQUEST,
+        StatusCode::FORBIDDEN,
         "Cookie-authenticated mutation without X-Requested-With should be rejected"
     );
 
@@ -798,6 +855,7 @@ async fn test_token_revocation_on_logout() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_ipv6_subnet_rate_limiting() {
     use pms_platform::rate_limit::canonicalize_rate_limit_ip;
     use std::net::IpAddr;
@@ -819,8 +877,9 @@ async fn test_ipv6_subnet_rate_limiting() {
         "IPs in different /64 subnets must have distinct canonical prefixes"
     );
 
-    // Also verify Cloudflare CF-Connecting-IP extraction
+    // Also verify Cloudflare CF-Connecting-IP extraction when both flags are true
     std::env::set_var("TRUST_PROXY", "true");
+    std::env::set_var("TRUST_CLOUDFLARE", "true");
     let mut headers = axum::http::HeaderMap::new();
     headers.insert("CF-Connecting-IP", "203.0.113.88".parse().unwrap());
     headers.insert(
@@ -831,6 +890,7 @@ async fn test_ipv6_subnet_rate_limiting() {
     let extracted = pms_platform::rate_limit::client_ip_from_headers(&headers);
     assert_eq!(extracted, "203.0.113.88".parse::<IpAddr>().unwrap());
     std::env::remove_var("TRUST_PROXY");
+    std::env::remove_var("TRUST_CLOUDFLARE");
 }
 
 #[tokio::test]
@@ -898,4 +958,639 @@ async fn test_text_plain_upload_validation() {
 
     let res_good = app.oneshot(req_good).await.unwrap();
     assert_eq!(res_good.status(), StatusCode::OK);
+
+    let body = res_good.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let url_str = json["url"].as_str().unwrap();
+    let file_path = url_str.trim_start_matches('/');
+    let _ = tokio::fs::remove_file(file_path).await;
+}
+
+#[tokio::test]
+async fn test_jwt_secret_validation_rules() {
+    use pms_platform::auth::validate_jwt_secret_candidate;
+
+    assert!(validate_jwt_secret_candidate("too-short").is_err());
+    assert!(
+        validate_jwt_secret_candidate("replace-with-a-secure-random-secret-key-in-production")
+            .is_err()
+    );
+    assert!(
+        validate_jwt_secret_candidate("pms-dev-insecure-placeholder-do-not-use-in-production")
+            .is_err()
+    );
+    assert!(validate_jwt_secret_candidate("0123456789abcdef0123456789abcdef").is_ok());
+}
+
+#[tokio::test]
+async fn test_migrations_only_stats_returns_200() {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .expect("Failed to connect to in-memory test db");
+
+    db::run_migrations(&pool).await;
+
+    let app = create_app(pool);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/api/stats")
+        .body(Body::empty())
+        .unwrap();
+
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+#[serial]
+async fn test_rate_limit_proxy_and_cloudflare_headers() {
+    use std::net::IpAddr;
+
+    // 1. Plain TRUST_PROXY=true (TRUST_CLOUDFLARE unset/false): ignore CF headers, use X-Real-IP
+    std::env::set_var("TRUST_PROXY", "true");
+    std::env::remove_var("TRUST_CLOUDFLARE");
+
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert("CF-Connecting-IP", "198.51.100.1".parse().unwrap());
+    headers.insert("True-Client-IP", "198.51.100.2".parse().unwrap());
+    headers.insert("X-Real-IP", "203.0.113.10".parse().unwrap());
+    headers.insert("X-Forwarded-For", "10.0.0.1, 203.0.113.20".parse().unwrap());
+
+    let ip = pms_platform::rate_limit::client_ip_from_headers(&headers);
+    assert_eq!(ip, "203.0.113.10".parse::<IpAddr>().unwrap());
+
+    // 2. Plain TRUST_PROXY=true without X-Real-IP: use rightmost X-Forwarded-For hop
+    headers.remove("X-Real-IP");
+    let ip = pms_platform::rate_limit::client_ip_from_headers(&headers);
+    assert_eq!(ip, "203.0.113.20".parse::<IpAddr>().unwrap());
+
+    // 3. TRUST_PROXY=true AND TRUST_CLOUDFLARE=true: trust CF-Connecting-IP
+    std::env::set_var("TRUST_CLOUDFLARE", "true");
+    let ip = pms_platform::rate_limit::client_ip_from_headers(&headers);
+    assert_eq!(ip, "198.51.100.1".parse::<IpAddr>().unwrap());
+
+    std::env::remove_var("TRUST_PROXY");
+    std::env::remove_var("TRUST_CLOUDFLARE");
+}
+
+#[tokio::test]
+async fn test_upload_file_derives_extension_and_returns_safe_url() {
+    let app = setup_test_app().await;
+    let token = create_token(1, "admin@pieas.edu.pk").unwrap();
+
+    let png_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82";
+
+    // 1. x.html with PNG magic bytes -> saved as .png
+    let boundary = "----WebKitFormBoundarySafeUpload123";
+    let mut data1 = Vec::new();
+    data1.extend_from_slice(
+        format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"x.html\"\r\nContent-Type: text/html\r\n\r\n",
+            boundary = boundary
+        )
+        .as_bytes(),
+    );
+    data1.extend_from_slice(png_bytes);
+    data1.extend_from_slice(format!("\r\n--{}--\r\n", boundary).as_bytes());
+
+    let req1 = Request::builder()
+        .method(Method::POST)
+        .uri("/api/admin/upload")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .body(Body::from(data1))
+        .unwrap();
+
+    let res1 = app.clone().oneshot(req1).await.unwrap();
+    assert_eq!(res1.status(), StatusCode::OK);
+    let body1 = res1.into_body().collect().await.unwrap().to_bytes();
+    let json1: serde_json::Value = serde_json::from_slice(&body1).unwrap();
+    let url1 = json1["url"].as_str().unwrap();
+    let filename1 = json1["filename"].as_str().unwrap();
+
+    assert!(url1.ends_with(".png"), "URL must end with .png");
+    assert!(filename1.ends_with(".png"), "Filename must end with .png");
+    assert!(!url1.contains(".html"), "URL must not contain .html");
+
+    // 2. Check response headers on GET /uploads/...
+    let req_get = Request::builder()
+        .method(Method::GET)
+        .uri(url1)
+        .body(Body::empty())
+        .unwrap();
+
+    let res_get = app.clone().oneshot(req_get).await.unwrap();
+    assert_eq!(res_get.status(), StatusCode::OK);
+    let csp = res_get
+        .headers()
+        .get("Content-Security-Policy")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert_eq!(
+        csp,
+        "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+    );
+    let nosniff = res_get
+        .headers()
+        .get("X-Content-Type-Options")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert_eq!(nosniff, "nosniff");
+    let cache_control = res_get
+        .headers()
+        .get("Cache-Control")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert_eq!(cache_control, "public, max-age=2592000");
+
+    let _ = tokio::fs::remove_file(url1.trim_start_matches('/')).await;
+
+    // 3. Filename with spaces, #, ? yields valid safe URL
+    let mut data2 = Vec::new();
+    data2.extend_from_slice(
+        format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"my space #file ? test.png\"\r\nContent-Type: image/png\r\n\r\n",
+            boundary = boundary
+        )
+        .as_bytes(),
+    );
+    data2.extend_from_slice(png_bytes);
+    data2.extend_from_slice(format!("\r\n--{}--\r\n", boundary).as_bytes());
+
+    let req2 = Request::builder()
+        .method(Method::POST)
+        .uri("/api/admin/upload")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .body(Body::from(data2))
+        .unwrap();
+
+    let res2 = app.oneshot(req2).await.unwrap();
+    assert_eq!(res2.status(), StatusCode::OK);
+    let body2 = res2.into_body().collect().await.unwrap().to_bytes();
+    let json2: serde_json::Value = serde_json::from_slice(&body2).unwrap();
+    let url2 = json2["url"].as_str().unwrap();
+    assert!(!url2.contains(' '), "URL must not contain spaces");
+    assert!(!url2.contains('#'), "URL must not contain #");
+    assert!(!url2.contains('?'), "URL must not contain ?");
+
+    let _ = tokio::fs::remove_file(url2.trim_start_matches('/')).await;
+}
+
+#[tokio::test]
+async fn test_logout_unverifiable_token_not_revoked() {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+
+    db::run_migrations(&pool).await;
+
+    // Insert dummy admin
+    sqlx::query(
+        "INSERT OR IGNORE INTO admin_users (id, email, password_hash, name) VALUES (1, 'admin@pieas.edu.pk', 'dummyhash', 'Admin')"
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let app = create_app(pool.clone());
+
+    // 1. Call logout with unverifiable token string
+    let req_unverifiable = Request::builder()
+        .method(Method::POST)
+        .uri("/api/auth/logout")
+        .header(header::AUTHORIZATION, "Bearer not.a.real.jwt.token")
+        .body(Body::empty())
+        .unwrap();
+
+    let res1 = app.clone().oneshot(req_unverifiable).await.unwrap();
+    assert_eq!(res1.status(), StatusCode::OK);
+
+    // Verify revoked_tokens count is still 0
+    let (count1,): (i64,) = sqlx::query_as("SELECT count(*) FROM revoked_tokens")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        count1, 0,
+        "Unverifiable token must not be inserted into revoked_tokens"
+    );
+
+    // 2. Call logout with a genuinely verifiable token
+    let real_token = create_token(1, "admin@pieas.edu.pk").unwrap();
+    let req_real = Request::builder()
+        .method(Method::POST)
+        .uri("/api/auth/logout")
+        .header(header::AUTHORIZATION, format!("Bearer {}", real_token))
+        .body(Body::empty())
+        .unwrap();
+
+    let res2 = app.oneshot(req_real).await.unwrap();
+    assert_eq!(res2.status(), StatusCode::OK);
+
+    let (count2,): (i64,) = sqlx::query_as("SELECT count(*) FROM revoked_tokens")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        count2, 1,
+        "Verifiable token must be inserted into revoked_tokens"
+    );
+}
+
+#[tokio::test]
+async fn test_health_check_endpoint() {
+    let app = setup_test_app().await;
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/healthz")
+        .body(Body::empty())
+        .unwrap();
+
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let body = res.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["status"], "ok");
+}
+
+#[tokio::test]
+async fn test_trailing_slashes_and_404_routes() {
+    let app = setup_test_app().await;
+
+    // 1. /about/ with trailing slash works and returns 200
+    let req1 = Request::builder()
+        .method(Method::GET)
+        .uri("/about/")
+        .body(Body::empty())
+        .unwrap();
+    let res1 = app.clone().oneshot(req1).await.unwrap();
+    assert_eq!(res1.status(), StatusCode::OK);
+
+    // 2. /404 returns 404 status
+    let req2 = Request::builder()
+        .method(Method::GET)
+        .uri("/404")
+        .body(Body::empty())
+        .unwrap();
+    let res2 = app.clone().oneshot(req2).await.unwrap();
+    assert_eq!(res2.status(), StatusCode::NOT_FOUND);
+
+    // 3. /api/* unmatched route returns 404 JSON shape
+    let req3 = Request::builder()
+        .method(Method::GET)
+        .uri("/api/unknown_route_xyz")
+        .body(Body::empty())
+        .unwrap();
+    let res3 = app.oneshot(req3).await.unwrap();
+    assert_eq!(res3.status(), StatusCode::NOT_FOUND);
+    let body3 = res3.into_body().collect().await.unwrap().to_bytes();
+    let json3: serde_json::Value = serde_json::from_slice(&body3).unwrap();
+    assert_eq!(json3["status"], 404);
+    assert_eq!(json3["error"], "Resource not found");
+}
+
+#[tokio::test]
+async fn test_attendance_toggle_and_certificate_verification() {
+    let (app, pool) = setup_test_app_and_pool().await;
+    let token = create_token(1, "admin@pieas.edu.pk").unwrap();
+
+    // 1. Create future event
+    let future_date = chrono::Utc::now()
+        .checked_add_signed(chrono::Duration::days(10))
+        .unwrap()
+        .format("%Y-%m-%d")
+        .to_string();
+
+    let event_res = sqlx::query(
+        "INSERT INTO events (title, slug, date, category, is_past) VALUES ('Ceramics Symposium', 'ceramics-symposium', ?1, 'Symposium', 0)"
+    )
+    .bind(&future_date)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let event_id = event_res.last_insert_rowid();
+
+    // 2. Register for event
+    let reg_payload = serde_json::json!({
+        "student_name": "Hamza Ali",
+        "email": "hamza@pieas.edu.pk",
+        "roll_number": "22-MS-01",
+        "batch": "2022-2026",
+        "department": "DMME"
+    });
+
+    let req_reg = Request::builder()
+        .method(Method::POST)
+        .uri(format!("/api/events/{}/register", event_id))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&reg_payload).unwrap()))
+        .unwrap();
+
+    let res_reg = app.clone().oneshot(req_reg).await.unwrap();
+    assert_eq!(res_reg.status(), StatusCode::OK);
+    let reg_body = res_reg.into_body().collect().await.unwrap().to_bytes();
+    let reg_json: serde_json::Value = serde_json::from_slice(&reg_body).unwrap();
+    let reg_id = reg_json["id"].as_i64().unwrap();
+    let cert_code = reg_json["certificate_code"].as_str().unwrap().to_string();
+    assert_eq!(reg_json["attended"], false);
+
+    // 3. Verify certificate before attendance marked -> valid: false
+    let req_cert1 = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/api/certificates/verify?code={}", cert_code))
+        .body(Body::empty())
+        .unwrap();
+    let res_cert1 = app.clone().oneshot(req_cert1).await.unwrap();
+    assert_eq!(res_cert1.status(), StatusCode::OK);
+    let cert1_json: serde_json::Value =
+        serde_json::from_slice(&res_cert1.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(cert1_json["valid"], false);
+
+    // 4. Admin toggles attendance to true
+    let toggle_payload = serde_json::json!({
+        "attended": true
+    });
+    let req_toggle = Request::builder()
+        .method(Method::PUT)
+        .uri(format!("/api/admin/registrations/{}", reg_id))
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&toggle_payload).unwrap()))
+        .unwrap();
+    let res_toggle = app.clone().oneshot(req_toggle).await.unwrap();
+    assert_eq!(res_toggle.status(), StatusCode::OK);
+    let toggle_json: serde_json::Value =
+        serde_json::from_slice(&res_toggle.into_body().collect().await.unwrap().to_bytes())
+            .unwrap();
+    assert_eq!(toggle_json["attended"], true);
+
+    // 5. Verify certificate after attendance marked -> valid: true
+    let req_cert2 = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/api/certificates/verify?code={}", cert_code))
+        .body(Body::empty())
+        .unwrap();
+    let res_cert2 = app.oneshot(req_cert2).await.unwrap();
+    assert_eq!(res_cert2.status(), StatusCode::OK);
+    let cert2_json: serde_json::Value =
+        serde_json::from_slice(&res_cert2.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(cert2_json["valid"], true);
+    assert_eq!(cert2_json["student_name"], "Hamza Ali");
+}
+
+#[tokio::test]
+async fn test_login_token_return_header() {
+    let (app, pool) = setup_test_app_and_pool().await;
+
+    // Insert admin with known Argon2 hash
+    let salt =
+        argon2::password_hash::SaltString::generate(&mut argon2::password_hash::rand_core::OsRng);
+    let hashed = argon2::Argon2::default()
+        .hash_password(b"TestPassword123!", &salt)
+        .unwrap()
+        .to_string();
+
+    sqlx::query("UPDATE admin_users SET password_hash = ?1 WHERE id = 1")
+        .bind(&hashed)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let login_payload = serde_json::json!({
+        "email": "admin@pieas.edu.pk",
+        "password": "TestPassword123!"
+    });
+
+    // 1. Browser login without X-Return-Token: 1 -> token is null in JSON body
+    let req_browser = Request::builder()
+        .method(Method::POST)
+        .uri("/api/auth/login")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&login_payload).unwrap()))
+        .unwrap();
+
+    let res_browser = app.clone().oneshot(req_browser).await.unwrap();
+    assert_eq!(res_browser.status(), StatusCode::OK);
+    assert!(res_browser.headers().contains_key("set-cookie"));
+    let browser_json: serde_json::Value =
+        serde_json::from_slice(&res_browser.into_body().collect().await.unwrap().to_bytes())
+            .unwrap();
+    assert!(
+        browser_json["token"].is_null(),
+        "Browser login must not return token in JSON"
+    );
+
+    // 2. Programmatic login with X-Return-Token: 1 -> token is returned in JSON body
+    let req_prog = Request::builder()
+        .method(Method::POST)
+        .uri("/api/auth/login")
+        .header("X-Return-Token", "1")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&login_payload).unwrap()))
+        .unwrap();
+
+    let res_prog = app.oneshot(req_prog).await.unwrap();
+    assert_eq!(res_prog.status(), StatusCode::OK);
+    let prog_json: serde_json::Value =
+        serde_json::from_slice(&res_prog.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert!(
+        prog_json["token"].is_string(),
+        "Programmatic login must return token in JSON"
+    );
+}
+
+#[tokio::test]
+async fn test_post_body_markdown_omitted_in_list_and_pagination() {
+    let (app, pool) = setup_test_app_and_pool().await;
+
+    sqlx::query(
+        "INSERT INTO posts (title, slug, excerpt, body_markdown, category) VALUES ('Titanium Alloys', 'titanium-alloys', 'Short excerpt', '# Full Article Body Markdown', 'Technical')"
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // 1. List query omits body_markdown (is null)
+    let req_list = Request::builder()
+        .method(Method::GET)
+        .uri("/api/posts")
+        .body(Body::empty())
+        .unwrap();
+
+    let res_list = app.clone().oneshot(req_list).await.unwrap();
+    assert_eq!(res_list.status(), StatusCode::OK);
+    let list_json: serde_json::Value =
+        serde_json::from_slice(&res_list.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let posts = list_json.as_array().unwrap();
+    assert!(!posts.is_empty());
+    assert!(
+        posts[0]["body_markdown"].is_null(),
+        "body_markdown must be omitted in list query"
+    );
+
+    // 2. Slug detail endpoint returns full body_markdown
+    let req_slug = Request::builder()
+        .method(Method::GET)
+        .uri("/api/posts/titanium-alloys")
+        .body(Body::empty())
+        .unwrap();
+
+    let res_slug = app.oneshot(req_slug).await.unwrap();
+    assert_eq!(res_slug.status(), StatusCode::OK);
+    let slug_json: serde_json::Value =
+        serde_json::from_slice(&res_slug.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(slug_json["body_markdown"], "# Full Article Body Markdown");
+}
+
+#[tokio::test]
+async fn test_coalesce_partial_update_stats_and_empty_string_clear() {
+    let app = setup_test_app().await;
+    let token = create_token(1, "admin@pieas.edu.pk").unwrap();
+
+    // 1. Partial update: only update active_members, other fields should not be nulled
+    let partial_payload = serde_json::json!({
+        "active_members": 200
+    });
+    let req1 = Request::builder()
+        .method(Method::PUT)
+        .uri("/api/admin/stats")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&partial_payload).unwrap()))
+        .unwrap();
+    let res1 = app.clone().oneshot(req1).await.unwrap();
+    assert_eq!(res1.status(), StatusCode::OK);
+
+    // Verify via GET /api/stats that active_members is updated while events_held is preserved
+    let req_get1 = Request::builder()
+        .method(Method::GET)
+        .uri("/api/stats")
+        .body(Body::empty())
+        .unwrap();
+    let res_get1 = app.clone().oneshot(req_get1).await.unwrap();
+    assert_eq!(res_get1.status(), StatusCode::OK);
+    let json1: serde_json::Value =
+        serde_json::from_slice(&res_get1.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(json1["active_members"], 200);
+    assert_eq!(
+        json1["events_held"], 30,
+        "events_held should be preserved via COALESCE"
+    );
+
+    // 2. Explicit empty string clears optional field
+    let clear_payload = serde_json::json!({
+        "constitution_pdf_url": ""
+    });
+    let req2 = Request::builder()
+        .method(Method::PUT)
+        .uri("/api/admin/stats")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&clear_payload).unwrap()))
+        .unwrap();
+    let res2 = app.clone().oneshot(req2).await.unwrap();
+    assert_eq!(res2.status(), StatusCode::OK);
+
+    // Verify via GET /api/stats that constitution_pdf_url is now null
+    let req_get2 = Request::builder()
+        .method(Method::GET)
+        .uri("/api/stats")
+        .body(Body::empty())
+        .unwrap();
+    let res_get2 = app.oneshot(req_get2).await.unwrap();
+    assert_eq!(res_get2.status(), StatusCode::OK);
+    let json2: serde_json::Value =
+        serde_json::from_slice(&res_get2.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert!(
+        json2["constitution_pdf_url"].is_null(),
+        "Empty string should clear the field to null"
+    );
+}
+
+#[tokio::test]
+async fn test_unique_violation_returns_conflict_409() {
+    let app = setup_test_app().await;
+    let token = create_token(1, "admin@pieas.edu.pk").unwrap();
+
+    let payload = serde_json::json!({
+        "section_key": "unique_hero_key",
+        "title": "Hero",
+        "content": "Hero content"
+    });
+
+    // First creation succeeds
+    let req1 = Request::builder()
+        .method(Method::POST)
+        .uri("/api/admin/sections")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+        .unwrap();
+    let res1 = app.clone().oneshot(req1).await.unwrap();
+    assert_eq!(res1.status(), StatusCode::OK);
+
+    // Duplicate section_key creation returns 409 Conflict
+    let req2 = Request::builder()
+        .method(Method::POST)
+        .uri("/api/admin/sections")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+        .unwrap();
+    let res2 = app.oneshot(req2).await.unwrap();
+    assert_eq!(res2.status(), StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn test_standard_json_error_shapes_and_rejections() {
+    let app = setup_test_app().await;
+
+    // Malformed JSON (syntax error) to /api/contact should return 400 JSON
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/api/contact")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(b"{malformed_json_without_quotes}".to_vec()))
+        .unwrap();
+
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    let body = res.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["status"], 400);
+    assert!(json["error"].is_string());
+
+    // Deserialization type mismatch (e.g. number for email string) returns 422 JSON
+    let bad_type_payload = serde_json::json!({
+        "email": 12345
+    });
+    let req2 = Request::builder()
+        .method(Method::POST)
+        .uri("/api/newsletter")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&bad_type_payload).unwrap()))
+        .unwrap();
+
+    let res2 = app.oneshot(req2).await.unwrap();
+    assert_eq!(res2.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body2 = res2.into_body().collect().await.unwrap().to_bytes();
+    let json2: serde_json::Value = serde_json::from_slice(&body2).unwrap();
+    assert_eq!(json2["status"], 422);
+    assert!(json2["error"].is_string());
 }

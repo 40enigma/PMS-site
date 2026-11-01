@@ -576,6 +576,41 @@ footer {
   transform: translateY(0);
 }
 
+/* ── No-JS Fallback Visibility ── */
+.no-js .fade-up,
+html:not(.js) .fade-up,
+noscript .fade-up {
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+/* ── Focus Visibility Accessibility ── */
+:focus-visible {
+  outline: 2px solid var(--primary-light);
+  outline-offset: 3px;
+}
+
+/* ── Accessibility Skip Link ── */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 1rem;
+  background: var(--primary);
+  color: #fff;
+  padding: .6rem 1.2rem;
+  border-radius: var(--radius-sm);
+  z-index: 10000;
+  font-weight: 600;
+  font-size: .875rem;
+  text-decoration: none;
+  box-shadow: var(--shadow);
+  transition: top .2s ease-in-out;
+}
+.skip-link:focus {
+  top: 1rem;
+  outline: 3px solid var(--accent);
+}
+
 @media (max-width: 1080px) {
   .nav-links {
     display: none;
