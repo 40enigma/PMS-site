@@ -361,17 +361,26 @@ pub async fn verify_certificate(
     .await?;
 
     match result {
-        Some((name, title, code, attended)) if attended => Ok(Json(CertificateVerification {
+        Some((name, title, code, true)) => Ok(Json(CertificateVerification {
             valid: true,
             student_name: Some(name),
             event_title: Some(title),
             certificate_code: Some(code),
+            reason: None,
         })),
-        _ => Ok(Json(CertificateVerification {
+        Some((_, _, _, false)) => Ok(Json(CertificateVerification {
             valid: false,
             student_name: None,
             event_title: None,
             certificate_code: None,
+            reason: Some("not_attended".to_string()),
+        })),
+        None => Ok(Json(CertificateVerification {
+            valid: false,
+            student_name: None,
+            event_title: None,
+            certificate_code: None,
+            reason: Some("not_found".to_string()),
         })),
     }
 }

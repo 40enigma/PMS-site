@@ -318,18 +318,17 @@ pub async fn sitemap_xml(State(pool): State<SqlitePool>) -> Response {
         ));
     }
 
-    if let Ok(posts) = sqlx::query_as::<_, (String, Option<String>)>(
-        "SELECT slug, published_at FROM posts WHERE is_published = 1",
-    )
-    .fetch_all(&pool)
-    .await
+    if let Ok(posts) =
+        sqlx::query_as::<_, (String, Option<String>)>("SELECT slug, published_at FROM posts")
+            .fetch_all(&pool)
+            .await
     {
         for (slug, pub_date) in posts {
             let lastmod = pub_date
                 .map(|d| format!("    <lastmod>{}</lastmod>\n", d))
                 .unwrap_or_default();
             xml.push_str(&format!(
-                "  <url>\n    <loc>{}/blog#{}</loc>\n{}    <changefreq>monthly</changefreq>\n    <priority>0.7</priority>\n  </url>\n",
+                "  <url>\n    <loc>{}/blog/{}</loc>\n{}    <changefreq>monthly</changefreq>\n    <priority>0.7</priority>\n  </url>\n",
                 base_url, slug, lastmod
             ));
         }
@@ -339,10 +338,10 @@ pub async fn sitemap_xml(State(pool): State<SqlitePool>) -> Response {
         .fetch_all(&pool)
         .await
     {
-        for (slug, date) in events {
+        for (_slug, date) in events {
             xml.push_str(&format!(
-                "  <url>\n    <loc>{}/events#{}</loc>\n    <lastmod>{}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.6</priority>\n  </url>\n",
-                base_url, slug, date
+                "  <url>\n    <loc>{}/events</loc>\n    <lastmod>{}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.6</priority>\n  </url>\n",
+                base_url, date
             ));
         }
     }

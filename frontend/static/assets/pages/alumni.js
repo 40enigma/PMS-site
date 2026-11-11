@@ -20,7 +20,14 @@
             <h2 style="font-size:1.05rem;margin:0">${PMS.escHtml(a.name)}</h2>
             <span class="badge" style="font-size:12px">Batch ${PMS.escHtml(a.graduating_batch)}</span>
           </div>
-          <p style="color:var(--text);font-size:.875rem;font-weight:500;margin:.25rem 0">${PMS.escHtml(a.current_role || '')} ${a.current_organization ? '· ' + PMS.escHtml(a.current_organization) : ''}</p>
+          ${(() => {
+            const parts = [a.current_role, a.current_organization]
+              .map(v => (v ? String(v).trim() : ''))
+              .filter(Boolean);
+            return parts.length
+              ? `<p style="color:var(--text);font-size:.875rem;font-weight:500;margin:.25rem 0">${parts.map(PMS.escHtml).join(' · ')}</p>`
+              : '';
+          })()}
           ${a.industry_sector ? `<p style="color:var(--text-muted);font-size:12.5px;margin-bottom:4px;display:flex;align-items:center;gap:6px">${PMS.icon('building', 13)} Sector: ${PMS.escHtml(a.industry_sector)}</p>` : ''}
           ${a.location ? `<p style="color:var(--text-muted);font-size:12.5px;margin-bottom:6px;display:flex;align-items:center;gap:6px">${PMS.icon('map-pin', 13)} ${PMS.escHtml(a.location)}</p>` : ''}
           ${a.quote_testimonial ? `<blockquote style="font-size:13px;color:var(--text-secondary);font-style:italic;margin:8px 0;border-left:2px solid var(--border-hover);padding-left:10px;line-height:1.5">“${PMS.escHtml(a.quote_testimonial)}”</blockquote>` : ''}

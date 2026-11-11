@@ -491,6 +491,7 @@ pub struct CertificateVerification {
     pub student_name: Option<String>,
     pub event_title: Option<String>,
     pub certificate_code: Option<String>,
+    pub reason: Option<String>,
 }
 
 // Site Sections (Editable Content Across Website)

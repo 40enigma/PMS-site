@@ -4,18 +4,23 @@
  * frontend/static/assets/pages/events.js
  */
 
+let eventsLoadSeq = 0;
+
 async function loadEvents(isPast) {
+  const req = ++eventsLoadSeq;
   const grid = document.getElementById('events-grid');
   if (!grid) return;
   grid.innerHTML = PMS.skeletonGrid(3);
   try {
     const qs = isPast !== null ? `?is_past=${isPast}` : '';
     const events = await PMS.apiFetch(`/api/events${qs}`);
+    if (req !== eventsLoadSeq) return;
     grid.innerHTML = events.length
       ? events.map((e, idx) => PMS.eventCard(e, idx)).join('')
       : '<p style="grid-column:1/-1;text-align:center;color:var(--text-muted);padding:2rem 0">No events found in this category.</p>';
     PMS.observeFadeElements(grid);
   } catch(err) {
+    if (req !== eventsLoadSeq) return;
     grid.innerHTML = `<p style="color:var(--danger);grid-column:1/-1;text-align:center">Failed to load events.</p>`;
   }
 }
@@ -44,6 +49,8 @@ if (verifyForm) {
       const res = await PMS.apiFetch(`/api/certificates/verify?code=${encodeURIComponent(code)}`);
       if (res.valid) {
         PMS.showAlert(msgEl, `<strong>Digitally verified</strong><br>Participant: <strong>${PMS.escHtml(res.student_name)}</strong><br>Event: ${PMS.escHtml(res.event_title)}<br>Certificate code: <code class="mono">${PMS.escHtml(res.certificate_code)}</code>`, 'success', true);
+      } else if (res.reason === 'not_attended') {
+        PMS.showAlert(msgEl, 'Registered, but attendance has not been confirmed yet. Contact the organizers.', 'error');
       } else {
         PMS.showAlert(msgEl, 'Certificate code not found. Please verify the code or contact DMME administration.', 'error');
       }

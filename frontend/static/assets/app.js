@@ -33,7 +33,7 @@ async function apiFetch(path, options = {}) {
       const body = await res.json();
       msg = body.error || msg;
     } catch (_) {}
-    throw new Error(msg);
+    throw Object.assign(new Error(msg), { status: res.status });
   }
 
   const text = await res.text();
@@ -179,8 +179,22 @@ function setLoading(el, loading) {
 /** Format ISO date string to human readable */
 function fmtDate(iso) {
   if (!iso) return '';
-  const d = new Date(String(iso).replace(' ', 'T'));
-  if (isNaN(d.getTime())) return String(iso);
+  const str = String(iso).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const d = new Date(`${str}T00:00:00Z`);
+    if (isNaN(d.getTime())) return str;
+    return d.toLocaleDateString('en-PK', {
+      timeZone: 'UTC',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  }
+  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(str)
+    ? `${str.replace(' ', 'T')}Z`
+    : str.replace(' ', 'T');
+  const d = new Date(normalized);
+  if (isNaN(d.getTime())) return str;
   return d.toLocaleDateString('en-PK', {
     year: 'numeric',
     month: 'short',
@@ -197,23 +211,27 @@ function fmtDate(iso) {
 function renderMarkdown(md) {
   if (!md) return '';
 
+  const tok = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
   const codeBlocks = [];
   const inlineCodes = [];
   const images = [];
   const links = [];
 
+  // Strip NUL bytes so internal placeholder delimiters cannot collide with article text
+  let text = String(md).replace(/\u0000/g, '');
+
   // 1. Protect fenced code blocks (```lang ... ```)
-  let text = md.replace(/```([a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+  text = text.replace(/```([a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
     const idx = codeBlocks.length;
     codeBlocks.push({ lang, code: code.trim() });
-    return `\n\n__PMS_CODE_BLOCK_${idx}__\n\n`;
+    return `\n\n\u0000PMS_${tok}_CODE_BLOCK_${idx}\u0000\n\n`;
   });
 
   // 2. Protect inline code (`code`)
   text = text.replace(/`([^`\n]+)`/g, (_, code) => {
     const idx = inlineCodes.length;
     inlineCodes.push(code);
-    return `__PMS_INLINE_CODE_${idx}__`;
+    return `\u0000PMS_${tok}_INLINE_CODE_${idx}\u0000`;
   });
 
   // Escape HTML characters in markdown body to prevent XSS
@@ -225,7 +243,7 @@ function renderMarkdown(md) {
     const cleanUrl = url.replace(/&amp;/g, '&');
     const target = safeUrlRaw(cleanUrl);
     images.push({ alt, target: escHtml(target) });
-    return `\n\n__PMS_IMAGE_${idx}__\n\n`;
+    return `\n\n\u0000PMS_${tok}_IMAGE_${idx}\u0000\n\n`;
   });
 
   // 4. Protect Links [text](url) - handles parentheses in URL & prevents bold/italic asterisks from corrupting URLs
@@ -234,16 +252,16 @@ function renderMarkdown(md) {
     const cleanUrl = url.replace(/&amp;/g, '&');
     const target = safeUrl(cleanUrl);
     links.push({ linkText, target });
-    return `__PMS_LINK_${idx}__`;
+    return `\u0000PMS_${tok}_LINK_${idx}\u0000`;
   });
 
   // 5. Horizontal Rules (--- or *** or ___)
   text = text.replace(/^(?:---|—{3,}|\*\*\*|___)\s*$/gm, '\n\n<hr style="border:0;border-top:1px solid var(--border);margin:2rem 0">\n\n');
 
-  // 6. Headings (padded with blank lines for block paragraph separation)
-  text = text.replace(/^### (.*$)/gim, '\n\n<h3 style="font-size:1.15rem;margin:1.35rem 0 .5rem;color:var(--text)">$1</h3>\n\n');
-  text = text.replace(/^## (.*$)/gim, '\n\n<h2 style="font-size:1.35rem;margin:1.6rem 0 .6rem;color:var(--text)">$1</h2>\n\n');
-  text = text.replace(/^# (.*$)/gim, '\n\n<h1 style="font-size:1.65rem;margin:1.85rem 0 .75rem;color:var(--primary-light)">$1</h1>\n\n');
+  // 6. Headings (shifted h1->h2, h2->h3, h3->h4 because article modal already contains an h1)
+  text = text.replace(/^### (.*$)/gim, '\n\n<h4 style="font-size:1.05rem;margin:1.25rem 0 .45rem;color:var(--text)">$1</h4>\n\n');
+  text = text.replace(/^## (.*$)/gim, '\n\n<h3 style="font-size:1.25rem;margin:1.5rem 0 .55rem;color:var(--text)">$1</h3>\n\n');
+  text = text.replace(/^# (.*$)/gim, '\n\n<h2 style="font-size:1.45rem;margin:1.75rem 0 .7rem;color:var(--primary-light)">$1</h2>\n\n');
 
   // 7. Bold & Italics
   text = text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
@@ -286,6 +304,8 @@ function renderMarkdown(md) {
   });
 
   // 11. Paragraphs
+  const cbPrefix = `\u0000PMS_${tok}_CODE_BLOCK_`;
+  const imgPrefix = `\u0000PMS_${tok}_IMAGE_`;
   const blocks = text.split(/\n\s*\n/);
   text = blocks
     .map(b => {
@@ -293,8 +313,8 @@ function renderMarkdown(md) {
       if (!b) return '';
       if (
         b.startsWith('<h') ||
-        b.startsWith('__PMS_CODE_BLOCK_') ||
-        b.startsWith('__PMS_IMAGE_') ||
+        b.startsWith(cbPrefix) ||
+        b.startsWith(imgPrefix) ||
         b.startsWith('<blockquote') ||
         b.startsWith('<ul') ||
         b.startsWith('<ol') ||
@@ -307,7 +327,7 @@ function renderMarkdown(md) {
     .join('');
 
   // 12. Restore links (supporting inline bold/italics in link text) with guarded placeholder restoration
-  text = text.replace(/__PMS_LINK_(\d+)__/g, (match, idx) => {
+  text = text.replace(new RegExp(`\u0000PMS_${tok}_LINK_(\\d+)\u0000`, 'g'), (match, idx) => {
     const item = links[idx];
     if (!item) return match;
     let formattedText = item.linkText
@@ -317,21 +337,21 @@ function renderMarkdown(md) {
   });
 
   // 13. Restore images
-  text = text.replace(/__PMS_IMAGE_(\d+)__/g, (match, idx) => {
+  text = text.replace(new RegExp(`\u0000PMS_${tok}_IMAGE_(\\d+)\u0000`, 'g'), (match, idx) => {
     const item = images[idx];
     if (!item) return match;
     return `<img src="${item.target}" alt="${item.alt}" style="max-width:100%;height:auto;border-radius:8px;margin:1rem 0;display:block" loading="lazy">`;
   });
 
   // 14. Restore inline code
-  text = text.replace(/__PMS_INLINE_CODE_(\d+)__/g, (match, idx) => {
+  text = text.replace(new RegExp(`\u0000PMS_${tok}_INLINE_CODE_(\\d+)\u0000`, 'g'), (match, idx) => {
     const item = inlineCodes[idx];
     if (item === undefined) return match;
     return `<code style="background:rgba(255,255,255,.08);padding:.2rem .45rem;border-radius:4px;font-size:.875em;color:#93c5fd">${escHtml(item)}</code>`;
   });
 
   // 15. Restore code blocks
-  text = text.replace(/__PMS_CODE_BLOCK_(\d+)__/g, (match, idx) => {
+  text = text.replace(new RegExp(`\u0000PMS_${tok}_CODE_BLOCK_(\\d+)\u0000`, 'g'), (match, idx) => {
     const item = codeBlocks[idx];
     if (!item) return match;
     return `<pre class="code-block" style="background:#050811;padding:1.1rem;border-radius:10px;overflow-x:auto;margin:1.25rem 0;border:1px solid var(--border);box-shadow:inset 0 2px 4px rgba(0,0,0,.5)"><code style="font-family:monospace;font-size:.875rem;line-height:1.55;color:#e2e8f0">${escHtml(item.code)}</code></pre>`;
@@ -623,19 +643,22 @@ async function loadStats(container) {
     }
 
     // Populate contact and constitution details wherever mapped
-    qsa('[data-stat="constitution"], .pms-constitution-link').forEach(el => {
+    qsa('.pms-constitution-link').forEach(el => {
       if (s.constitution_pdf_url) {
         el.href = safeUrlRaw(s.constitution_pdf_url);
         el.style.display = 'inline-block';
       }
     });
-    qsa('[data-stat="office"], .pms-office-location').forEach(el => {
+    qsa('.pms-office-location').forEach(el => {
       if (s.office_location) el.textContent = s.office_location;
     });
-    qsa('[data-stat="email"], .pms-contact-email').forEach(el => {
+    qsa('.pms-contact-email').forEach(el => {
       if (s.contact_email) {
-        el.textContent = s.contact_email;
-        if (el.tagName === 'A') el.href = `mailto:${escHtml(s.contact_email)}`;
+        const rawEmail = String(s.contact_email).trim();
+        el.textContent = rawEmail;
+        if (el.tagName === 'A' && /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(rawEmail)) {
+          el.href = `mailto:${rawEmail}`;
+        }
       }
     });
   } catch (_) {
@@ -665,7 +688,7 @@ function eventCard(e, idx = 0) {
       </div>
       <h3 style="margin-bottom:8px">${escHtml(e.title)}</h3>
       ${e.speaker_or_organizer ? `<p style="color:var(--text);font-size:13px;font-weight:500;margin-bottom:6px;display:flex;align-items:center;gap:6px">${icon('user', 14)} ${escHtml(e.speaker_or_organizer)}</p>` : ''}
-      <p style="color:var(--text-muted);font-size:13px;margin-bottom:6px;display:flex;align-items:center;gap:6px">${icon('calendar', 14)} <span class="tabular-nums">${escHtml(e.date)}${e.time_range ? ' · ' + escHtml(e.time_range) : ''}</span></p>
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:6px;display:flex;align-items:center;gap:6px">${icon('calendar', 14)} <span class="tabular-nums">${escHtml(fmtDate(e.date))}${e.time_range ? ' · ' + escHtml(e.time_range) : ''}</span></p>
       ${e.venue ? `<p style="color:var(--text-muted);font-size:13px;margin-bottom:12px;display:flex;align-items:center;gap:6px">${icon('map-pin', 14)} ${escHtml(e.venue)}</p>` : ''}
       <p style="color:var(--text-secondary);font-size:14px;margin-bottom:12px;line-height:1.5">${escHtml(e.short_description || '')}</p>
       ${e.full_summary ? `

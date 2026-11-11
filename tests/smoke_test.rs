@@ -1321,6 +1321,9 @@ async fn test_attendance_toggle_and_certificate_verification() {
     let cert1_json: serde_json::Value =
         serde_json::from_slice(&res_cert1.into_body().collect().await.unwrap().to_bytes()).unwrap();
     assert_eq!(cert1_json["valid"], false);
+    assert_eq!(cert1_json["reason"], "not_attended");
+    assert!(cert1_json["student_name"].is_null());
+    assert!(cert1_json["event_title"].is_null());
 
     // 4. Admin toggles attendance to true
     let toggle_payload = serde_json::json!({
@@ -1352,6 +1355,7 @@ async fn test_attendance_toggle_and_certificate_verification() {
         serde_json::from_slice(&res_cert2.into_body().collect().await.unwrap().to_bytes()).unwrap();
     assert_eq!(cert2_json["valid"], true);
     assert_eq!(cert2_json["student_name"], "Hamza Ali");
+    assert!(cert2_json["reason"].is_null());
 }
 
 #[tokio::test]
@@ -1593,4 +1597,128 @@ async fn test_standard_json_error_shapes_and_rejections() {
     let json2: serde_json::Value = serde_json::from_slice(&body2).unwrap();
     assert_eq!(json2["status"], 422);
     assert!(json2["error"].is_string());
+}
+
+#[tokio::test]
+async fn test_certificate_verify_reasons_not_found_and_not_attended() {
+    let (app, pool) = setup_test_app_and_pool().await;
+
+    // Unknown certificate code -> valid: false, reason: "not_found"
+    let req_missing = Request::builder()
+        .method(Method::GET)
+        .uri("/api/certificates/verify?code=PMS-NONEXISTENT-9999")
+        .body(Body::empty())
+        .unwrap();
+    let res_missing = app.clone().oneshot(req_missing).await.unwrap();
+    assert_eq!(res_missing.status(), StatusCode::OK);
+    let json_missing: serde_json::Value =
+        serde_json::from_slice(&res_missing.into_body().collect().await.unwrap().to_bytes())
+            .unwrap();
+    assert_eq!(json_missing["valid"], false);
+    assert_eq!(json_missing["reason"], "not_found");
+    assert!(json_missing["student_name"].is_null());
+    assert!(json_missing["event_title"].is_null());
+    assert!(json_missing["certificate_code"].is_null());
+
+    // Seed an event + unattended registration -> valid: false, reason: "not_attended"
+    sqlx::query(
+        "INSERT INTO events (title, slug, date, category, is_past) VALUES ('Test Workshop', 'test-workshop-reason', '2026-10-10', 'Workshop', 1)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (event_id,): (i64,) =
+        sqlx::query_as("SELECT id FROM events WHERE slug = 'test-workshop-reason'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    sqlx::query(
+        "INSERT INTO event_registrations (event_id, student_name, roll_number, email, department, batch, attended, certificate_code) VALUES (?1, 'Ayesha Khan', '2023-BSME-001', 'ayesha@pieas.edu.pk', 'DMME', '2023', 0, 'PMS-UNATTENDED-001')",
+    )
+    .bind(event_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let req_unattended = Request::builder()
+        .method(Method::GET)
+        .uri("/api/certificates/verify?code=PMS-UNATTENDED-001")
+        .body(Body::empty())
+        .unwrap();
+    let res_unattended = app.oneshot(req_unattended).await.unwrap();
+    assert_eq!(res_unattended.status(), StatusCode::OK);
+    let json_unattended: serde_json::Value = serde_json::from_slice(
+        &res_unattended
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes(),
+    )
+    .unwrap();
+    assert_eq!(json_unattended["valid"], false);
+    assert_eq!(json_unattended["reason"], "not_attended");
+    assert!(json_unattended["student_name"].is_null());
+    assert!(json_unattended["event_title"].is_null());
+    assert!(json_unattended["certificate_code"].is_null());
+}
+
+#[tokio::test]
+#[serial]
+async fn test_sitemap_includes_seeded_post_slug_and_events() {
+    let (app, pool) = setup_test_app_and_pool().await;
+    db::seed_data(&pool).await;
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/sitemap.xml")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = res.into_body().collect().await.unwrap().to_bytes();
+    let xml = String::from_utf8_lossy(&body);
+    assert!(xml.contains("/blog/material-of-the-month-zircaloy-inconel</loc>"));
+    assert!(xml.contains("/events</loc>"));
+    assert!(!xml.contains('#'));
+}
+
+#[tokio::test]
+async fn test_team_member_default_tenure_year_is_computed() {
+    let app = setup_test_app().await;
+    let token = create_token(1, "admin@pieas.edu.pk").unwrap();
+
+    use chrono::{Datelike, Utc};
+    let now = Utc::now();
+    let y = now.year();
+    let expected_tenure = if now.month() >= 8 {
+        format!("{}-{}", y, y + 1)
+    } else {
+        format!("{}-{}", y - 1, y)
+    };
+
+    let payload = serde_json::json!({
+        "name": "Test Coordinator",
+        "role": "Coordinator"
+    });
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/api/admin/team")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let req_get = Request::builder()
+        .method(Method::GET)
+        .uri("/api/team")
+        .body(Body::empty())
+        .unwrap();
+    let res_get = app.oneshot(req_get).await.unwrap();
+    assert_eq!(res_get.status(), StatusCode::OK);
+    let body: serde_json::Value =
+        serde_json::from_slice(&res_get.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(body[0]["tenure_year"], expected_tenure);
 }

@@ -10,6 +10,35 @@ let currentEditingId = null;
 let loadSeq = 0;
 let eventsMap = {};
 
+const PAGINATED_TABS = new Set(['registrations', 'membership', 'contacts', 'newsletter']);
+
+function isUnauthorized(err) {
+  return Boolean(err && err.status === 401);
+}
+
+function currentAcademicYear() {
+  const now = new Date();
+  const y = now.getFullYear();
+  return now.getMonth() >= 7 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+}
+
+async function fetchAllRows(tab, api) {
+  if (!PAGINATED_TABS.has(tab)) {
+    return PMS.apiFetch(api);
+  }
+  const limit = 200;
+  const maxIterations = 500;
+  const all = [];
+  for (let iter = 0; iter < maxIterations; iter++) {
+    const sep = api.includes('?') ? '&' : '?';
+    const page = await PMS.apiFetch(`${api}${sep}limit=${limit}&offset=${iter * limit}`);
+    if (!Array.isArray(page) || page.length === 0) break;
+    all.push(...page);
+    if (page.length < limit) break;
+  }
+  return all;
+}
+
 /* ── Schemas for all collections ── */
 const SCHEMAS = {
   announcements: {
@@ -68,7 +97,7 @@ const SCHEMAS = {
       { name: 'role_responsibility', label: 'Key Responsibilities', type: 'text' },
       { name: 'photo_url', label: 'Photo URL', type: 'text', placeholder: '/uploads/... or https://' },
       { name: 'batch', label: 'Batch', type: 'text', placeholder: 'e.g. 2022-2026' },
-      { name: 'tenure_year', label: 'Tenure Year *', type: 'text', required: true, placeholder: 'e.g. 2025-2026' },
+      { name: 'tenure_year', label: 'Tenure Year *', type: 'text', required: true, placeholder: `e.g. ${currentAcademicYear()}` },
       { name: 'is_current', label: 'Current Council Member', type: 'checkbox', default: true },
       { name: 'is_faculty_advisor', label: 'Faculty Advisor', type: 'checkbox', default: false },
       { name: 'bio', label: 'Short Bio', type: 'textarea' },
@@ -179,7 +208,7 @@ const SCHEMAS = {
       { name: 'caption', label: 'Caption / Micrograph Spec', type: 'text', placeholder: 'e.g. Ti-6Al-4V SLM Microstructure (1000x)' },
       { name: 'event_name', label: 'Event / Context', type: 'text' },
       { name: 'event_id', label: 'Linked Event ID (Optional)', type: 'number' },
-      { name: 'year', label: 'Year *', type: 'text', required: true, default: '2026' }
+      { name: 'year', label: 'Year *', type: 'text', required: true, default: String(new Date().getFullYear()) }
     ]
   },
   sponsors: {
@@ -346,6 +375,11 @@ async function loadSection(tab) {
   const content = document.getElementById('admin-content');
   const toolbar = document.getElementById('toolbar-actions');
   if (!content) return;
+  let savedRegFilter = '';
+  if (tab === 'registrations') {
+    const existingFilter = document.getElementById('reg-event-filter');
+    if (existingFilter) savedRegFilter = existingFilter.value;
+  }
   content.innerHTML = '<div class="spinner"></div>';
   if (toolbar) toolbar.innerHTML = '';
 
@@ -377,7 +411,9 @@ async function loadSection(tab) {
       } catch (_) {}
     }
 
-    const data = await PMS.apiFetch(schema.api);
+    const data = PAGINATED_TABS.has(tab)
+      ? await fetchAllRows(tab, schema.api)
+      : await PMS.apiFetch(schema.api);
     if (req !== loadSeq) return;
     currentCache = data;
 
@@ -386,10 +422,7 @@ async function loadSection(tab) {
       return;
     }
 
-    let savedRegFilter = '';
     if (tab === 'registrations' && toolbar) {
-      const existingFilter = document.getElementById('reg-event-filter');
-      if (existingFilter) savedRegFilter = existingFilter.value;
       const uniqueEvents = Object.keys(eventsMap).map(id => ({ id, title: eventsMap[id] }));
       const opts = uniqueEvents.map(e => `<option value="${e.id}">${PMS.escHtml(e.title)}</option>`).join('');
       toolbar.innerHTML = `
@@ -528,7 +561,7 @@ async function loadSection(tab) {
     }
   } catch (err) {
     if (req !== loadSeq) return;
-    if (err.message && (err.message.includes('401') || err.message.toLowerCase().includes('unauthorized'))) {
+    if (isUnauthorized(err)) {
       showLogin();
     } else {
       content.innerHTML = `<div class="alert alert-error">Error loading records: ${PMS.escHtml(err.message)}</div>`;
@@ -555,7 +588,7 @@ if (adminContent) {
         await PMS.apiDelete(`${schema.api}/${id}`);
         loadSection(currentTab);
       } catch (err) {
-        if (err.message && (err.message.includes('401') || err.message.toLowerCase().includes('unauthorized'))) {
+        if (isUnauthorized(err)) {
           showLogin();
           return;
         }
@@ -567,7 +600,7 @@ if (adminContent) {
         await PMS.apiPut(`/api/admin/registrations/${id}`, { attended: !isAttended });
         loadSection(currentTab);
       } catch (err) {
-        if (err.message && (err.message.includes('401') || err.message.toLowerCase().includes('unauthorized'))) {
+        if (isUnauthorized(err)) {
           showLogin();
           return;
         }
@@ -583,7 +616,7 @@ if (adminContent) {
         await PMS.apiPut(`/api/admin/membership/${id}`, { status });
         loadSection(currentTab);
       } catch (err) {
-        if (err.message && (err.message.includes('401') || err.message.toLowerCase().includes('unauthorized'))) {
+        if (isUnauthorized(err)) {
           showLogin();
           return;
         }
@@ -687,13 +720,13 @@ async function renderStatsEditor(container) {
           events_held,
           years_active,
           industrial_partners,
-          constitution_pdf_url: document.getElementById('stat-pdf').value.trim() || null,
-          office_location: document.getElementById('stat-loc').value.trim() || null,
-          contact_email: document.getElementById('stat-email').value.trim() || null,
+          constitution_pdf_url: document.getElementById('stat-pdf').value.trim(),
+          office_location: document.getElementById('stat-loc').value.trim(),
+          contact_email: document.getElementById('stat-email').value.trim(),
         });
         PMS.showAlert(msg, 'Site statistics updated.', 'success');
       } catch (e) {
-        if (e.message && (e.message.includes('401') || e.message.toLowerCase().includes('unauthorized'))) {
+        if (isUnauthorized(e)) {
           showLogin();
           return;
         }
@@ -703,7 +736,7 @@ async function renderStatsEditor(container) {
       }
     });
   } catch (err) {
-    if (err.message && (err.message.includes('401') || err.message.toLowerCase().includes('unauthorized'))) {
+    if (isUnauthorized(err)) {
       showLogin();
     } else {
       container.innerHTML = `<div class="alert alert-error">Error loading statistics: ${PMS.escHtml(err.message)}</div>`;
@@ -923,7 +956,17 @@ if (crudForm) {
         const parsed = parseInt(el.value, 10);
         payload[f.name] = el.value === '' || isNaN(parsed) ? null : parsed;
       } else {
-        payload[f.name] = el.value.trim() === '' ? null : el.value.trim();
+        const trimmed = el.value.trim();
+        if (
+          trimmed === '' &&
+          currentEditingId &&
+          currentTab === 'sections' &&
+          ['subtitle', 'badge', 'extra_json'].includes(f.name)
+        ) {
+          payload[f.name] = '';
+        } else {
+          payload[f.name] = trimmed === '' ? null : trimmed;
+        }
       }
       if (f.required && (payload[f.name] === null || payload[f.name] === '')) {
         PMS.showAlert(msg, `Please fill out required field: ${f.label.replace('*', '').trim()}`);
@@ -951,7 +994,7 @@ if (crudForm) {
       modal.close();
       loadSection(currentTab);
     } catch (err) {
-      if (err.message && (err.message.includes('401') || err.message.toLowerCase().includes('unauthorized'))) {
+      if (isUnauthorized(err)) {
         showLogin();
         return;
       }

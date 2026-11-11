@@ -21,6 +21,34 @@ async function loadTeamData() {
 function renderFilteredTeam(mode) {
   const grid = document.getElementById('team-grid');
   if (!grid) return;
+  if (mode === 'past') {
+    const pastMembers = allMembers.filter(m => !m.is_current && !m.is_faculty_advisor);
+    if (!pastMembers.length) {
+      grid.innerHTML = '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No members listed in this category.</p>';
+      PMS.observeFadeElements(grid);
+      return;
+    }
+    const groups = new Map();
+    pastMembers.forEach(m => {
+      const yr = (m.tenure_year && String(m.tenure_year).trim()) || 'Other';
+      if (!groups.has(yr)) groups.set(yr, []);
+      groups.get(yr).push(m);
+    });
+    const yearValue = y => {
+      const match = /^(\d{4})/.exec(y);
+      return match ? parseInt(match[1], 10) : -1;
+    };
+    const sortedYears = Array.from(groups.keys()).sort((a, b) => yearValue(b) - yearValue(a) || b.localeCompare(a));
+    grid.innerHTML = sortedYears
+      .map(yr => {
+        const heading = `<h2 style="grid-column:1/-1;font-size:1.25rem;color:var(--text);margin:1rem 0 .25rem;padding-bottom:.4rem;border-bottom:1px solid var(--border)">${PMS.escHtml(yr)}</h2>`;
+        const cards = groups.get(yr).map((m, idx) => PMS.teamCard(m, idx)).join('');
+        return heading + cards;
+      })
+      .join('');
+    PMS.observeFadeElements(grid);
+    return;
+  }
   let filtered = [];
   if (mode === 'current') {
     filtered = allMembers.filter(m => m.is_current && !m.is_faculty_advisor);
@@ -28,8 +56,6 @@ function renderFilteredTeam(mode) {
     // Show all faculty advisors: current first, former second
     const faculty = allMembers.filter(m => m.is_faculty_advisor);
     filtered = faculty.slice().sort((a, b) => (b.is_current ? 1 : 0) - (a.is_current ? 1 : 0));
-  } else if (mode === 'past') {
-    filtered = allMembers.filter(m => !m.is_current && !m.is_faculty_advisor);
   }
   grid.innerHTML = filtered.length
     ? filtered.map((m, idx) => PMS.teamCard(m, idx)).join('')

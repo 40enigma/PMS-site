@@ -5,6 +5,7 @@ use axum::{
     Json, Router,
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
+use chrono::{Datelike, Utc};
 use sqlx::SqlitePool;
 use time::Duration;
 
@@ -13,6 +14,16 @@ use crate::error::AppError;
 use crate::models::*;
 use crate::rate_limit::{ClientIp, RateLimitState};
 use crate::util::{is_unique_violation, slugify};
+
+fn current_academic_year() -> String {
+    let now = Utc::now();
+    let year = now.year();
+    if now.month() >= 8 {
+        format!("{}-{}", year, year + 1)
+    } else {
+        format!("{}-{}", year - 1, year)
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Allowed MIME types for file uploads
@@ -901,9 +912,10 @@ async fn create_team_member(
     if p.role.trim().is_empty() {
         return Err(AppError::BadRequest("role is required".into()));
     }
+    let default_tenure = current_academic_year();
     sqlx::query("INSERT INTO team_members (name,role,role_responsibility,photo_url,batch,tenure_year,is_current,is_faculty_advisor,bio,linkedin_url,email,display_order) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)")
         .bind(&p.name).bind(&p.role).bind(&p.role_responsibility).bind(&p.photo_url)
-        .bind(&p.batch).bind(p.tenure_year.as_deref().unwrap_or("2025-2026"))
+        .bind(&p.batch).bind(p.tenure_year.as_deref().unwrap_or(&default_tenure))
         .bind(p.is_current.unwrap_or(true)).bind(p.is_faculty_advisor.unwrap_or(false))
         .bind(&p.bio).bind(&p.linkedin_url).bind(&p.email).bind(p.display_order.unwrap_or(99))
         .execute(&pool).await?;
@@ -925,9 +937,10 @@ async fn update_team_member(
     if p.role.trim().is_empty() {
         return Err(AppError::BadRequest("role is required".into()));
     }
+    let default_tenure = current_academic_year();
     let res = sqlx::query("UPDATE team_members SET name=?1,role=?2,role_responsibility=?3,photo_url=?4,batch=?5,tenure_year=?6,is_current=?7,is_faculty_advisor=?8,bio=?9,linkedin_url=?10,email=?11,display_order=?12 WHERE id=?13")
         .bind(&p.name).bind(&p.role).bind(&p.role_responsibility).bind(&p.photo_url)
-        .bind(&p.batch).bind(p.tenure_year.as_deref().unwrap_or("2025-2026"))
+        .bind(&p.batch).bind(p.tenure_year.as_deref().unwrap_or(&default_tenure))
         .bind(p.is_current.unwrap_or(true)).bind(p.is_faculty_advisor.unwrap_or(false))
         .bind(&p.bio).bind(&p.linkedin_url).bind(&p.email).bind(p.display_order.unwrap_or(99))
         .bind(id)

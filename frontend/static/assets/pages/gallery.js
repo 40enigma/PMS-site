@@ -18,7 +18,7 @@
           tabindex="0"
           role="button"
           aria-label="View micrograph in full size"
-          data-img-url="${PMS.safeUrlRaw(img.image_url)}"
+          data-img-url="${PMS.safeUrl(img.image_url)}"
           data-img-title="${PMS.escHtml(title)}"
           data-img-caption="${PMS.escHtml(captionDetail)}"
           style="margin:0;padding:0;border-radius:var(--radius-lg);overflow:hidden;position:relative;aspect-ratio:4/3;background:var(--bg-card);border:1px solid var(--border);cursor:pointer;transition-delay:${idx * 60}ms">
