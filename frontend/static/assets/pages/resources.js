@@ -81,10 +81,10 @@ async function loadAstmStrip() {
         try {
           const protocols = JSON.parse(sec.extra_json);
           strip.innerHTML = protocols.map(p => `
-            <div class="card" style="padding:1.25rem;border-left:3px solid var(--primary)">
-              <span class="tag" style="margin-bottom:.5rem;font-weight:700">${PMS.escHtml(p.code)}</span>
-              <h3 style="font-size:.95rem;margin-bottom:.35rem;color:var(--text)">${PMS.escHtml(p.title)}</h3>
-              <p style="font-size:.8rem;color:var(--text-muted);line-height:1.5">${PMS.escHtml(p.detail)}</p>
+            <div class="card" style="padding:20px;border-left:2px solid var(--accent)">
+              <span class="tag" style="margin-bottom:8px;font-family:var(--font-mono);color:var(--text)">${PMS.escHtml(p.code)}</span>
+              <h3 style="font-size:14px;margin-bottom:6px;color:var(--text)">${PMS.escHtml(p.title)}</h3>
+              <p style="font-size:13px;color:var(--text-secondary);line-height:1.5">${PMS.escHtml(p.detail)}</p>
             </div>
           `).join('');
           return;

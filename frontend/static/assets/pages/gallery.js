@@ -27,7 +27,7 @@
           <figcaption style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.88));padding:.75rem 1rem;font-size:.8rem;color:#f8fafc;pointer-events:none">
             <strong style="color:#fff">${PMS.escHtml(title)}</strong>
             ${captionDetail ? `<br><small style="color:#94a3b8">${PMS.escHtml(captionDetail)}</small>` : ''}
-            <div style="font-size:.72rem;color:var(--primary-light);margin-top:.25rem">🔍 Click to expand</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:4px;display:flex;align-items:center;gap:4px">${PMS.icon('search', 12)} Click to inspect</div>
           </figcaption>
         </figure>`;
     }).join('') : '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No images in gallery.</p>';

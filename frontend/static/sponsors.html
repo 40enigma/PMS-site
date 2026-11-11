@@ -7,7 +7,7 @@
   <meta name="description" content="Partners and industrial sponsors of PIEAS Materials Society – supporting materials engineering education and student research.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
   <link rel="stylesheet" href="/assets/style.css">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="canonical" href="https://pms.pieas.edu.pk/sponsors">
@@ -16,6 +16,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://pms.pieas.edu.pk/sponsors">
   <meta property="og:image" content="https://pms.pieas.edu.pk/pms-logo.jpeg">
+  <script src="/assets/theme.js"></script>
 </head>
 <body>
 <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -24,10 +25,7 @@
 <!-- Navbar -->
 <nav class="navbar" role="navigation" aria-label="Main navigation">
   <div class="container nav-inner">
-    <a href="/" class="nav-brand"><img src="/pms-logo.jpeg" alt="PMS Logo" class="nav-logo" width="32" height="32"> PMS <span>PIEAS</span></a>
-    <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
-      <span></span><span></span><span></span>
-    </button>
+    <a href="/" class="nav-brand"><img src="/pms-logo.jpeg" alt="PIEAS Materials Society Logo" class="nav-logo" width="28" height="28"> PIEAS Materials Society</a>
     <ul class="nav-links" id="nav-links" role="list">
       <li><a href="/">Home</a></li>
       <li><a href="/about">About</a></li>
@@ -42,14 +40,20 @@
       <li><a href="/sponsors">Sponsors</a></li>
       <li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li>
     </ul>
+    <div class="nav-actions">
+      <button id="theme-toggle" class="theme-toggle-btn" type="button" aria-label="Toggle theme" title="Toggle theme"></button>
+      <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
   </div>
 </nav>
 
 <main id="main-content">
 <!-- Hero -->
-<section class="hero" style="padding:3.5rem 0 2.5rem">
+<section class="hero" style="padding:64px 0 48px">
   <div class="container hero-content">
-    <span class="badge">Industry Linkages</span>
+    <div class="hero-badge"><span class="badge">Industry Linkages · DMME</span></div>
     <h1 class="fade-up">Our Sponsors &amp; Industrial Partners</h1>
     <p class="hero-desc fade-up">Strategic manufacturing, metallurgical, and research organizations supporting students at PIEAS.</p>
   </div>
@@ -65,19 +69,19 @@
 </section>
 
 <!-- Dynamic Collaboration Pitch (from site_sections) -->
-<section class="section" style="background:rgba(255,255,255,.01);border-top:1px solid var(--border)">
+<section class="section">
   <div class="container">
     <div class="section-header" style="text-align:center">
       <span class="badge" id="pitch-badge">Partnership</span>
       <h2 id="pitch-title">Partner with PIEAS Materials Society</h2>
-      <div id="pitch-subtitle" style="font-size:.95rem;color:var(--primary-light);font-weight:600;margin-bottom:.35rem;display:none"></div>
+      <div id="pitch-subtitle" style="font-size:15px;color:var(--text);font-weight:500;margin-bottom:6px;display:none"></div>
       <p id="pitch-desc">Connect with future materials engineers, sponsor technical workshops, and collaborate on strategic engineering challenges.</p>
     </div>
-    <div id="pitch-grid" class="grid grid-3" style="margin-bottom:3rem">
+    <div id="pitch-grid" class="grid grid-3" style="margin-bottom:32px">
       <div class="spinner"></div>
     </div>
     <div style="text-align:center">
-      <a href="/join" class="btn btn-primary">Initiate Corporate Partnership →</a>
+      <a href="/join" class="btn btn-primary">Initiate Corporate Partnership</a>
     </div>
   </div>
 </section>
@@ -88,8 +92,8 @@
   <div class="container">
     <div class="footer-grid">
       <div>
-        <div class="footer-title">⚛️ PMS PIEAS</div>
-        <p style="font-size:.85rem">Official academic society of the Department of Metallurgy &amp; Materials Engineering (DMME), PIEAS Islamabad.</p>
+        <div class="footer-title">PMS PIEAS</div>
+        <p style="font-size:13px;line-height:1.6">Official academic society of the Department of Metallurgy &amp; Materials Engineering (DMME), PIEAS Islamabad.</p>
       </div>
       <div>
         <div class="footer-title">Quick Links</div>
@@ -111,10 +115,10 @@
       </div>
       <div>
         <div class="footer-title">Contact &amp; Governance</div>
-        <p style="font-size:.85rem;line-height:1.6">
+        <p style="font-size:13px;line-height:1.6">
           <a href="mailto:pms@pieas.edu.pk" class="pms-contact-email" style="color:var(--text-muted)">pms@pieas.edu.pk</a><br>
           <span class="pms-office-location">DMME Block, PIEAS, Nilore, Islamabad</span><br>
-          <a href="#" class="pms-constitution-link" style="display:none;margin-top:.45rem;color:var(--accent);font-weight:600">📜 Society Constitution (PDF) ↗</a>
+          <a href="#" class="pms-constitution-link" style="display:none;margin-top:.45rem;color:var(--text);font-weight:500">Society Constitution (PDF) ↗</a>
         </p>
       </div>
     </div>

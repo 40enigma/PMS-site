@@ -289,7 +289,7 @@ function showDashboard(user) {
   if (logoutBtn) logoutBtn.style.display = '';
   if (user && user.name) {
     const navUser = document.getElementById('nav-user');
-    if (navUser) navUser.textContent = `👤 ${user.name}`;
+    if (navUser) navUser.textContent = user.name;
   }
   loadSection(currentTab);
 }
@@ -398,7 +398,7 @@ async function loadSection(tab) {
             <option value="">All Events (${data.length})</option>
             ${opts}
           </select>
-          <button class="btn btn-outline btn-sm" id="btn-export-csv">📥 Export CSV</button>
+          <button class="btn btn-outline btn-sm" id="btn-export-csv" style="display:inline-flex;align-items:center;gap:6px">${PMS.icon('download', 13)} Export CSV</button>
         </div>
       `;
     }
@@ -408,7 +408,7 @@ async function loadSection(tab) {
         let val = item[c];
         if (c === 'event_id' && tab === 'registrations') {
           const t = eventsMap[val] || `Event #${val}`;
-          return `<td><span title="${PMS.escHtml(t)}" style="font-weight:600;color:var(--primary-light)">${PMS.escHtml(t)}</span></td>`;
+          return `<td><span title="${PMS.escHtml(t)}" style="font-weight:600;color:var(--text)">${PMS.escHtml(t)}</span></td>`;
         }
         if (c === 'attended' && tab === 'registrations') {
           return `<td><span class="status-badge ${val ? 'status-approved' : 'status-rejected'}">${val ? 'Attended' : 'Absent'}</span></td>`;
@@ -418,7 +418,7 @@ async function loadSection(tab) {
           const cls = s === 'approved' ? 'status-approved' : (s === 'rejected' ? 'status-rejected' : 'status-pending');
           return `<td><span class="status-badge ${cls}">${PMS.escHtml(String(val))}</span></td>`;
         }
-        if (typeof val === 'boolean') return `<td>${val ? '✅ Yes' : '—'}</td>`;
+        if (typeof val === 'boolean') return `<td>${val ? 'Yes' : '—'}</td>`;
         if (val === null || val === undefined) return `<td>—</td>`;
         const str = String(val);
         const display = str.length > 50 ? str.slice(0, 48) + '…' : str;
@@ -691,7 +691,7 @@ async function renderStatsEditor(container) {
           office_location: document.getElementById('stat-loc').value.trim() || null,
           contact_email: document.getElementById('stat-email').value.trim() || null,
         });
-        PMS.showAlert(msg, '✅ Site statistics updated successfully!', 'success');
+        PMS.showAlert(msg, 'Site statistics updated.', 'success');
       } catch (e) {
         if (e.message && (e.message.includes('401') || e.message.toLowerCase().includes('unauthorized'))) {
           showLogin();
@@ -757,7 +757,7 @@ function renderUploadTool(container) {
         throw new Error(errDetail || `Upload failed (HTTP ${res.status})`);
       }
       const data = await res.json();
-      PMS.showAlert(msg, `✅ Asset uploaded: <a href="${PMS.safeUrl(data.url)}" target="_blank" style="color:var(--primary-light);font-weight:600">${PMS.escHtml(data.url)}</a>`, 'success', true);
+      PMS.showAlert(msg, `Asset uploaded: <a href="${PMS.safeUrl(data.url)}" target="_blank" style="color:var(--text);font-weight:600">${PMS.escHtml(data.url)}</a>`, 'success', true);
     } catch (e) {
       PMS.showAlert(msg, e.message);
     } finally {
@@ -838,7 +838,7 @@ function renderFields(fields, currentData) {
           <div style="display:flex;gap:.5rem;align-items:center">
             <input type="${f.type || 'text'}" id="f-${f.name}" class="form-control" value="${PMS.escHtml(val)}" placeholder="${PMS.escHtml(f.placeholder || '')}" ${f.required ? 'required' : ''} style="flex:1">
             <label class="btn btn-outline btn-sm inline-upload-label" style="margin:0;white-space:nowrap;cursor:pointer;padding:.4rem .7rem">
-              <span class="upload-status-text">📁 Upload</span>
+              <span class="upload-status-text">Upload</span>
               <input type="file" style="display:none" data-target-input="f-${f.name}" class="inline-file-input">
             </label>
           </div>
@@ -865,7 +865,7 @@ if (crudFields) {
     const expectedEditingId = currentEditingId;
     const expectedTab = currentTab;
 
-    if (statusSpan) statusSpan.textContent = '⏳ Uploading…';
+    if (statusSpan) statusSpan.textContent = 'Uploading…';
     try {
       const fd = new FormData();
       fd.append('file', file);
@@ -891,12 +891,12 @@ if (crudFields) {
       if (modal.open && currentEditingId === expectedEditingId && currentTab === expectedTab) {
         const targetEl = document.getElementById(targetId);
         if (targetEl) targetEl.value = data.url;
-        if (statusSpan) statusSpan.textContent = '✅ Uploaded';
+        if (statusSpan) statusSpan.textContent = 'Uploaded';
       }
     } catch (err) {
       if (modal.open && currentEditingId === expectedEditingId && currentTab === expectedTab) {
         alert('Upload failed: ' + err.message);
-        if (statusSpan) statusSpan.textContent = '📁 Upload';
+        if (statusSpan) statusSpan.textContent = 'Upload';
       }
     } finally {
       fileInput.value = '';

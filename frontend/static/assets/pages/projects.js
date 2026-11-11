@@ -18,11 +18,11 @@
           <span class="badge badge-accent">Batch ${PMS.escHtml(p.batch)}</span>
         </div>
         <h2 style="font-size:1.15rem;margin-bottom:.5rem">${PMS.escHtml(p.title)}</h2>
-        ${p.students ? `<p style="color:var(--primary-light);font-size:.85rem;margin-bottom:.35rem">👥 Investigators: ${PMS.escHtml(p.students)}</p>` : ''}
-        ${p.supervisors ? `<p style="color:var(--text-dim);font-size:.8rem;margin-bottom:.5rem">🔬 Supervisors: ${PMS.escHtml(p.supervisors)}</p>` : ''}
-        <p style="color:var(--text-muted);font-size:.875rem;line-height:1.6;margin-bottom:.75rem">${PMS.escHtml(p.abstract || '')}</p>
-        ${p.tags ? `<div style="display:flex;gap:.35rem;flex-wrap:wrap;margin:.6rem 0">${p.tags.split(',').map(t => `<span class="tag">${PMS.escHtml(t.trim())}</span>`).join('')}</div>` : ''}
-        ${p.paper_or_repo_url ? `<div style="margin-top:1rem"><a href="${PMS.safeUrl(p.paper_or_repo_url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">View Paper / Repo ↗</a></div>` : ''}
+        ${p.students ? `<p style="color:var(--text);font-size:13px;margin-bottom:4px;display:flex;align-items:center;gap:6px">${PMS.icon('users', 14)} Investigators: ${PMS.escHtml(p.students)}</p>` : ''}
+        ${p.supervisors ? `<p style="color:var(--text-muted);font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px">${PMS.icon('microscope', 14)} Supervisors: ${PMS.escHtml(p.supervisors)}</p>` : ''}
+        <p style="color:var(--text-secondary);font-size:14px;line-height:1.55;margin-bottom:12px">${PMS.escHtml(p.abstract || '')}</p>
+        ${p.tags ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin:8px 0">${p.tags.split(',').map(t => `<span class="tag">${PMS.escHtml(t.trim())}</span>`).join('')}</div>` : ''}
+        ${p.paper_or_repo_url ? `<div style="margin-top:auto;padding-top:12px"><a href="${PMS.safeUrl(p.paper_or_repo_url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;gap:6px">${PMS.icon('external', 13)} View Paper / Repository</a></div>` : ''}
       </article>`).join('') : '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No student projects listed.</p>';
     PMS.observeFadeElements(grid);
   } catch(e) {

@@ -8,55 +8,59 @@
   <meta name="robots" content="noindex,nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
   <link rel="stylesheet" href="/assets/style.css">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <style>
-    .admin-nav { display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:1.5rem; }
-    .admin-nav button { background:rgba(255,255,255,.05); border:1px solid var(--border); color:var(--text-muted); padding:.5rem .85rem; border-radius:8px; cursor:pointer; font-size:.825rem; transition:var(--transition); display:flex; align-items:center; gap:.4rem; }
-    .admin-nav button.active, .admin-nav button:hover { background:var(--primary); color:#fff; border-color:var(--primary); }
-    #admin-content table { width:100%; border-collapse:collapse; font-size:.85rem; }
-    #admin-content th, #admin-content td { padding:.75rem 1rem; border-bottom:1px solid var(--border); text-align:left; vertical-align:middle; }
-    #admin-content th { color:var(--text-muted); font-weight:600; font-size:.78rem; text-transform:uppercase; letter-spacing:.05em; background:rgba(255,255,255,.02); }
-    #admin-content tr:hover td { background:rgba(255,255,255,.03); }
-    .action-btn { padding:.3rem .6rem; border-radius:6px; font-size:.78rem; cursor:pointer; border:1px solid var(--border); background:rgba(255,255,255,.05); color:var(--text); transition:var(--transition); margin-right:.35rem; }
-    .action-btn:hover { background:rgba(255,255,255,.1); }
-    .action-btn.btn-danger { color:var(--danger); border-color:rgba(239,68,68,.3); }
-    .action-btn.btn-danger:hover { background:rgba(239,68,68,.15); }
-    .action-btn.btn-success { color:var(--success); border-color:rgba(16,185,129,.3); }
-    .action-btn.btn-success:hover { background:rgba(16,185,129,.15); }
-    .action-btn.btn-primary { background:var(--primary); color:#fff; border-color:var(--primary); }
-    #login-section { max-width:440px; margin:2rem auto; }
-    .section-toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; flex-wrap:wrap; gap:1rem; }
-    dialog::backdrop { background:rgba(0,0,0,.75); backdrop-filter:blur(4px); }
-    .modal-dialog { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); color:var(--text); max-width:680px; width:95%; padding:2rem; max-height:90vh; overflow-y:auto; box-shadow:0 25px 50px -12px rgba(0,0,0,.7); }
-    .status-badge { display:inline-block; padding:.2rem .5rem; border-radius:4px; font-size:.75rem; font-weight:600; text-transform:uppercase; }
-    .status-pending { background:rgba(245,158,11,.15); color:#fbbf24; border:1px solid rgba(245,158,11,.3); }
-    .status-approved { background:rgba(16,185,129,.15); color:#6ee7b7; border:1px solid rgba(16,185,129,.3); }
-    .status-rejected { background:rgba(239,68,68,.15); color:#fca5a5; border:1px solid rgba(239,68,68,.3); }
+    .admin-nav { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:20px; }
+    .admin-nav button { background:var(--bg-raised); border:1px solid var(--border); color:var(--text-secondary); padding:7px 12px; border-radius:var(--radius-btn); cursor:pointer; font-size:13px; font-weight:500; transition:var(--transition); display:flex; align-items:center; gap:6px; }
+    .admin-nav button.active, .admin-nav button:hover { background:var(--bg-deep); color:var(--accent); border-color:var(--accent-border); }
+    #admin-content table { width:100%; border-collapse:collapse; font-size:13.5px; }
+    #admin-content th, #admin-content td { padding:10px 14px; border-bottom:1px solid var(--border); text-align:left; vertical-align:middle; }
+    #admin-content th { color:var(--text-muted); font-weight:500; font-size:12px; text-transform:none; letter-spacing:0; font-family:var(--font-mono); background:var(--bg-subtle); }
+    #admin-content tr:hover td { background:var(--bg-raised); }
+    .action-btn { padding:4px 8px; border-radius:var(--radius-sm); font-size:12.5px; font-weight:500; cursor:pointer; border:1px solid var(--border); background:var(--bg-raised); color:var(--text); transition:var(--transition); margin-right:4px; }
+    .action-btn:hover { background:#2a2a2e; border-color:var(--border-hover); }
+    .action-btn.btn-danger { color:var(--danger); border-color:var(--danger-border); background:var(--danger-subtle); }
+    .action-btn.btn-danger:hover { background:var(--danger); color:#fff; }
+    .action-btn.btn-success { color:var(--success); border-color:var(--success-border); background:var(--success-subtle); }
+    .action-btn.btn-success:hover { background:var(--success); color:#fff; }
+    .action-btn.btn-primary { background:var(--text); color:var(--bg); border-color:var(--text); }
+    #login-section { max-width:420px; margin:32px auto; }
+    .section-toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
+    dialog::backdrop { background:rgba(0,0,0,.72); backdrop-filter:blur(4px); }
+    .modal-dialog { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); color:var(--text); max-width:680px; width:95%; padding:24px; max-height:90vh; overflow-y:auto; box-shadow:var(--shadow-lg); }
+    .status-badge { display:inline-block; padding:2px 7px; border-radius:var(--radius-sm); font-size:12px; font-weight:500; font-family:var(--font-mono); text-transform:none; }
+    .status-pending { background:var(--accent-subtle); color:var(--accent); border:1px solid var(--accent-border); }
+    .status-approved { background:var(--success-subtle); color:var(--success); border:1px solid var(--success-border); }
+    .status-rejected { background:var(--danger-subtle); color:var(--danger); border:1px solid var(--danger-border); }
     select.form-control option { background: var(--bg-card); color: var(--text); }
     @media (max-width: 1080px) {
-      #nav-user-item, #nav-logout-item { padding: .35rem .5rem; }
+      #nav-user-item, #nav-logout-item { padding: 6px 8px; }
       #logout-btn { width: 100%; text-align: center; }
     }
   </style>
+  <script src="/assets/theme.js"></script>
 </head>
 <body>
 <a href="#main-content" class="skip-link">Skip to main content</a>
 <nav class="navbar" role="navigation" aria-label="Main navigation">
   <div class="container nav-inner">
     <a href="/" class="nav-brand">
-      <img src="/pms-logo.jpeg" alt="PMS Logo" class="nav-logo" width="32" height="32">
-      PMS <span>Admin</span>
+      <img src="/pms-logo.jpeg" alt="PIEAS Materials Society Logo" class="nav-logo" width="28" height="28">
+      PIEAS Materials Society <span>Admin</span>
     </a>
-    <button class="hamburger" aria-label="Toggle Navigation" aria-expanded="false">
-      <span></span><span></span><span></span>
-    </button>
     <ul class="nav-links" role="list">
-      <li><a href="/">← View Live Site</a></li>
+      <li><a href="/">View Live Site</a></li>
       <li id="nav-user-item" style="display:none"><span id="nav-user" style="color:var(--text-muted);font-size:.85rem;font-weight:600"></span></li>
       <li id="nav-logout-item" style="display:none"><button id="logout-btn" class="btn btn-outline btn-sm" style="display:none">Logout</button></li>
     </ul>
+    <div class="nav-actions">
+      <button id="theme-toggle" class="theme-toggle-btn" type="button" aria-label="Toggle theme" title="Toggle theme"></button>
+      <button class="hamburger" aria-label="Toggle Navigation" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
   </div>
 </nav>
 
@@ -65,7 +69,12 @@
   <!-- Login Section -->
   <div id="login-section">
     <div class="card fade-up">
-      <div style="font-size:2.5rem;margin-bottom:1rem">🔐</div>
+      <div style="margin-bottom:16px;color:var(--text);display:flex;align-items:center;justify-content:center">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+      </div>
       <h1 style="font-size:1.5rem;margin-bottom:.5rem">Admin Authentication</h1>
       <p style="color:var(--text-muted);font-size:.875rem;margin-bottom:1.5rem">
         Sign in to manage society announcements, events, technical posts, ASTM toolkit resources, and member applications.
@@ -96,24 +105,24 @@
     </div>
 
     <div class="admin-nav" role="tablist" aria-label="Admin sections">
-      <button class="active" data-section="announcements" role="tab">📢 Announcements</button>
-      <button data-section="stats" role="tab">📊 Site Stats</button>
-      <button data-section="events" role="tab">📅 Events</button>
-      <button data-section="registrations" role="tab">🎟️ Registrations</button>
-      <button data-section="team" role="tab">👥 Team &amp; Council</button>
-      <button data-section="posts" role="tab">📝 Technical Posts</button>
-      <button data-section="resources" role="tab">📚 Toolkit &amp; ASTM</button>
-      <button data-section="opportunities" role="tab">💼 Opportunities</button>
-      <button data-section="alumni" role="tab">🎓 Alumni Directory</button>
-      <button data-section="projects" role="tab">🔬 FYP &amp; Research</button>
-      <button data-section="gallery" role="tab">🖼️ Gallery</button>
-      <button data-section="sponsors" role="tab">🤝 Sponsors</button>
-      <button data-section="faqs" role="tab">❓ FAQs</button>
-      <button data-section="sections" role="tab">🧩 Site Sections</button>
-      <button data-section="membership" role="tab">📋 Membership Apps</button>
-      <button data-section="contacts" role="tab">📬 Contact Messages</button>
-      <button data-section="newsletter" role="tab">📧 Newsletter</button>
-      <button data-section="upload" role="tab">📎 File Upload</button>
+      <button class="active" data-section="announcements" role="tab">Announcements</button>
+      <button data-section="stats" role="tab">Site Stats</button>
+      <button data-section="events" role="tab">Events</button>
+      <button data-section="registrations" role="tab">Registrations</button>
+      <button data-section="team" role="tab">Team &amp; Council</button>
+      <button data-section="posts" role="tab">Technical Posts</button>
+      <button data-section="resources" role="tab">Toolkit &amp; ASTM</button>
+      <button data-section="opportunities" role="tab">Opportunities</button>
+      <button data-section="alumni" role="tab">Alumni Directory</button>
+      <button data-section="projects" role="tab">FYP &amp; Research</button>
+      <button data-section="gallery" role="tab">Gallery</button>
+      <button data-section="sponsors" role="tab">Sponsors</button>
+      <button data-section="faqs" role="tab">FAQs</button>
+      <button data-section="sections" role="tab">Site Sections</button>
+      <button data-section="membership" role="tab">Membership Apps</button>
+      <button data-section="contacts" role="tab">Contact Messages</button>
+      <button data-section="newsletter" role="tab">Newsletter</button>
+      <button data-section="upload" role="tab">File Upload</button>
     </div>
 
     <div id="admin-content" class="card">
@@ -127,7 +136,7 @@
 <dialog id="crud-modal" class="modal-dialog">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
     <h2 id="modal-title" style="font-size:1.35rem;margin:0">Create Record</h2>
-    <button id="modal-cancel-btn" class="btn btn-outline btn-sm" style="padding:.25rem .5rem">✕</button>
+    <button id="modal-cancel-btn" class="btn btn-outline btn-sm" style="padding:.25rem .5rem" aria-label="Close dialog">Close</button>
   </div>
   <form id="crud-form" novalidate>
     <div id="crud-fields"></div>
@@ -143,7 +152,7 @@
 <dialog id="view-modal" class="modal-dialog" style="max-width:650px;width:92%">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem">
     <h2 id="view-modal-title" style="font-size:1.35rem;margin:0">Record Details</h2>
-    <button type="button" id="view-modal-close-btn" class="btn btn-outline btn-sm" style="padding:.25rem .5rem">✕</button>
+    <button type="button" id="view-modal-close-btn" class="btn btn-outline btn-sm" style="padding:.25rem .5rem" aria-label="Close dialog">Close</button>
   </div>
   <div id="view-modal-content" style="max-height:65vh;overflow-y:auto;display:flex;flex-direction:column;gap:.75rem"></div>
   <div style="display:flex;justify-content:flex-end;margin-top:1.5rem">

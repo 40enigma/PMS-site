@@ -7,7 +7,7 @@
   <meta name="description" content="Undergraduate materials engineering toolkit: ASTM standards, metallography etching cheatsheets, Thermo-Calc, and phase diagram software.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
   <link rel="stylesheet" href="/assets/style.css">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="canonical" href="https://pms.pieas.edu.pk/resources">
@@ -16,6 +16,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://pms.pieas.edu.pk/resources">
   <meta property="og:image" content="https://pms.pieas.edu.pk/pms-logo.jpeg">
+  <script src="/assets/theme.js"></script>
 </head>
 <body>
 <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -24,10 +25,7 @@
 <!-- Navbar -->
 <nav class="navbar" role="navigation" aria-label="Main navigation">
   <div class="container nav-inner">
-    <a href="/" class="nav-brand"><img src="/pms-logo.jpeg" alt="PMS Logo" class="nav-logo" width="32" height="32"> PMS <span>PIEAS</span></a>
-    <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
-      <span></span><span></span><span></span>
-    </button>
+    <a href="/" class="nav-brand"><img src="/pms-logo.jpeg" alt="PIEAS Materials Society Logo" class="nav-logo" width="28" height="28"> PIEAS Materials Society</a>
     <ul class="nav-links" id="nav-links" role="list">
       <li><a href="/">Home</a></li>
       <li><a href="/about">About</a></li>
@@ -42,17 +40,23 @@
       <li><a href="/sponsors">Sponsors</a></li>
       <li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li>
     </ul>
+    <div class="nav-actions">
+      <button id="theme-toggle" class="theme-toggle-btn" type="button" aria-label="Toggle theme" title="Toggle theme"></button>
+      <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
   </div>
 </nav>
 
 <main id="main-content">
 <!-- Hero Section with Category Filters -->
-<section class="hero" style="padding:3.5rem 0 2.5rem">
+<section class="hero" style="padding:64px 0 48px">
   <div class="container hero-content">
-    <span class="badge">Academic Toolkit</span>
+    <div class="hero-badge"><span class="badge">Academic Toolkit · DMME</span></div>
     <h1 class="fade-up">Student Toolkit &amp; Materials Engineering Resources</h1>
     <p class="hero-desc fade-up">Curated ASTM testing standards, software tutorials, lab safety protocols, and crystallography databases for DMME students.</p>
-    <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1.5rem">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:20px">
       <button class="btn btn-outline btn-sm res-filter active" data-cat="">All Toolkit Items</button>
       <button class="btn btn-outline btn-sm res-filter" data-cat="Standards">Standards (ASTM)</button>
       <button class="btn btn-outline btn-sm res-filter" data-cat="Software">Software &amp; Tools</button>
@@ -64,14 +68,14 @@
 </section>
 
 <!-- ASTM Standards & Cheatsheet Strip (Dynamic from site_sections) -->
-<section class="section" style="padding-top:1.5rem;padding-bottom:1.5rem;background:rgba(255,255,255,.01);border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
+<section class="section" style="padding:40px 0;background:var(--bg-card);border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
   <div class="container">
-    <div class="section-header" style="margin-bottom:1.5rem">
+    <div class="section-header" style="margin-bottom:24px">
       <span class="badge" id="astm-badge">Testing Protocols</span>
-      <h2 id="astm-title" style="font-size:1.5rem">Materials Testing &amp; ASTM Cheatsheet Strip</h2>
-      <p id="astm-desc" style="font-size:.875rem">Critical mechanical testing and metallography protocols used across DMME laboratory coursework.</p>
+      <h2 id="astm-title" style="font-size:1.4rem">Materials Testing &amp; ASTM Specifications</h2>
+      <p id="astm-desc" style="font-size:14px">Critical mechanical testing and metallography protocols used across DMME laboratory coursework.</p>
     </div>
-    <div id="astm-strip" class="grid grid-4" style="gap:1rem">
+    <div id="astm-strip" class="grid grid-4" style="gap:16px">
       <div class="spinner"></div>
     </div>
   </div>
@@ -92,8 +96,8 @@
   <div class="container">
     <div class="footer-grid">
       <div>
-        <div class="footer-title">⚛️ PMS PIEAS</div>
-        <p style="font-size:.85rem">Official academic society of the Department of Metallurgy &amp; Materials Engineering (DMME), PIEAS Islamabad.</p>
+        <div class="footer-title">PMS PIEAS</div>
+        <p style="font-size:13px;line-height:1.6">Official academic society of the Department of Metallurgy &amp; Materials Engineering (DMME), PIEAS Islamabad.</p>
       </div>
       <div>
         <div class="footer-title">Quick Links</div>
@@ -115,10 +119,10 @@
       </div>
       <div>
         <div class="footer-title">Contact &amp; Governance</div>
-        <p style="font-size:.85rem;line-height:1.6">
+        <p style="font-size:13px;line-height:1.6">
           <a href="mailto:pms@pieas.edu.pk" class="pms-contact-email" style="color:var(--text-muted)">pms@pieas.edu.pk</a><br>
           <span class="pms-office-location">DMME Block, PIEAS, Nilore, Islamabad</span><br>
-          <a href="#" class="pms-constitution-link" style="display:none;margin-top:.45rem;color:var(--accent);font-weight:600">📜 Society Constitution (PDF) ↗</a>
+          <a href="#" class="pms-constitution-link" style="display:none;margin-top:.45rem;color:var(--text);font-weight:500">Society Constitution (PDF) ↗</a>
         </p>
       </div>
     </div>

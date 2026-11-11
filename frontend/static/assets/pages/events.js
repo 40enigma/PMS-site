@@ -43,9 +43,9 @@ if (verifyForm) {
     try {
       const res = await PMS.apiFetch(`/api/certificates/verify?code=${encodeURIComponent(code)}`);
       if (res.valid) {
-        PMS.showAlert(msgEl, `🎓 <strong>Digitally Verified!</strong><br>Participant: <strong>${PMS.escHtml(res.student_name)}</strong><br>Event: <em>${PMS.escHtml(res.event_title)}</em><br>Certificate Code: <code>${PMS.escHtml(res.certificate_code)}</code>`, 'success', true);
+        PMS.showAlert(msgEl, `<strong>Digitally verified</strong><br>Participant: <strong>${PMS.escHtml(res.student_name)}</strong><br>Event: ${PMS.escHtml(res.event_title)}<br>Certificate code: <code class="mono">${PMS.escHtml(res.certificate_code)}</code>`, 'success', true);
       } else {
-        PMS.showAlert(msgEl, '❌ Invalid certificate code. Please verify code or contact society administration.', 'error');
+        PMS.showAlert(msgEl, 'Certificate code not found. Please verify the code or contact DMME administration.', 'error');
       }
     } catch(e) {
       PMS.showAlert(msgEl, e.message || 'Verification service error.');

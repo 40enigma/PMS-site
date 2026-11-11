@@ -35,7 +35,7 @@
           const actionsEl = document.getElementById('hero-actions');
           if (actionsEl) {
             actionsEl.innerHTML = `
-              ${cfg.cta_primary_url ? `<a href="${PMS.safeUrl(cfg.cta_primary_url)}" class="btn btn-primary">${PMS.escHtml(cfg.cta_primary_text || 'Join PMS →')}</a>` : ''}
+              ${cfg.cta_primary_url ? `<a href="${PMS.safeUrl(cfg.cta_primary_url)}" class="btn btn-primary">${PMS.escHtml(cfg.cta_primary_text || 'Join PMS')}</a>` : ''}
               ${cfg.cta_secondary_url ? `<a href="${PMS.safeUrl(cfg.cta_secondary_url)}" class="btn btn-outline">${PMS.escHtml(cfg.cta_secondary_text || 'Student Resources')}</a>` : ''}
             `;
           }
@@ -71,12 +71,12 @@
         try {
           const cards = JSON.parse(actSec.extra_json);
           if (Array.isArray(cards) && cards.length > 0) {
-            const icons = { Atom: '⚛️', Cpu: '🔬', Award: '🏆', Building: '🏭' };
+            const icons = { Atom: 'atom', Cpu: 'cpu', Award: 'award', Building: 'building' };
             actGrid.innerHTML = cards.map(c => `
               <article class="card fade-up">
-                <div style="font-size:2rem;margin-bottom:.75rem">${icons[c.icon] || '✨'}</div>
-                <h3 style="font-size:1.1rem;margin-bottom:.5rem">${PMS.escHtml(c.title)}</h3>
-                <p style="color:var(--text-muted);font-size:.875rem;line-height:1.6">${PMS.escHtml(c.desc)}</p>
+                <div style="margin-bottom:14px;color:var(--text)">${PMS.icon(icons[c.icon] || 'layers', 22)}</div>
+                <h3 style="font-size:15px;margin-bottom:8px">${PMS.escHtml(c.title)}</h3>
+                <p style="color:var(--text-secondary);font-size:13.5px;line-height:1.5">${PMS.escHtml(c.desc)}</p>
               </article>
             `).join('');
             PMS.observeFadeElements(actGrid);
@@ -141,7 +141,7 @@
       PMS.setLoading(btn, true);
       try {
         await PMS.apiPost('/api/newsletter', { email });
-        PMS.showAlert(msgEl, '🎉 Thank you for subscribing to the PMS Bulletin!', 'success');
+        PMS.showAlert(msgEl, 'Subscribed to the PMS Bulletin.', 'success');
         if (emailInput) emailInput.value = '';
       } catch(e) {
         PMS.showAlert(msgEl, e.message || 'Could not subscribe. Please try again.');

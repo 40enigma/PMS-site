@@ -7,9 +7,10 @@
   <meta name="description" content="The requested page could not be found on the PIEAS Materials Society web platform.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
   <link rel="stylesheet" href="/assets/style.css">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <script src="/assets/theme.js"></script>
 </head>
 <body>
 <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -18,10 +19,7 @@
 <!-- Full Responsive Navbar -->
 <nav class="navbar" role="navigation" aria-label="Main navigation">
   <div class="container nav-inner">
-    <a href="/" class="nav-brand"><img src="/pms-logo.jpeg" alt="PMS Logo" class="nav-logo" width="32" height="32"> PMS <span>PIEAS</span></a>
-    <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
-      <span></span><span></span><span></span>
-    </button>
+    <a href="/" class="nav-brand"><img src="/pms-logo.jpeg" alt="PIEAS Materials Society Logo" class="nav-logo" width="28" height="28"> PIEAS Materials Society</a>
     <ul class="nav-links" id="nav-links" role="list">
       <li><a href="/">Home</a></li>
       <li><a href="/about">About</a></li>
@@ -36,21 +34,31 @@
       <li><a href="/sponsors">Sponsors</a></li>
       <li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li>
     </ul>
+    <div class="nav-actions">
+      <button id="theme-toggle" class="theme-toggle-btn" type="button" aria-label="Toggle theme" title="Toggle theme"></button>
+      <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
   </div>
 </nav>
 
 <main id="main-content">
-<section class="section" style="padding:6rem 0;text-align:center">
-  <div class="container" style="max-width:600px">
-    <div style="font-size:5rem;margin-bottom:1rem">🔬</div>
-    <span class="badge" style="margin-bottom:1rem">Error 404</span>
-    <h1 style="font-size:3rem;color:var(--text);margin-bottom:.75rem">Page Not Found</h1>
-    <p style="color:var(--text-muted);margin:0 auto 2rem;line-height:1.7">
-      The materials engineering resource or page you requested does not exist or has been relocated. Please check the URL or return to the main platform.
+<section class="section" style="padding:80px 0;text-align:center">
+  <div class="container" style="max-width:580px">
+    <div style="margin-bottom:20px;color:var(--text);display:flex;justify-content:center">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M6 18h8"/><path d="M3 22h18"/><path d="M14 22a7 7 0 1 0 0-14h-1"/><path d="M9 14h2"/><path d="M9 12a2 2 0 0 1-2-2V6h6v4a2 2 0 0 1-2 2Z"/><path d="M12 6V3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3"/>
+      </svg>
+    </div>
+    <div style="margin-bottom:16px"><span class="badge">404 · Unresolved Coordinate</span></div>
+    <h1 style="font-size:2.25rem;color:var(--text);margin-bottom:12px">Page Not Found</h1>
+    <p style="color:var(--text-secondary);margin:0 auto 28px;line-height:1.6">
+      The materials engineering resource or page you requested does not exist or has been relocated. Check the URL or return to the main platform.
     </p>
-    <div style="display:flex;justify-content:center;gap:1rem;flex-wrap:wrap">
-      <a href="/" class="btn btn-primary">← Return to Homepage</a>
-      <a href="/resources" class="btn btn-outline">Browse Student Resources</a>
+    <div style="display:flex;justify-content:center;gap:12px;flex-wrap:wrap">
+      <a href="/" class="btn btn-primary">Return to Homepage</a>
+      <a href="/resources" class="btn btn-outline">Student Resources</a>
     </div>
   </div>
 </section>
@@ -61,8 +69,8 @@
   <div class="container">
     <div class="footer-grid">
       <div>
-        <div class="footer-title">⚛️ PMS PIEAS</div>
-        <p style="font-size:.85rem">Official academic society of the Department of Metallurgy &amp; Materials Engineering (DMME), PIEAS Islamabad.</p>
+        <div class="footer-title">PMS PIEAS</div>
+        <p style="font-size:13px;line-height:1.6">Official academic society of the Department of Metallurgy &amp; Materials Engineering (DMME), PIEAS Islamabad.</p>
       </div>
       <div>
         <div class="footer-title">Quick Links</div>
@@ -84,10 +92,10 @@
       </div>
       <div>
         <div class="footer-title">Contact &amp; Governance</div>
-        <p style="font-size:.85rem;line-height:1.6">
+        <p style="font-size:13px;line-height:1.6">
           <a href="mailto:pms@pieas.edu.pk" class="pms-contact-email" style="color:var(--text-muted)">pms@pieas.edu.pk</a><br>
           <span class="pms-office-location">DMME Block, PIEAS, Nilore, Islamabad</span><br>
-          <a href="#" class="pms-constitution-link" style="display:none;margin-top:.45rem;color:var(--accent);font-weight:600">📜 Society Constitution (PDF) ↗</a>
+          <a href="#" class="pms-constitution-link" style="display:none;margin-top:.45rem;color:var(--text);font-weight:500">Society Constitution (PDF) ↗</a>
         </p>
       </div>
     </div>

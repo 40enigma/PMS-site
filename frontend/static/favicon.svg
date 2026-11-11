@@ -1,39 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <defs>
-    <linearGradient id="pms-grad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#2563eb"/>
-      <stop offset="50%" stop-color="#0ea5e9"/>
-      <stop offset="100%" stop-color="#f59e0b"/>
-    </linearGradient>
-    <linearGradient id="pms-node" x1="0" y1="0" x2="10" y2="10" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="100%" stop-color="#60a5fa"/>
-    </linearGradient>
-  </defs>
+  <!-- Crystalline Unit Cell Hexagonal / BCC Geometry -->
+  <polygon points="32,6 56,19 56,45 32,58 8,45 8,19" stroke="#ededed" stroke-width="2.5" stroke-linejoin="round" fill="#141415"/>
+  
+  <!-- Interior Crystal Lattice Vectors -->
+  <line x1="32" y1="6" x2="32" y2="32" stroke="rgba(237,237,237,0.4)" stroke-width="1.75"/>
+  <line x1="56" y1="19" x2="32" y2="32" stroke="rgba(237,237,237,0.4)" stroke-width="1.75"/>
+  <line x1="56" y1="45" x2="32" y2="32" stroke="rgba(237,237,237,0.4)" stroke-width="1.75"/>
+  <line x1="32" y1="58" x2="32" y2="32" stroke="rgba(237,237,237,0.4)" stroke-width="1.75"/>
+  <line x1="8" y1="45" x2="32" y2="32" stroke="rgba(237,237,237,0.4)" stroke-width="1.75"/>
+  <line x1="8" y1="19" x2="32" y2="32" stroke="rgba(237,237,237,0.4)" stroke-width="1.75"/>
 
-  <!-- Hexagonal Crystal Lattice / Grain Boundary Motif -->
-  <polygon points="32,6 54,19 54,45 32,58 10,45 10,19" stroke="url(#pms-grad)" stroke-width="2.5" stroke-linejoin="round" fill="rgba(37,99,235,0.08)"/>
+  <!-- Lattice Vertex Atoms -->
+  <circle cx="32" cy="6" r="3" fill="#ededed"/>
+  <circle cx="56" cy="19" r="3" fill="#ededed"/>
+  <circle cx="56" cy="45" r="3" fill="#ededed"/>
+  <circle cx="32" cy="58" r="3" fill="#ededed"/>
+  <circle cx="8" cy="45" r="3" fill="#ededed"/>
+  <circle cx="8" cy="19" r="3" fill="#ededed"/>
 
-  <!-- Interior Lattice Bonds (HCP / FCC unit cell center) -->
-  <line x1="32" y1="6" x2="32" y2="32" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"/>
-  <line x1="54" y1="19" x2="32" y2="32" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"/>
-  <line x1="54" y1="45" x2="32" y2="32" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round"/>
-  <line x1="32" y1="58" x2="32" y2="32" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/>
-  <line x1="10" y1="45" x2="32" y2="32" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round"/>
-  <line x1="10" y1="19" x2="32" y2="32" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"/>
-
-  <!-- Atomic Orbital Ring -->
-  <ellipse cx="32" cy="32" rx="22" ry="9" stroke="rgba(245,158,11,0.5)" stroke-width="1.5" stroke-dasharray="3 3" transform="rotate(-25 32 32)"/>
-
-  <!-- Lattice Atom Nodes -->
-  <circle cx="32" cy="6" r="3.5" fill="url(#pms-node)" stroke="#1e3a8a" stroke-width="1"/>
-  <circle cx="54" cy="19" r="3.5" fill="url(#pms-node)" stroke="#1e3a8a" stroke-width="1"/>
-  <circle cx="54" cy="45" r="3.5" fill="url(#pms-node)" stroke="#1e3a8a" stroke-width="1"/>
-  <circle cx="32" cy="58" r="3.5" fill="#f59e0b" stroke="#78350f" stroke-width="1"/>
-  <circle cx="10" cy="45" r="3.5" fill="url(#pms-node)" stroke="#1e3a8a" stroke-width="1"/>
-  <circle cx="10" cy="19" r="3.5" fill="url(#pms-node)" stroke="#1e3a8a" stroke-width="1"/>
-
-  <!-- Center Atom Core -->
-  <circle cx="32" cy="32" r="5" fill="#f59e0b" stroke="#ffffff" stroke-width="1.5"/>
-  <circle cx="32" cy="32" r="2" fill="#ffffff"/>
+  <!-- Interstitial Atom Core (Tempered Bronze Accent) -->
+  <circle cx="32" cy="32" r="4.5" fill="#e59a3c"/>
+  <circle cx="32" cy="32" r="2" fill="#141415"/>
 </svg>

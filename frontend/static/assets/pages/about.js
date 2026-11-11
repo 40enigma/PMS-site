@@ -35,11 +35,11 @@
       faqsEl.innerHTML = faqs.length
         ? faqs.map(f => `
           <details class="card" style="margin-bottom:1rem;cursor:pointer">
-            <summary style="font-weight:600;font-size:1.05rem;color:var(--text);display:flex;justify-content:space-between;align-items:center">
-              <span>❓ ${PMS.escHtml(f.question)}</span>
-              <span class="badge" style="font-size:.72rem">${PMS.escHtml(f.category || 'General')}</span>
+            <summary style="font-weight:500;font-size:15px;color:var(--text);display:flex;justify-content:space-between;align-items:center">
+              <span>${PMS.escHtml(f.question)}</span>
+              <span class="badge" style="font-size:12px">${PMS.escHtml(f.category || 'General')}</span>
             </summary>
-            <div style="padding-top:1rem;margin-top:.75rem;border-top:1px solid var(--border);color:var(--text-muted);line-height:1.7">
+            <div style="padding-top:12px;margin-top:10px;border-top:1px solid var(--border-subtle);color:var(--text-secondary);line-height:1.6">
               ${PMS.escHtml(f.answer)}
             </div>
           </details>

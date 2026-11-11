@@ -38,7 +38,7 @@ if (joinForm) {
         interests:   document.getElementById('join-interests').value.trim() || null,
         why_join:    document.getElementById('join-why').value.trim() || null,
       });
-      PMS.showAlert(msg, '🎉 Application submitted successfully! The executive council will review your submission.', 'success');
+      PMS.showAlert(msg, 'Application submitted. The executive council will review your submission.', 'success');
       joinForm.reset();
     } catch(e) {
       PMS.showAlert(msg, e.message || 'Submission failed. Please try again.');
@@ -76,7 +76,7 @@ if (contactForm) {
         subject: document.getElementById('contact-subject').value.trim() || null,
         message: message,
       });
-      PMS.showAlert(msg, '✉️ Your message has been sent to PMS administration.', 'success');
+      PMS.showAlert(msg, 'Message sent to society administration.', 'success');
       contactForm.reset();
     } catch(e) {
       PMS.showAlert(msg, e.message || 'Message could not be sent. Please try again.');
