@@ -12,3 +12,4 @@ ignore = [
     # `pms-platform` only opens its own local application database file.
     "RUSTSEC-2026-0459",
 ]
+
