@@ -17,12 +17,15 @@ const ALIASES = {
 async function loadResources() {
   const grid = document.getElementById('resources-grid');
   if (!grid) return;
+  grid.setAttribute('aria-busy', 'true');
   grid.innerHTML = PMS.skeletonGrid(3);
   try {
     allResources = await PMS.apiFetch('/api/resources');
     renderFilteredResources('');
   } catch (e) {
     grid.innerHTML = '<p style="color:var(--danger);grid-column:1/-1">Failed to load resources.</p>';
+  } finally {
+    grid.setAttribute('aria-busy', 'false');
   }
 }
 
@@ -50,8 +53,11 @@ function renderFilteredResources(category) {
 // Category filter buttons
 document.querySelectorAll('.res-filter').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.res-filter').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
+    document.querySelectorAll('.res-filter').forEach(b => {
+      const isActive = b === btn;
+      b.classList.toggle('active', isActive);
+      b.setAttribute('aria-pressed', String(isActive));
+    });
     renderFilteredResources(btn.dataset.cat);
   });
 });
@@ -60,6 +66,7 @@ document.querySelectorAll('.res-filter').forEach(btn => {
 async function loadAstmStrip() {
   const strip = document.getElementById('astm-strip');
   if (!strip) return;
+  strip.setAttribute('aria-busy', 'true');
   try {
     const sections = await PMS.apiFetch('/api/sections');
     const sec = sections.find(s => s.section_key === 'resources_standards');
@@ -94,6 +101,8 @@ async function loadAstmStrip() {
     strip.innerHTML = '';
   } catch (_) {
     strip.innerHTML = '';
+  } finally {
+    strip.setAttribute('aria-busy', 'false');
   }
 }
 

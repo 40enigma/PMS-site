@@ -7,17 +7,18 @@
 (async () => {
   const grid = document.getElementById('projects-grid');
   if (!grid) return;
+  grid.setAttribute('aria-busy', 'true');
   grid.innerHTML = PMS.skeletonGrid(2);
   try {
     const projects = await PMS.apiFetch('/api/projects');
     grid.innerHTML = projects.length ? projects.map((p, idx) => `
       <article class="card fade-up" style="transition-delay:${Math.min(idx, 8) * 60}ms">
-        ${p.image_url ? `<img src="${PMS.safeUrl(p.image_url)}" alt="${PMS.escHtml(p.title)}" style="width:100%;height:160px;object-fit:cover;border-radius:8px;margin-bottom:1rem">` : ''}
+        ${p.image_url ? `<img src="${PMS.safeUrl(p.image_url)}" alt="" style="width:100%;height:160px;object-fit:cover;border-radius:8px;margin-bottom:1rem">` : ''}
         <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">
           <span class="badge">${PMS.escHtml(p.project_type)}</span>
           <span class="badge badge-accent">Batch ${PMS.escHtml(p.batch)}</span>
         </div>
-        <h2 style="font-size:1.15rem;margin-bottom:.5rem">${PMS.escHtml(p.title)}</h2>
+        <h3 style="font-size:1.15rem;margin-bottom:.5rem">${PMS.escHtml(p.title)}</h3>
         ${p.students ? `<p style="color:var(--text);font-size:13px;margin-bottom:4px;display:flex;align-items:center;gap:6px">${PMS.icon('users', 14)} Investigators: ${PMS.escHtml(p.students)}</p>` : ''}
         ${p.supervisors ? `<p style="color:var(--text-muted);font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px">${PMS.icon('microscope', 14)} Supervisors: ${PMS.escHtml(p.supervisors)}</p>` : ''}
         <p style="color:var(--text-secondary);font-size:14px;line-height:1.55;margin-bottom:12px">${PMS.escHtml(p.abstract || '')}</p>
@@ -27,6 +28,8 @@
     PMS.observeFadeElements(grid);
   } catch(e) {
     grid.innerHTML = '<p style="color:var(--danger);grid-column:1/-1;text-align:center">Could not load projects.</p>';
+  } finally {
+    grid.setAttribute('aria-busy', 'false');
   }
 })();
 

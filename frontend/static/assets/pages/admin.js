@@ -359,15 +359,46 @@ if (logoutBtn) {
   });
 }
 
-/* ── Tab Switcher ── */
-document.querySelectorAll('.admin-nav button').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.admin-nav button').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentTab = btn.dataset.section;
-    loadSection(currentTab);
+/* ── Tab Switcher & ARIA Tablist Navigation ── */
+function activateAdminTab(btn, shouldFocus = false) {
+  if (!btn) return;
+  const tabs = Array.from(document.querySelectorAll('.admin-nav [role="tab"]'));
+  tabs.forEach(b => {
+    const isSelected = b === btn;
+    b.classList.toggle('active', isSelected);
+    b.setAttribute('aria-selected', String(isSelected));
+    b.setAttribute('tabindex', isSelected ? '0' : '-1');
   });
-});
+  const contentEl = document.getElementById('admin-content');
+  if (contentEl && btn.id) {
+    contentEl.setAttribute('aria-labelledby', btn.id);
+  }
+  if (shouldFocus) btn.focus();
+  currentTab = btn.dataset.section;
+  loadSection(currentTab);
+}
+
+const adminTablist = document.querySelector('.admin-nav[role="tablist"]');
+if (adminTablist) {
+  const tabs = Array.from(adminTablist.querySelectorAll('[role="tab"]'));
+  tabs.forEach(btn => {
+    btn.addEventListener('click', () => activateAdminTab(btn, false));
+  });
+  adminTablist.addEventListener('keydown', ev => {
+    const tabsList = Array.from(adminTablist.querySelectorAll('[role="tab"]'));
+    const curIdx = tabsList.indexOf(document.activeElement);
+    if (curIdx === -1 || !tabsList.length) return;
+    let nextIdx = -1;
+    if (ev.key === 'ArrowRight') nextIdx = (curIdx + 1) % tabsList.length;
+    else if (ev.key === 'ArrowLeft') nextIdx = (curIdx - 1 + tabsList.length) % tabsList.length;
+    else if (ev.key === 'Home') nextIdx = 0;
+    else if (ev.key === 'End') nextIdx = tabsList.length - 1;
+    if (nextIdx !== -1) {
+      ev.preventDefault();
+      activateAdminTab(tabsList[nextIdx], true);
+    }
+  });
+}
 
 /* ── Section Loader ── */
 async function loadSection(tab) {
@@ -380,7 +411,8 @@ async function loadSection(tab) {
     const existingFilter = document.getElementById('reg-event-filter');
     if (existingFilter) savedRegFilter = existingFilter.value;
   }
-  content.innerHTML = '<div class="spinner"></div>';
+  content.setAttribute('aria-busy', 'true');
+  content.innerHTML = '<div class="spinner" role="status" aria-live="polite" aria-label="Loading section"></div>';
   if (toolbar) toolbar.innerHTML = '';
 
   try {
@@ -564,8 +596,10 @@ async function loadSection(tab) {
     if (isUnauthorized(err)) {
       showLogin();
     } else {
-      content.innerHTML = `<div class="alert alert-error">Error loading records: ${PMS.escHtml(err.message)}</div>`;
+      content.innerHTML = `<div class="alert alert-error" role="alert">Error loading records: ${PMS.escHtml(err.message)}</div>`;
     }
+  } finally {
+    if (req === loadSeq) content.setAttribute('aria-busy', 'false');
   }
 }
 
@@ -694,7 +728,7 @@ async function renderStatsEditor(container) {
             <input id="stat-email" type="email" class="form-control" value="${PMS.escHtml(stats.contact_email || '')}">
           </div>
         </div>
-        <div id="stats-msg" style="margin-top:1rem"></div>
+        <div id="stats-msg" role="status" aria-live="polite" style="margin-top:1rem"></div>
         <button type="submit" class="btn btn-primary" style="margin-top:1rem" id="stats-save-btn">Save Statistics</button>
       </form>
     `;
@@ -740,7 +774,7 @@ async function renderStatsEditor(container) {
     if (isUnauthorized(err)) {
       showLogin();
     } else {
-      container.innerHTML = `<div class="alert alert-error">Error loading statistics: ${PMS.escHtml(err.message)}</div>`;
+      container.innerHTML = `<div class="alert alert-error" role="alert">Error loading statistics: ${PMS.escHtml(err.message)}</div>`;
     }
   }
 }
@@ -757,7 +791,7 @@ function renderUploadTool(container) {
         <label class="form-label" for="upload-file">Select File</label>
         <input id="upload-file" type="file" class="form-control" accept="image/*,application/pdf,text/plain" required>
       </div>
-      <div id="upload-msg" style="margin-top:1rem"></div>
+      <div id="upload-msg" role="status" aria-live="polite" style="margin-top:1rem"></div>
       <button type="submit" class="btn btn-primary" style="margin-top:1rem" id="upload-submit">Upload Asset</button>
     </form>
   `;
@@ -791,7 +825,7 @@ function renderUploadTool(container) {
         throw new Error(errDetail || `Upload failed (HTTP ${res.status})`);
       }
       const data = await res.json();
-      PMS.showAlert(msg, `Asset uploaded: <a href="${PMS.safeUrl(data.url)}" target="_blank" style="color:var(--text);font-weight:600">${PMS.escHtml(data.url)}</a>`, 'success', true);
+      PMS.showAlert(msg, `Asset uploaded: <a href="${PMS.safeUrl(data.url)}" target="_blank" rel="noopener noreferrer" style="color:var(--text);font-weight:600">${PMS.escHtml(data.url)}</a>`, 'success', true);
     } catch (e) {
       PMS.showAlert(msg, e.message);
     } finally {
@@ -874,7 +908,7 @@ function renderFields(fields, currentData) {
             <input type="${f.type || 'text'}" id="f-${f.name}" class="form-control" value="${PMS.escHtml(val)}" placeholder="${PMS.escHtml(f.placeholder || '')}" ${f.required ? 'required' : ''} style="flex:1">
             <label class="btn btn-outline btn-sm inline-upload-label" style="margin:0;white-space:nowrap;cursor:pointer;padding:.4rem .7rem">
               <span class="upload-status-text">Upload</span>
-              <input type="file" style="display:none" data-target-input="f-${f.name}" class="inline-file-input">
+              <input type="file" data-target-input="f-${f.name}" class="inline-file-input">
             </label>
           </div>
         </div>`;

@@ -7,6 +7,7 @@
 (async () => {
   const grid = document.getElementById('alumni-grid');
   if (!grid) return;
+  grid.setAttribute('aria-busy', 'true');
   grid.innerHTML = PMS.skeletonGrid(2);
   try {
     const alumni = await PMS.apiFetch('/api/alumni');
@@ -17,7 +18,7 @@
           : `<div style="width:72px;height:72px;border-radius:50%;background:var(--bg-raised);border:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--text-muted)">${PMS.icon('graduation-cap', 26)}</div>`}
         <div style="flex:1">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:.5rem">
-            <h2 style="font-size:1.05rem;margin:0">${PMS.escHtml(a.name)}</h2>
+            <h3 style="font-size:1.05rem;margin:0">${PMS.escHtml(a.name)}</h3>
             <span class="badge" style="font-size:12px">Batch ${PMS.escHtml(a.graduating_batch)}</span>
           </div>
           ${(() => {
@@ -37,6 +38,8 @@
     PMS.observeFadeElements(grid);
   } catch(e) {
     grid.innerHTML = '<p style="color:var(--danger);grid-column:1/-1;text-align:center">Could not load alumni.</p>';
+  } finally {
+    grid.setAttribute('aria-busy', 'false');
   }
 })();
 

@@ -8,6 +8,7 @@
   // 1. Load Dynamic About Sections
   const container = document.getElementById('sections-content');
   if (container) {
+    container.setAttribute('aria-busy', 'true');
     container.innerHTML = PMS.skeletonGrid(3);
     try {
       const secs = await PMS.apiFetch('/api/sections');
@@ -24,12 +25,15 @@
       PMS.observeFadeElements(container);
     } catch (e) {
       container.innerHTML = '<p style="color:var(--danger);grid-column:1/-1">Could not load about sections.</p>';
+    } finally {
+      container.setAttribute('aria-busy', 'false');
     }
   }
 
   // 2. Load FAQs Section
   const faqsEl = document.getElementById('faqs-container');
   if (faqsEl) {
+    faqsEl.setAttribute('aria-busy', 'true');
     try {
       const faqs = await PMS.apiFetch('/api/faqs');
       faqsEl.innerHTML = faqs.length
@@ -47,6 +51,8 @@
         : '<p style="color:var(--text-muted);text-align:center">No frequently asked questions published yet.</p>';
     } catch (e) {
       faqsEl.innerHTML = '<p style="color:var(--danger);text-align:center">Failed to load FAQs.</p>';
+    } finally {
+      faqsEl.setAttribute('aria-busy', 'false');
     }
   }
 })();

@@ -118,7 +118,8 @@ function qsa(sel, ctx = document) {
 
 function showAlert(container, message, type = 'error', isHtml = false) {
   if (!container) return;
-  container.innerHTML = `<div class="alert alert-${type}" role="alert">${isHtml ? message : escHtml(message)}</div>`;
+  const roleAttr = type === 'error' ? 'alert' : 'status';
+  container.innerHTML = `<div class="alert alert-${type}" role="${roleAttr}">${isHtml ? message : escHtml(message)}</div>`;
 }
 
 function escHtml(str) {
@@ -734,7 +735,7 @@ async function loadStats(container) {
 function skeletonGrid(count = 3) {
   let html = '';
   for (let i = 0; i < count; i++) {
-    html += '<div class="skeleton-card"></div>';
+    html += '<div class="skeleton-card" aria-hidden="true"></div>';
   }
   return html;
 }
@@ -744,7 +745,7 @@ function eventCard(e, idx = 0) {
   const delay = Math.min(idx, 8) * 60;
   return `
     <article class="card fade-up ${e.is_featured ? 'card-featured' : ''}" style="transition-delay:${delay}ms">
-      ${e.poster_url ? `<img src="${safeUrl(e.poster_url)}" alt="${escHtml(e.title)}" style="width:100%;height:180px;object-fit:cover;border-radius:8px;margin-bottom:16px;">` : ''}
+      ${e.poster_url ? `<img src="${safeUrl(e.poster_url)}" alt="" style="width:100%;height:180px;object-fit:cover;border-radius:8px;margin-bottom:16px;">` : ''}
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
         <span class="badge">${escHtml(e.category)}</span>
         ${e.is_past ? '<span class="badge" style="color:var(--text-muted)">Past</span>' : '<span class="badge badge-success">Upcoming</span>'}
@@ -796,7 +797,7 @@ function postCard(p, idx = 0) {
 
   return `
     <article class="card fade-up ${p.is_featured ? 'card-featured' : ''}" style="transition-delay:${delay}ms">
-      ${p.cover_image_url ? `<img src="${safeUrl(p.cover_image_url)}" alt="${escHtml(p.title)}" style="width:100%;height:160px;object-fit:cover;border-radius:8px;margin-bottom:14px;border:1px solid var(--border-subtle)">` : ''}
+      ${p.cover_image_url ? `<img src="${safeUrl(p.cover_image_url)}" alt="" style="width:100%;height:160px;object-fit:cover;border-radius:8px;margin-bottom:14px;border:1px solid var(--border-subtle)">` : ''}
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
         <span class="badge">${escHtml(p.category)}</span>
         ${p.material_formula ? `<span class="tag">[${escHtml(p.material_formula)}]</span>` : ''}
@@ -915,7 +916,7 @@ function openRegistrationModal(eventId, eventTitle, triggerEl) {
           <label class="form-label" for="reg-phone">Contact Phone</label>
           <input id="reg-phone" class="form-control" placeholder="Optional for SMS updates">
         </div>
-        <div id="reg-msg" style="margin-top:1rem"></div>
+        <div id="reg-msg" role="status" aria-live="polite" style="margin-top:1rem"></div>
         <div style="display:flex;justify-content:flex-end;gap:.75rem;margin-top:1.5rem">
           <button type="button" class="btn btn-outline" id="reg-close">Cancel</button>
           <button type="submit" class="btn btn-primary" id="reg-submit">Confirm Registration</button>
@@ -1069,7 +1070,7 @@ function openLightbox(imageUrl, title, caption = '', triggerEl) {
     modal.setAttribute('aria-labelledby', 'lightbox-title');
     modal.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
-        <h3 id="lightbox-title" style="font-size:1.15rem;color:var(--text)">Micrograph</h3>
+        <h2 id="lightbox-title" style="font-size:1.15rem;color:var(--text)">Micrograph</h2>
         <button type="button" id="lightbox-close-btn" class="btn btn-outline btn-sm" aria-label="Close dialog">${icon('x', 14)} Close</button>
       </div>
       <img id="lightbox-img" src="" alt="Micrograph" style="max-width:100%;max-height:70vh;object-fit:contain;border-radius:8px">
@@ -1080,9 +1081,12 @@ function openLightbox(imageUrl, title, caption = '', triggerEl) {
     enableBackdropClose(modal);
   }
 
+  const cleanTitle = title && title !== 'null' ? title : 'Micrograph Detail';
   const cleanCaption = caption && caption !== 'null' ? caption : '';
-  modal.querySelector('#lightbox-img').src = safeUrlRaw(imageUrl);
-  modal.querySelector('#lightbox-title').textContent = title && title !== 'null' ? title : 'Micrograph Detail';
+  const lightboxImg = modal.querySelector('#lightbox-img');
+  lightboxImg.src = safeUrlRaw(imageUrl);
+  lightboxImg.alt = cleanTitle;
+  modal.querySelector('#lightbox-title').textContent = cleanTitle;
   modal.querySelector('#lightbox-caption').textContent = cleanCaption;
   showModalWithFocusReturn(modal, triggerEl);
 }
@@ -1129,16 +1133,16 @@ async function openArticleModal(slug, triggerEl) {
       <span class="badge">Technical Article</span>
       <button type="button" id="close-article-modal" class="btn btn-outline btn-sm" aria-label="Close dialog">${icon('x', 14)} Close</button>
     </div>
-    <div id="article-reader-content"><div class="spinner"></div></div>
+    <div id="article-reader-content" aria-busy="true"><div class="spinner" role="status" aria-live="polite" aria-label="Loading article"></div></div>
   `;
   showModalWithFocusReturn(modal, triggerEl);
   document.getElementById('close-article-modal').onclick = () => modal.close();
 
+  const contentEl = document.getElementById('article-reader-content');
   try {
     const post = await apiFetch(`/api/posts/${encodeURIComponent(slug)}`);
-    const content = document.getElementById('article-reader-content');
-    content.innerHTML = `
-      ${post.cover_image_url ? `<img src="${safeUrl(post.cover_image_url)}" alt="${escHtml(post.title)}" style="width:100%;max-height:300px;object-fit:cover;border-radius:10px;margin-bottom:1.5rem">` : ''}
+    contentEl.innerHTML = `
+      ${post.cover_image_url ? `<img src="${safeUrl(post.cover_image_url)}" alt="" style="width:100%;max-height:300px;object-fit:cover;border-radius:10px;margin-bottom:1.5rem">` : ''}
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">
         <span class="badge">${escHtml(post.category)}</span>
         ${post.material_formula ? `<span class="tag">[${escHtml(post.material_formula)}]</span>` : ''}
@@ -1155,9 +1159,13 @@ async function openArticleModal(slug, triggerEl) {
       </div>
     `;
   } catch (err) {
-    document.getElementById('article-reader-content').innerHTML = `
-      <div class="alert alert-error">Failed to load article: ${escHtml(err.message)}</div>
-    `;
+    if (contentEl) {
+      contentEl.innerHTML = `
+        <div class="alert alert-error" role="alert">Failed to load article: ${escHtml(err.message)}</div>
+      `;
+    }
+  } finally {
+    if (contentEl) contentEl.setAttribute('aria-busy', 'false');
   }
 }
 
@@ -1189,22 +1197,6 @@ document.addEventListener('click', ev => {
       lbTrigger.dataset.imgCaption,
       lbTrigger
     );
-  }
-});
-
-/* ── Keyboard accessibility for interactive gallery cards ── */
-document.addEventListener('keydown', ev => {
-  if (ev.key === 'Enter' || ev.key === ' ') {
-    const lbTrigger = document.activeElement && document.activeElement.closest('.micrograph-lightbox-trigger');
-    if (lbTrigger) {
-      ev.preventDefault();
-      openLightbox(
-        lbTrigger.dataset.imgUrl,
-        lbTrigger.dataset.imgTitle,
-        lbTrigger.dataset.imgCaption,
-        lbTrigger
-      );
-    }
   }
 });
 

@@ -57,9 +57,9 @@
     <h1 class="fade-up">Our Executive Council &amp; Advisors</h1>
     <p class="hero-desc fade-up">Dedicated undergraduate, graduate students and DMME faculty advisors advancing materials engineering at PIEAS.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:20px">
-      <button class="btn btn-outline btn-sm team-toggle active" data-filter="current" id="btn-toggle-current">Current Council</button>
-      <button class="btn btn-outline btn-sm team-toggle" data-filter="faculty" id="btn-toggle-faculty">Faculty Advisors</button>
-      <button class="btn btn-outline btn-sm team-toggle" data-filter="past" id="btn-toggle-past">Past Councils</button>
+      <button type="button" class="btn btn-outline btn-sm team-toggle active" data-filter="current" id="btn-toggle-current" aria-pressed="true">Current Council</button>
+      <button type="button" class="btn btn-outline btn-sm team-toggle" data-filter="faculty" id="btn-toggle-faculty" aria-pressed="false">Faculty Advisors</button>
+      <button type="button" class="btn btn-outline btn-sm team-toggle" data-filter="past" id="btn-toggle-past" aria-pressed="false">Past Councils</button>
     </div>
   </div>
 </section>
@@ -67,8 +67,9 @@
 <!-- Team Grid -->
 <section class="section">
   <div class="container">
+    <h2 class="sr-only">Executive Council &amp; Advisors Directory</h2>
     <div id="team-grid" class="grid grid-4">
-      <div class="spinner"></div>
+      <div class="spinner" role="status" aria-live="polite" aria-label="Loading"></div>
     </div>
   </div>
 </section>
@@ -83,7 +84,7 @@
       <p id="guidance-desc">Structured executive responsibilities ensuring transparent operational and academic leadership.</p>
     </div>
     <div id="guidance-grid" class="grid grid-3">
-      <div class="spinner"></div>
+      <div class="spinner" role="status" aria-live="polite" aria-label="Loading"></div>
     </div>
   </div>
 </section>

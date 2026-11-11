@@ -57,9 +57,9 @@
     <h1 id="page-title" class="fade-up">Events, Seminars &amp; Workshops</h1>
     <p class="hero-desc fade-up">Hands-on characterization training, expert industrial seminars, and technical visits organized by PMS.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:20px">
-      <button class="btn btn-outline btn-sm filter-btn active" data-filter="" id="filter-all">All Events</button>
-      <button class="btn btn-outline btn-sm filter-btn" data-filter="false" id="filter-upcoming">Upcoming Programs</button>
-      <button class="btn btn-outline btn-sm filter-btn" data-filter="true" id="filter-past">Past Event Archive</button>
+      <button type="button" class="btn btn-outline btn-sm filter-btn active" data-filter="" id="filter-all" aria-pressed="true">All Events</button>
+      <button type="button" class="btn btn-outline btn-sm filter-btn" data-filter="false" id="filter-upcoming" aria-pressed="false">Upcoming Programs</button>
+      <button type="button" class="btn btn-outline btn-sm filter-btn" data-filter="true" id="filter-past" aria-pressed="false">Past Event Archive</button>
     </div>
   </div>
 </section>
@@ -67,8 +67,9 @@
 <!-- Events Grid -->
 <section class="section">
   <div class="container">
+    <h2 class="sr-only">Events Directory</h2>
     <div id="events-grid" class="grid grid-3">
-      <div class="spinner"></div>
+      <div class="spinner" role="status" aria-live="polite" aria-label="Loading"></div>
     </div>
   </div>
 </section>
@@ -84,7 +85,7 @@
         <input id="verify-code" class="form-control" placeholder="PMS-1-XXXXXXXX" required style="flex:1;min-width:220px" aria-label="Certificate Code">
         <button type="submit" class="btn btn-primary" id="verify-submit">Verify Certificate</button>
       </div>
-      <div id="verify-msg" style="margin-top:16px"></div>
+      <div id="verify-msg" role="status" aria-live="polite" style="margin-top:16px"></div>
     </form>
   </div>
 </section>

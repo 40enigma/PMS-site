@@ -59,7 +59,7 @@
           <label class="form-label" for="login-password">Password *</label>
           <input id="login-password" type="password" class="form-control" required placeholder="••••••••" autocomplete="current-password">
         </div>
-        <div id="login-msg"></div>
+        <div id="login-msg" role="status" aria-live="polite"></div>
         <button type="submit" class="btn btn-primary" style="width:100%;margin-top:.75rem" id="login-submit">Sign In to Console</button>
       </form>
     </div>
@@ -76,28 +76,28 @@
     </div>
 
     <div class="admin-nav" role="tablist" aria-label="Admin sections">
-      <button class="active" data-section="announcements" role="tab">Announcements</button>
-      <button data-section="stats" role="tab">Site Stats</button>
-      <button data-section="events" role="tab">Events</button>
-      <button data-section="registrations" role="tab">Registrations</button>
-      <button data-section="team" role="tab">Team &amp; Council</button>
-      <button data-section="posts" role="tab">Technical Posts</button>
-      <button data-section="resources" role="tab">Toolkit &amp; ASTM</button>
-      <button data-section="opportunities" role="tab">Opportunities</button>
-      <button data-section="alumni" role="tab">Alumni Directory</button>
-      <button data-section="projects" role="tab">FYP &amp; Research</button>
-      <button data-section="gallery" role="tab">Gallery</button>
-      <button data-section="sponsors" role="tab">Sponsors</button>
-      <button data-section="faqs" role="tab">FAQs</button>
-      <button data-section="sections" role="tab">Site Sections</button>
-      <button data-section="membership" role="tab">Membership Apps</button>
-      <button data-section="contacts" role="tab">Contact Messages</button>
-      <button data-section="newsletter" role="tab">Newsletter</button>
-      <button data-section="upload" role="tab">File Upload</button>
+      <button type="button" id="tab-announcements" class="active" data-section="announcements" role="tab" aria-selected="true" aria-controls="admin-content" tabindex="0">Announcements</button>
+      <button type="button" id="tab-stats" data-section="stats" role="tab" aria-selected="false" aria-controls="admin-content" tabindex="-1">Site Stats</button>
+      <button type="button" id="tab-events" data-section="events" role="tab" aria-selected="false" aria-controls="admin-content" tabindex="-1">Events</button>
+      <button type="button" id="tab-registrations" data-section="registrations" role="tab" aria-selected="false" aria-controls="admin-content" tabindex="-1">Registrations</button>
+      <button type="button" id="tab-team" data-section="team" role="tab" aria-selected="false" aria-controls="admin-content" tabindex="-1">Team &amp; Council</button>
+      <button type="button" id="tab-posts" data-section="posts" role="tab" aria-selected="false" aria-controls="admin-content" tabindex="-1">Technical Posts</button>
+      <button type="button" id="tab-resources" data-section="resources" role="tab" aria-selected="false" aria-controls="admin-content" tabindex="-1">Toolkit &amp; ASTM</button>
+      <button type="button" id="tab-opportunities" data-section="opportunities" role="tab" aria-selected="false" aria-controls="admin-content" tabindex="-1">Opportunities</button>
+      <button type="button" id="tab-alumni" data-section="alumni" role="tab" aria-selected="false" aria-controls="admin-content" tabindex="-1">Alumni Directory</button>
+      <button type="button" id="tab-projects" data-section="projects" role="tab" aria-selected="false" aria-controls="admin-content" tabindex="-1">FYP &amp; Research</button>
+      <button type="button" id="tab-gallery" data-section="gallery" role="tab" aria-selected="false" aria-controls="admin-content" tabindex="-1">Gallery</button>
+      <button type="button" id="tab-sponsors" data-section="sponsors" role="tab" aria-selected="false" aria-controls="admin-content" tabindex="-1">Sponsors</button>
+      <button type="button" id="tab-faqs" data-section="faqs" role="tab" aria-selected="false" aria-controls="admin-content" tabindex="-1">FAQs</button>
+      <button type="button" id="tab-sections" data-section="sections" role="tab" aria-selected="false" aria-controls="admin-content" tabindex="-1">Site Sections</button>
+      <button type="button" id="tab-membership" data-section="membership" role="tab" aria-selected="false" aria-controls="admin-content" tabindex="-1">Membership Apps</button>
+      <button type="button" id="tab-contacts" data-section="contacts" role="tab" aria-selected="false" aria-controls="admin-content" tabindex="-1">Contact Messages</button>
+      <button type="button" id="tab-newsletter" data-section="newsletter" role="tab" aria-selected="false" aria-controls="admin-content" tabindex="-1">Newsletter</button>
+      <button type="button" id="tab-upload" data-section="upload" role="tab" aria-selected="false" aria-controls="admin-content" tabindex="-1">File Upload</button>
     </div>
 
-    <div id="admin-content" class="card">
-      <div class="spinner"></div>
+    <div id="admin-content" class="card" role="tabpanel" aria-labelledby="tab-announcements">
+      <div class="spinner" role="status" aria-live="polite" aria-label="Loading"></div>
     </div>
   </div>
 </div>
@@ -111,7 +111,7 @@
   </div>
   <form id="crud-form" novalidate>
     <div id="crud-fields"></div>
-    <div id="crud-msg" style="margin-top:1rem"></div>
+    <div id="crud-msg" role="status" aria-live="polite" style="margin-top:1rem"></div>
     <div style="display:flex;justify-content:flex-end;gap:.75rem;margin-top:1.5rem">
       <button type="button" id="modal-cancel-footer-btn" class="btn btn-outline">Cancel</button>
       <button type="submit" id="modal-save-btn" class="btn btn-primary">Save Changes</button>

@@ -8,6 +8,7 @@
   // 1. Load active sponsors
   const grid = document.getElementById('sponsors-grid');
   if (grid) {
+    grid.setAttribute('aria-busy', 'true');
     grid.innerHTML = PMS.skeletonGrid(3);
     const tierColor = {
       Platinum: 'var(--tier-platinum, #c9ced6)',
@@ -23,7 +24,7 @@
           ${s.logo_url
             ? `<img src="${PMS.safeUrl(s.logo_url)}" alt="${PMS.escHtml(s.name)}" style="max-height:80px;max-width:180px;margin:0 auto 1.25rem;object-fit:contain">`
             : `<div style="width:64px;height:64px;border-radius:50%;background:var(--bg-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;color:var(--text-muted)">${PMS.icon('building', 24)}</div>`}
-          <h2 style="font-size:1.1rem;margin-bottom:.35rem">${PMS.escHtml(s.name)}</h2>
+          <h3 style="font-size:1.1rem;margin-bottom:.35rem">${PMS.escHtml(s.name)}</h3>
           <span class="badge" style="color:${tierColor[s.tier] || 'var(--text-muted)'}">${PMS.escHtml(s.tier === 'Partner' ? 'Partner' : `${s.tier} Partner`)}</span>
           ${s.since_year ? `<p style="font-size:.8rem;color:var(--text-muted);margin-top:.35rem">Partner Since ${PMS.escHtml(s.since_year)}</p>` : ''}
           ${s.website_url ? `<div style="margin-top:1rem"><a href="${PMS.safeUrl(s.website_url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;gap:6px">${PMS.icon('external', 13)} Visit Website</a></div>` : ''}
@@ -31,12 +32,15 @@
       PMS.observeFadeElements(grid);
     } catch(e) {
       grid.innerHTML = '<p style="color:var(--danger);grid-column:1/-1;text-align:center">Could not load sponsors.</p>';
+    } finally {
+      grid.setAttribute('aria-busy', 'false');
     }
   }
 
   // 2. Load sponsors_pitch cards from site_sections
   const pitchGrid = document.getElementById('pitch-grid');
   if (pitchGrid) {
+    pitchGrid.setAttribute('aria-busy', 'true');
     try {
       const sections = await PMS.apiFetch('/api/sections');
       const sec = sections.find(s => s.section_key === 'sponsors_pitch');
@@ -78,6 +82,8 @@
       pitchGrid.innerHTML = '';
     } catch(_) {
       pitchGrid.innerHTML = '';
+    } finally {
+      pitchGrid.setAttribute('aria-busy', 'false');
     }
   }
 })();

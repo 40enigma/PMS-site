@@ -7,6 +7,7 @@
 (async () => {
   const grid = document.getElementById('posts-grid');
   if (!grid) return;
+  grid.setAttribute('aria-busy', 'true');
   grid.innerHTML = PMS.skeletonGrid(3);
   try {
     const posts = await PMS.apiFetch('/api/posts');
@@ -16,6 +17,8 @@
     PMS.observeFadeElements(grid);
   } catch(e) {
     grid.innerHTML = '<p style="color:var(--danger);grid-column:1/-1;text-align:center">Could not load posts.</p>';
+  } finally {
+    grid.setAttribute('aria-busy', 'false');
   }
 })();
 

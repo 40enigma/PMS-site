@@ -57,12 +57,12 @@
     <h1 class="fade-up">Student Toolkit &amp; Materials Engineering Resources</h1>
     <p class="hero-desc fade-up">Curated ASTM testing standards, software tutorials, lab safety protocols, and crystallography databases for DMME students.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:20px">
-      <button class="btn btn-outline btn-sm res-filter active" data-cat="">All Toolkit Items</button>
-      <button class="btn btn-outline btn-sm res-filter" data-cat="Standards">Standards (ASTM)</button>
-      <button class="btn btn-outline btn-sm res-filter" data-cat="Software">Software &amp; Tools</button>
-      <button class="btn btn-outline btn-sm res-filter" data-cat="Books">Books &amp; Guides</button>
-      <button class="btn btn-outline btn-sm res-filter" data-cat="Safety">Lab Safety</button>
-      <button class="btn btn-outline btn-sm res-filter" data-cat="Databases">Databases</button>
+      <button type="button" class="btn btn-outline btn-sm res-filter active" data-cat="" aria-pressed="true">All Toolkit Items</button>
+      <button type="button" class="btn btn-outline btn-sm res-filter" data-cat="Standards" aria-pressed="false">Standards (ASTM)</button>
+      <button type="button" class="btn btn-outline btn-sm res-filter" data-cat="Software" aria-pressed="false">Software &amp; Tools</button>
+      <button type="button" class="btn btn-outline btn-sm res-filter" data-cat="Books" aria-pressed="false">Books &amp; Guides</button>
+      <button type="button" class="btn btn-outline btn-sm res-filter" data-cat="Safety" aria-pressed="false">Lab Safety</button>
+      <button type="button" class="btn btn-outline btn-sm res-filter" data-cat="Databases" aria-pressed="false">Databases</button>
     </div>
   </div>
 </section>
@@ -76,7 +76,7 @@
       <p id="astm-desc" style="font-size:14px">Critical mechanical testing and metallography protocols used across DMME laboratory coursework.</p>
     </div>
     <div id="astm-strip" class="grid grid-4" style="gap:16px">
-      <div class="spinner"></div>
+      <div class="spinner" role="status" aria-live="polite" aria-label="Loading"></div>
     </div>
   </div>
 </section>
@@ -84,8 +84,9 @@
 <!-- General Resources Grid -->
 <section class="section">
   <div class="container">
+    <h2 class="sr-only">Toolkit Resources Directory</h2>
     <div id="resources-grid" class="grid grid-3">
-      <div class="spinner"></div>
+      <div class="spinner" role="status" aria-live="polite" aria-label="Loading"></div>
     </div>
   </div>
 </section>

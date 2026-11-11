@@ -5,6 +5,8 @@
  */
 
 (async () => {
+  const actGrid = document.getElementById('activities-grid');
+  if (actGrid) actGrid.setAttribute('aria-busy', 'true');
   // 1. Fetch Dynamic Site Sections (home_hero, home_activities)
   try {
     const sections = await PMS.apiFetch('/api/sections');
@@ -44,7 +46,6 @@
     }
 
     const actSec = sections.find(s => s.section_key === 'home_activities');
-    const actGrid = document.getElementById('activities-grid');
     if (actSec && actGrid) {
       if (actSec.badge) {
         const badgeEl = document.getElementById('activities-badge');
@@ -91,13 +92,15 @@
       actGrid.innerHTML = '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">Activities information will be announced soon.</p>';
     }
   } catch (_) {
-    const actGrid = document.getElementById('activities-grid');
     if (actGrid) actGrid.innerHTML = '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">Activities information will be announced soon.</p>';
+  } finally {
+    if (actGrid) actGrid.setAttribute('aria-busy', 'false');
   }
 
   // 2. Load featured events
   const eventsGrid = document.getElementById('events-grid');
   if (eventsGrid) {
+    eventsGrid.setAttribute('aria-busy', 'true');
     eventsGrid.innerHTML = PMS.skeletonGrid(3);
     try {
       const events = await PMS.apiFetch('/api/events?is_featured=true&is_past=false');
@@ -107,12 +110,15 @@
       PMS.observeFadeElements(eventsGrid);
     } catch(e) {
       eventsGrid.innerHTML = `<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">Could not load events.</p>`;
+    } finally {
+      eventsGrid.setAttribute('aria-busy', 'false');
     }
   }
 
   // 3. Load latest technical posts
   const postsGrid = document.getElementById('posts-grid');
   if (postsGrid) {
+    postsGrid.setAttribute('aria-busy', 'true');
     postsGrid.innerHTML = PMS.skeletonGrid(3);
     try {
       const posts = await PMS.apiFetch('/api/posts');
@@ -122,6 +128,8 @@
       PMS.observeFadeElements(postsGrid);
     } catch(e) {
       postsGrid.innerHTML = `<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">Could not load posts.</p>`;
+    } finally {
+      postsGrid.setAttribute('aria-busy', 'false');
     }
   }
 

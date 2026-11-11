@@ -9,12 +9,15 @@ let allMembers = [];
 async function loadTeamData() {
   const grid = document.getElementById('team-grid');
   if (!grid) return;
+  grid.setAttribute('aria-busy', 'true');
   grid.innerHTML = PMS.skeletonGrid(4);
   try {
     allMembers = await PMS.apiFetch('/api/team');
     renderFilteredTeam('current');
   } catch (e) {
     grid.innerHTML = '<p style="color:var(--danger);grid-column:1/-1">Failed to load team directory.</p>';
+  } finally {
+    grid.setAttribute('aria-busy', 'false');
   }
 }
 
@@ -66,8 +69,11 @@ function renderFilteredTeam(mode) {
 // Button toggles
 document.querySelectorAll('.team-toggle').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.team-toggle').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
+    document.querySelectorAll('.team-toggle').forEach(b => {
+      const isActive = b === btn;
+      b.classList.toggle('active', isActive);
+      b.setAttribute('aria-pressed', String(isActive));
+    });
     renderFilteredTeam(btn.dataset.filter);
   });
 });
@@ -76,6 +82,7 @@ document.querySelectorAll('.team-toggle').forEach(btn => {
 async function loadTeamGuidance() {
   const grid = document.getElementById('guidance-grid');
   if (!grid) return;
+  grid.setAttribute('aria-busy', 'true');
   try {
     const sections = await PMS.apiFetch('/api/sections');
     const sec = sections.find(s => s.section_key === 'team_guidance');
@@ -118,6 +125,8 @@ async function loadTeamGuidance() {
     grid.innerHTML = '<p style="color:var(--text-muted);grid-column:1/-1">Portfolios configured in administration.</p>';
   } catch (_) {
     grid.innerHTML = '';
+  } finally {
+    grid.setAttribute('aria-busy', 'false');
   }
 }
 

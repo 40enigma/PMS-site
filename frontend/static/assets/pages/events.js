@@ -10,6 +10,7 @@ async function loadEvents(isPast) {
   const req = ++eventsLoadSeq;
   const grid = document.getElementById('events-grid');
   if (!grid) return;
+  grid.setAttribute('aria-busy', 'true');
   grid.innerHTML = PMS.skeletonGrid(3);
   try {
     const qs = isPast !== null ? `?is_past=${isPast}` : '';
@@ -22,6 +23,8 @@ async function loadEvents(isPast) {
   } catch(err) {
     if (req !== eventsLoadSeq) return;
     grid.innerHTML = `<p style="color:var(--danger);grid-column:1/-1;text-align:center">Failed to load events.</p>`;
+  } finally {
+    if (req === eventsLoadSeq) grid.setAttribute('aria-busy', 'false');
   }
 }
 
@@ -29,8 +32,11 @@ async function loadEvents(isPast) {
 
 document.querySelectorAll('.filter-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
+    document.querySelectorAll('.filter-btn').forEach(b => {
+      const isActive = b === btn;
+      b.classList.toggle('active', isActive);
+      b.setAttribute('aria-pressed', String(isActive));
+    });
     const f = btn.dataset.filter;
     loadEvents(f === '' ? null : f === 'true');
   });
