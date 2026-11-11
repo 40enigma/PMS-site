@@ -766,18 +766,62 @@ function resourceCard(r, idx = 0) {
     </article>`;
 }
 
+/* ── Shared Dialog Helpers (Backdrop pointer check + focus return) ── */
+function enableBackdropClose(dialog) {
+  if (!dialog || dialog.dataset.backdropCloseBound) return;
+  dialog.dataset.backdropCloseBound = 'true';
+  let downOutside = false;
+  const isOutside = e => {
+    const r = dialog.getBoundingClientRect();
+    return (
+      e.clientX < r.left ||
+      e.clientX > r.right ||
+      e.clientY < r.top ||
+      e.clientY > r.bottom
+    );
+  };
+  dialog.addEventListener('pointerdown', e => {
+    downOutside = e.target === dialog && isOutside(e);
+  });
+  dialog.addEventListener('pointerup', e => {
+    if (downOutside && e.target === dialog && isOutside(e)) {
+      dialog.close();
+    }
+    downOutside = false;
+  });
+}
+
+function showModalWithFocusReturn(dialog, triggerEl) {
+  if (!dialog) return;
+  if (!dialog.dataset.focusReturnBound) {
+    dialog.dataset.focusReturnBound = 'true';
+    dialog.addEventListener('close', () => {
+      const target = dialog._returnFocusEl;
+      dialog._returnFocusEl = null;
+      if (target && target !== document.body && typeof target.focus === 'function' && target.isConnected) {
+        target.focus();
+      }
+    });
+  }
+  const candidate = triggerEl || (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+  if (!dialog.open) {
+    dialog._returnFocusEl = candidate && !dialog.contains(candidate) ? candidate : null;
+    dialog.showModal();
+  }
+}
+
 /* ── Global Event Registration Modal (Supported on index.html, events.html, etc.) ── */
-function openRegistrationModal(eventId, eventTitle) {
+function openRegistrationModal(eventId, eventTitle, triggerEl) {
   let modal = document.getElementById('reg-modal');
   if (!modal) {
     modal = document.createElement('dialog');
     modal.id = 'reg-modal';
+    modal.className = 'modal modal--sm';
     modal.setAttribute('aria-labelledby', 'reg-modal-title');
-    modal.style.cssText = 'background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);color:var(--text);max-width:540px;width:92%;padding:2rem;box-shadow:0 25px 50px -12px rgba(0,0,0,.7);';
     modal.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem">
         <h2 id="reg-modal-title" style="margin:0;font-size:1.35rem">Register for Event</h2>
-        <button type="button" id="reg-close-icon" class="btn btn-outline btn-sm" style="padding:.25rem .5rem" aria-label="Close dialog">${icon('x', 14)}</button>
+        <button type="button" id="reg-close-icon" class="btn btn-outline btn-sm" aria-label="Close dialog">${icon('x', 14)} Close</button>
       </div>
       <form id="reg-form" novalidate>
         <input type="hidden" id="reg-event-id">
@@ -815,10 +859,7 @@ function openRegistrationModal(eventId, eventTitle) {
       </form>
     `;
     document.body.appendChild(modal);
-
-    modal.addEventListener('click', e => {
-      if (e.target === modal) modal.close();
-    });
+    enableBackdropClose(modal);
   }
 
   // Reset form inputs, set fields and reset alert
@@ -951,55 +992,48 @@ function openRegistrationModal(eventId, eventTitle) {
     }
   }
 
-  if (!modal.open) {
-    modal.showModal();
-  }
+  showModalWithFocusReturn(modal, triggerEl);
 }
 
 /* ── Lightbox for SEM & Optical Micrographs (gallery.html) ── */
-function openLightbox(imageUrl, title, caption = '') {
+function openLightbox(imageUrl, title, caption = '', triggerEl) {
   let modal = document.getElementById('lightbox-modal');
   if (!modal) {
     modal = document.createElement('dialog');
     modal.id = 'lightbox-modal';
-    modal.className = 'lightbox-modal';
+    modal.className = 'modal lightbox-modal';
     modal.setAttribute('aria-labelledby', 'lightbox-title');
     modal.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
         <h3 id="lightbox-title" style="font-size:1.15rem;color:var(--text)">Micrograph</h3>
-        <button id="lightbox-close-btn" class="btn btn-outline btn-sm" style="padding:.25rem .6rem" aria-label="Close dialog">${icon('x', 14)} Close</button>
+        <button type="button" id="lightbox-close-btn" class="btn btn-outline btn-sm" aria-label="Close dialog">${icon('x', 14)} Close</button>
       </div>
       <img id="lightbox-img" src="" alt="Micrograph" style="max-width:100%;max-height:70vh;object-fit:contain;border-radius:8px">
       <p id="lightbox-caption" style="color:var(--text-muted);font-size:.9rem;line-height:1.6;margin-top:.75rem"></p>
     `;
     document.body.appendChild(modal);
     modal.querySelector('#lightbox-close-btn').onclick = () => modal.close();
-    modal.addEventListener('click', e => {
-      if (e.target === modal) modal.close();
-    });
+    enableBackdropClose(modal);
   }
 
   const cleanCaption = caption && caption !== 'null' ? caption : '';
   modal.querySelector('#lightbox-img').src = safeUrlRaw(imageUrl);
   modal.querySelector('#lightbox-title').textContent = title && title !== 'null' ? title : 'Micrograph Detail';
   modal.querySelector('#lightbox-caption').textContent = cleanCaption;
-  modal.showModal();
+  showModalWithFocusReturn(modal, triggerEl);
 }
 
 /* ── Open Article Modal and load full article (with URL Deep Linking) ── */
-async function openArticleModal(slug) {
+async function openArticleModal(slug, triggerEl) {
   if (!slug) return;
   let modal = document.getElementById('article-reader-modal');
   if (!modal) {
     modal = document.createElement('dialog');
     modal.id = 'article-reader-modal';
+    modal.className = 'modal modal--lg';
     modal.setAttribute('aria-labelledby', 'article-reader-title');
-    modal.style.cssText = 'background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);color:var(--text);max-width:780px;width:95%;padding:2rem;max-height:85vh;overflow-y:auto;box-shadow:0 25px 60px rgba(0,0,0,.8);';
     document.body.appendChild(modal);
-
-    modal.addEventListener('click', e => {
-      if (e.target === modal) modal.close();
-    });
+    enableBackdropClose(modal);
   }
 
   // Deep linking: update URL query parameter ?article=<slug>
@@ -1029,13 +1063,11 @@ async function openArticleModal(slug) {
   modal.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
       <span class="badge">Technical Article</span>
-      <button id="close-article-modal" class="btn btn-outline btn-sm" style="padding:.25rem .6rem" aria-label="Close dialog">${icon('x', 14)} Close</button>
+      <button type="button" id="close-article-modal" class="btn btn-outline btn-sm" aria-label="Close dialog">${icon('x', 14)} Close</button>
     </div>
     <div id="article-reader-content"><div class="spinner"></div></div>
   `;
-  if (!modal.open) {
-    modal.showModal();
-  }
+  showModalWithFocusReturn(modal, triggerEl);
   document.getElementById('close-article-modal').onclick = () => modal.close();
 
   try {
@@ -1071,7 +1103,7 @@ document.addEventListener('click', ev => {
   const readBtn = ev.target.closest('.btn-read-article');
   if (readBtn && readBtn.dataset.slug) {
     ev.preventDefault();
-    openArticleModal(readBtn.dataset.slug);
+    openArticleModal(readBtn.dataset.slug, readBtn);
     return;
   }
 
@@ -1079,7 +1111,7 @@ document.addEventListener('click', ev => {
   const regBtn = ev.target.closest('.btn-open-reg');
   if (regBtn && regBtn.dataset.eventId) {
     ev.preventDefault();
-    openRegistrationModal(regBtn.dataset.eventId, regBtn.dataset.eventTitle);
+    openRegistrationModal(regBtn.dataset.eventId, regBtn.dataset.eventTitle, regBtn);
     return;
   }
 
@@ -1090,7 +1122,8 @@ document.addEventListener('click', ev => {
     openLightbox(
       lbTrigger.dataset.imgUrl,
       lbTrigger.dataset.imgTitle,
-      lbTrigger.dataset.imgCaption
+      lbTrigger.dataset.imgCaption,
+      lbTrigger
     );
   }
 });
@@ -1104,7 +1137,8 @@ document.addEventListener('keydown', ev => {
       openLightbox(
         lbTrigger.dataset.imgUrl,
         lbTrigger.dataset.imgTitle,
-        lbTrigger.dataset.imgCaption
+        lbTrigger.dataset.imgCaption,
+        lbTrigger
       );
     }
   }
@@ -1152,6 +1186,8 @@ window.PMS = {
   openArticleModal,
   openRegistrationModal,
   openLightbox,
+  enableBackdropClose,
+  showModalWithFocusReturn,
   skeletonGrid,
   showAlert,
   setLoading,

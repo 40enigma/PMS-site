@@ -399,7 +399,7 @@ async function loadSection(tab) {
     if (schema.canCreate && toolbar) {
       toolbar.innerHTML = `<button class="btn btn-primary btn-sm" id="btn-create-record">＋ New ${PMS.escHtml(schema.singular)}</button>`;
       const createRecordBtn = document.getElementById('btn-create-record');
-      if (createRecordBtn) createRecordBtn.onclick = () => openCreateModal(tab);
+      if (createRecordBtn) createRecordBtn.onclick = () => openCreateModal(tab, createRecordBtn);
     }
 
     if (tab === 'registrations') {
@@ -607,9 +607,9 @@ if (adminContent) {
         alert('Attendance update failed: ' + err.message);
       }
     } else if (action === 'edit') {
-      openEditModal(currentTab, id);
+      openEditModal(currentTab, id, btn);
     } else if (action === 'view') {
-      openViewModal(currentTab, id);
+      openViewModal(currentTab, id, btn);
     } else if (action === 'status') {
       const status = btn.dataset.status;
       try {
@@ -627,7 +627,7 @@ if (adminContent) {
 }
 
 /* ── Full Details View Modal ── */
-function openViewModal(tab, id) {
+function openViewModal(tab, id, triggerEl) {
   const item = currentCache.find(x => String(x.id) === String(id));
   if (!item) return;
   const schema = SCHEMAS[tab];
@@ -644,11 +644,12 @@ function openViewModal(tab, id) {
       </div>
     `).join('');
   }
-  modal.showModal();
+  PMS.showModalWithFocusReturn(modal, triggerEl);
 }
 
 const viewModal = document.getElementById('view-modal');
 if (viewModal) {
+  PMS.enableBackdropClose(viewModal);
   const closeBtn = document.getElementById('view-modal-close-btn');
   const closeFooterBtn = document.getElementById('view-modal-close-footer-btn');
   if (closeBtn) closeBtn.onclick = () => viewModal.close();
@@ -801,12 +802,13 @@ function renderUploadTool(container) {
 
 /* ── Create & Edit Modal Operations ── */
 const modal = document.getElementById('crud-modal');
+if (modal) PMS.enableBackdropClose(modal);
 const modalCancelBtn = document.getElementById('modal-cancel-btn');
 if (modalCancelBtn) modalCancelBtn.onclick = () => modal.close();
 const modalCancelFooterBtn = document.getElementById('modal-cancel-footer-btn');
 if (modalCancelFooterBtn) modalCancelFooterBtn.onclick = () => modal.close();
 
-function openCreateModal(tab) {
+function openCreateModal(tab, triggerEl) {
   const schema = SCHEMAS[tab];
   currentEditingId = null;
   const title = document.getElementById('modal-title');
@@ -814,10 +816,10 @@ function openCreateModal(tab) {
   const msg = document.getElementById('crud-msg');
   if (msg) msg.innerHTML = '';
   renderFields(schema.fields, {});
-  modal.showModal();
+  PMS.showModalWithFocusReturn(modal, triggerEl);
 }
 
-function openEditModal(tab, id) {
+function openEditModal(tab, id, triggerEl) {
   const schema = SCHEMAS[tab];
   const item = currentCache.find(x => String(x.id) === String(id));
   if (!item) return;
@@ -827,7 +829,7 @@ function openEditModal(tab, id) {
   const msg = document.getElementById('crud-msg');
   if (msg) msg.innerHTML = '';
   renderFields(schema.fields, item);
-  modal.showModal();
+  PMS.showModalWithFocusReturn(modal, triggerEl);
 }
 
 function renderFields(fields, currentData) {
