@@ -200,7 +200,7 @@
           try {
             const b = await res.json();
             errDetail = b.error;
-          } catch (_) {}
+          } catch (_) { }
           throw new Error(errDetail || `Upload failed (HTTP ${res.status})`);
         }
         const data = await res.json();
