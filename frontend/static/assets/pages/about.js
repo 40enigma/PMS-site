@@ -5,6 +5,8 @@
  */
 
 (async () => {
+  'use strict';
+
   // 1. Load Dynamic About Sections
   const container = document.getElementById('sections-content');
   if (container) {
@@ -14,17 +16,21 @@
       const secs = await PMS.apiFetch('/api/sections');
       const aboutSecs = secs.filter(s => s.section_key.startsWith('about'));
       container.innerHTML = aboutSecs.length
-        ? aboutSecs.map((s, idx) => `
+        ? aboutSecs
+            .map(
+              (s, idx) => `
           <article class="card fade-up" style="transition-delay:${Math.min(idx, 8) * 60}ms">
             <span class="badge" style="margin-bottom:.75rem">${PMS.escHtml(s.badge || s.section_key)}</span>
             <h2 style="font-size:1.3rem;margin-bottom:.5rem">${PMS.escHtml(s.title)}</h2>
             ${s.subtitle ? `<p style="color:var(--accent);font-weight:600;margin-bottom:.75rem">${PMS.escHtml(s.subtitle)}</p>` : ''}
             <p style="color:var(--text-muted);line-height:1.7">${PMS.escHtml(s.content)}</p>
-          </article>`).join('')
-        : '<p style="color:var(--text-muted);grid-column:1/-1">About information not available.</p>';
+          </article>`
+            )
+            .join('')
+        : PMS.emptyState('About information not available.');
       PMS.observeFadeElements(container);
-    } catch (e) {
-      container.innerHTML = '<p style="color:var(--danger);grid-column:1/-1">Could not load about sections.</p>';
+    } catch (_) {
+      container.innerHTML = PMS.errorState('Could not load about sections.');
     } finally {
       container.setAttribute('aria-busy', 'false');
     }
@@ -37,7 +43,9 @@
     try {
       const faqs = await PMS.apiFetch('/api/faqs');
       faqsEl.innerHTML = faqs.length
-        ? faqs.map(f => `
+        ? faqs
+            .map(
+              f => `
           <details class="card" style="margin-bottom:1rem;cursor:pointer">
             <summary style="font-weight:500;font-size:15px;color:var(--text);display:flex;justify-content:space-between;align-items:center">
               <span>${PMS.escHtml(f.question)}</span>
@@ -47,13 +55,14 @@
               ${PMS.escHtml(f.answer)}
             </div>
           </details>
-        `).join('')
-        : '<p style="color:var(--text-muted);text-align:center">No frequently asked questions published yet.</p>';
-    } catch (e) {
-      faqsEl.innerHTML = '<p style="color:var(--danger);text-align:center">Failed to load FAQs.</p>';
+        `
+            )
+            .join('')
+        : PMS.emptyState('No frequently asked questions published yet.');
+    } catch (_) {
+      faqsEl.innerHTML = PMS.errorState('Could not load FAQs.');
     } finally {
       faqsEl.setAttribute('aria-busy', 'false');
     }
   }
 })();
-

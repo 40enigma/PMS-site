@@ -1,0 +1,42 @@
+{
+  "env": {
+    "browser": true,
+    "es2022": true
+  },
+  "extends": "eslint:recommended",
+  "parserOptions": {
+    "ecmaVersion": "latest"
+  },
+  "rules": {
+    "no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_"
+      }
+    ],
+    "no-undef": "error",
+    "no-empty": [
+      "error",
+      {
+        "allowEmptyCatch": true
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["frontend/static/assets/pages/**/*.js"],
+      "globals": {
+        "PMS": "readonly"
+      }
+    },
+    {
+      "files": ["frontend/static/assets/pages/admin/*.js"],
+      "globals": {
+        "PMS": "readonly",
+        "PMSAdmin": "writable"
+      }
+    }
+  ]
+}
+

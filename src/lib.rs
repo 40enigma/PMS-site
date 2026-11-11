@@ -226,6 +226,84 @@ pub async fn standardize_api_errors(req: Request, next: Next) -> Response {
 }
 
 static NOT_FOUND_HTML: &str = include_str!("../frontend/static/404.html");
+static ASSET_VERSION_CACHE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+fn collect_asset_files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_asset_files(&path, out);
+        } else if path.is_file() {
+            out.push(path);
+        }
+    }
+}
+
+/// Compute a deterministic cache-busting asset version token from `ASSET_V` env var
+/// or the short SHA-256 digest of files under `frontend/static/assets`.
+pub fn asset_version() -> &'static str {
+    ASSET_VERSION_CACHE.get_or_init(|| {
+        if let Ok(v) = std::env::var("ASSET_V") {
+            let trimmed = v.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+        use sha2::{Digest, Sha256};
+        let assets_dir = std::path::Path::new("frontend/static/assets");
+        let mut files = Vec::new();
+        collect_asset_files(assets_dir, &mut files);
+        files.sort();
+        if files.is_empty() {
+            return env!("CARGO_PKG_VERSION").to_string();
+        }
+        let mut hasher = Sha256::new();
+        for path in files {
+            if let Ok(bytes) = std::fs::read(&path) {
+                hasher.update(path.to_string_lossy().as_bytes());
+                hasher.update(&bytes);
+            }
+        }
+        let hex = format!("{:x}", hasher.finalize());
+        hex[..8].to_string()
+    })
+}
+
+/// Render an HTML template substituting `{{ASSET_V}}` and `{{APP_URL}}` placeholders.
+pub fn render_html(template: &str) -> String {
+    let app_url =
+        std::env::var("APP_URL").unwrap_or_else(|_| "https://pms.pieas.edu.pk".to_string());
+    let base_url = app_url.trim_end_matches('/');
+    template
+        .replace("{{ASSET_V}}", asset_version())
+        .replace("{{APP_URL}}", base_url)
+}
+
+async fn render_html_file(path: &'static str, status: StatusCode) -> Response {
+    match tokio::fs::read_to_string(path).await {
+        Ok(raw) => (
+            status,
+            [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+            render_html(&raw),
+        )
+            .into_response(),
+        Err(e) => {
+            tracing::error!(path = path, error = %e, "Failed to read HTML template");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                [(
+                    axum::http::header::CONTENT_TYPE,
+                    "text/plain; charset=utf-8",
+                )],
+                "Internal server error",
+            )
+                .into_response()
+        }
+    }
+}
 
 /// Fallback handler for unmatched routes:
 /// Returns JSON for `/api/*` routes and HTML 404 for frontend routes.
@@ -241,21 +319,19 @@ async fn not_found_fallback(req: Request) -> Response {
         )
             .into_response()
     } else {
-        (
-            StatusCode::NOT_FOUND,
-            [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
-            NOT_FOUND_HTML,
-        )
-            .into_response()
+        not_found_page().await
     }
 }
 
 /// Dedicated 404 route handler returning StatusCode::NOT_FOUND with 404.html.
 async fn not_found_page() -> Response {
+    let raw = tokio::fs::read_to_string("frontend/static/404.html")
+        .await
+        .unwrap_or_else(|_| NOT_FOUND_HTML.to_string());
     (
         StatusCode::NOT_FOUND,
         [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
-        NOT_FOUND_HTML,
+        render_html(&raw),
     )
         .into_response()
 }
@@ -377,8 +453,19 @@ pub fn create_app(pool: SqlitePool) -> Router {
         .nest("/uploads", uploads_router)
         // Static assets served under /assets
         .nest_service("/assets", ServeDir::new("frontend/static/assets"))
-        // Pretty URLs and static files (with tolerance for trailing slashes)
-        .route_service("/", ServeFile::new("frontend/static/index.html"));
+        // Pretty URLs and static HTML templates (with placeholder substitution)
+        .route(
+            "/",
+            get(|| render_html_file("frontend/static/index.html", StatusCode::OK)),
+        )
+        .route(
+            "/blog/{slug}",
+            get(|| render_html_file("frontend/static/blog.html", StatusCode::OK)),
+        )
+        .route(
+            "/blog/{slug}/",
+            get(|| render_html_file("frontend/static/blog.html", StatusCode::OK)),
+        );
 
     let pretty_pages = [
         ("/about", "frontend/static/about.html"),
@@ -396,9 +483,13 @@ pub fn create_app(pool: SqlitePool) -> Router {
     ];
 
     for (route, file_path) in pretty_pages {
+        let fp: &'static str = file_path;
         router = router
-            .route_service(route, ServeFile::new(file_path))
-            .route_service(&format!("{}/", route), ServeFile::new(file_path));
+            .route(route, get(move || render_html_file(fp, StatusCode::OK)))
+            .route(
+                &format!("{}/", route),
+                get(move || render_html_file(fp, StatusCode::OK)),
+            );
     }
 
     router

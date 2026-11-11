@@ -5,6 +5,8 @@
  */
 
 (async () => {
+  'use strict';
+
   const grid = document.getElementById('posts-grid');
   if (!grid) return;
   grid.setAttribute('aria-busy', 'true');
@@ -13,12 +15,11 @@
     const posts = await PMS.apiFetch('/api/posts');
     grid.innerHTML = posts.length
       ? posts.map((p, idx) => PMS.postCard(p, idx)).join('')
-      : '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No articles published yet.</p>';
+      : PMS.emptyState('No articles published yet.');
     PMS.observeFadeElements(grid);
-  } catch(e) {
-    grid.innerHTML = '<p style="color:var(--danger);grid-column:1/-1;text-align:center">Could not load posts.</p>';
+  } catch (_) {
+    grid.innerHTML = PMS.errorState('Could not load posts.');
   } finally {
     grid.setAttribute('aria-busy', 'false');
   }
 })();
-

@@ -1722,3 +1722,52 @@ async fn test_team_member_default_tenure_year_is_computed() {
         serde_json::from_slice(&res_get.into_body().collect().await.unwrap().to_bytes()).unwrap();
     assert_eq!(body[0]["tenure_year"], expected_tenure);
 }
+
+#[tokio::test]
+async fn test_blog_slug_routes_and_template_placeholders() {
+    let app = setup_test_app().await;
+
+    for uri in [
+        "/",
+        "/blog/material-of-the-month-zircaloy-inconel",
+        "/blog/material-of-the-month-zircaloy-inconel/",
+    ] {
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri(uri)
+            .body(Body::empty())
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK, "Expected 200 for {}", uri);
+        let body = res.into_body().collect().await.unwrap().to_bytes();
+        let html = String::from_utf8_lossy(&body);
+        assert!(
+            !html.contains("{{ASSET_V}}"),
+            "Found un-substituted ASSET_V placeholder in {}",
+            uri
+        );
+        assert!(
+            !html.contains("{{APP_URL}}"),
+            "Found un-substituted APP_URL placeholder in {}",
+            uri
+        );
+        assert!(
+            html.contains("/assets/style.css?v="),
+            "Expected cache-busted asset query in {}",
+            uri
+        );
+    }
+
+    // Check 404 renders template cleanly as well
+    let req_404 = Request::builder()
+        .method(Method::GET)
+        .uri("/nonexistent-pms-route")
+        .body(Body::empty())
+        .unwrap();
+    let res_404 = app.oneshot(req_404).await.unwrap();
+    assert_eq!(res_404.status(), StatusCode::NOT_FOUND);
+    let body_404 = res_404.into_body().collect().await.unwrap().to_bytes();
+    let html_404 = String::from_utf8_lossy(&body_404);
+    assert!(!html_404.contains("{{ASSET_V}}"));
+    assert!(html_404.contains("/assets/style.css?v="));
+}

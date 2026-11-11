@@ -5,6 +5,8 @@
  */
 
 (async () => {
+  'use strict';
+
   // 1. Load active sponsors
   const grid = document.getElementById('sponsors-grid');
   if (grid) {
@@ -19,19 +21,27 @@
     };
     try {
       const sponsors = await PMS.apiFetch('/api/sponsors');
-      grid.innerHTML = sponsors.length ? sponsors.map((s, idx) => `
+      grid.innerHTML = sponsors.length
+        ? sponsors
+            .map(
+              (s, idx) => `
         <article class="card fade-up" style="text-align:center;transition-delay:${Math.min(idx, 8) * 60}ms">
-          ${s.logo_url
-            ? `<img src="${PMS.safeUrl(s.logo_url)}" alt="${PMS.escHtml(s.name)}" style="max-height:80px;max-width:180px;margin:0 auto 1.25rem;object-fit:contain">`
-            : `<div style="width:64px;height:64px;border-radius:50%;background:var(--bg-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;color:var(--text-muted)">${PMS.icon('building', 24)}</div>`}
+          ${
+            s.logo_url
+              ? `<img src="${PMS.safeUrl(s.logo_url)}" alt="${PMS.escHtml(s.name)}" width="180" height="80" loading="lazy" decoding="async" style="max-height:80px;max-width:180px;width:auto;height:auto;margin:0 auto 1.25rem;object-fit:contain">`
+              : `<div style="width:64px;height:64px;border-radius:50%;background:var(--bg-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;color:var(--text-muted)">${PMS.icon('building', 24)}</div>`
+          }
           <h3 style="font-size:1.1rem;margin-bottom:.35rem">${PMS.escHtml(s.name)}</h3>
           <span class="badge" style="color:${tierColor[s.tier] || 'var(--text-muted)'}">${PMS.escHtml(s.tier === 'Partner' ? 'Partner' : `${s.tier} Partner`)}</span>
           ${s.since_year ? `<p style="font-size:.8rem;color:var(--text-muted);margin-top:.35rem">Partner Since ${PMS.escHtml(s.since_year)}</p>` : ''}
           ${s.website_url ? `<div style="margin-top:1rem"><a href="${PMS.safeUrl(s.website_url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;gap:6px">${PMS.icon('external', 13)} Visit Website</a></div>` : ''}
-        </article>`).join('') : '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No active sponsors listed.</p>';
+        </article>`
+            )
+            .join('')
+        : PMS.emptyState('No active sponsors listed.');
       PMS.observeFadeElements(grid);
-    } catch(e) {
-      grid.innerHTML = '<p style="color:var(--danger);grid-column:1/-1;text-align:center">Could not load sponsors.</p>';
+    } catch (_) {
+      grid.innerHTML = PMS.errorState('Could not load sponsors.');
     } finally {
       grid.setAttribute('aria-busy', 'false');
     }
@@ -68,23 +78,26 @@
         if (sec.extra_json) {
           try {
             const cards = JSON.parse(sec.extra_json);
-            pitchGrid.innerHTML = cards.map(c => `
+            pitchGrid.innerHTML = cards
+              .map(
+                c => `
               <article class="card fade-up">
                 <h3 style="font-size:15px;margin-bottom:8px;color:var(--text)">${PMS.escHtml(c.title)}</h3>
                 <p style="color:var(--text-secondary);font-size:13.5px;line-height:1.55">${PMS.escHtml(c.desc)}</p>
               </article>
-            `).join('');
+            `
+              )
+              .join('');
             PMS.observeFadeElements(pitchGrid);
             return;
           } catch (_) {}
         }
       }
       pitchGrid.innerHTML = '';
-    } catch(_) {
+    } catch (_) {
       pitchGrid.innerHTML = '';
     } finally {
       pitchGrid.setAttribute('aria-busy', 'false');
     }
   }
 })();
-

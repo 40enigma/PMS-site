@@ -303,7 +303,7 @@ code, pre, .mono {
   padding: 5px 8px;
   border-radius: var(--radius-btn);
   font-size: 13px;
-  font-weight: 450;
+  font-weight: 500;
   color: var(--text-secondary);
   transition: var(--transition);
   white-space: nowrap;
@@ -531,7 +531,7 @@ code, pre, .mono {
   background: var(--text);
   color: var(--bg) !important;
   box-shadow: var(--highlight-top), var(--shadow-sm);
-  font-weight: 550;
+  font-weight: 600;
 }
 .btn-primary:hover {
   background: var(--text);
@@ -620,7 +620,7 @@ code, pre, .mono {
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-family: var(--font-mono);
-  font-weight: 450;
+  font-weight: 500;
   background: var(--tag-bg);
   color: var(--text-muted);
   border: 1px solid var(--border-subtle);
@@ -799,7 +799,7 @@ textarea.form-control {
 }
 .announcement-text {
   color: var(--text);
-  font-weight: 450;
+  font-weight: 500;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

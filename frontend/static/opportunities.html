@@ -8,46 +8,39 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
-  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="stylesheet" href="/assets/style.css?v={{ASSET_V}}">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="canonical" href="https://pms.pieas.edu.pk/opportunities">
+  <link rel="canonical" href="{{APP_URL}}/opportunities">
   <meta property="og:title" content="Opportunities &amp; Scholarships – PIEAS Materials Society">
   <meta property="og:description" content="Internships, graduate scholarships, conferences, and metallurgy research positions curated for DMME students at PIEAS.">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://pms.pieas.edu.pk/opportunities">
-  <meta property="og:image" content="https://pms.pieas.edu.pk/pms-logo.jpeg">
-  <script src="/assets/theme.js"></script>
+  <meta property="og:url" content="{{APP_URL}}/opportunities">
+  <meta property="og:image" content="{{APP_URL}}/pms-logo.jpeg">
+  <script src="/assets/theme.js?v={{ASSET_V}}"></script>
 </head>
 <body>
 <a href="#main-content" class="skip-link">Skip to main content</a>
 <div id="announcement-banner" class="banner" style="display:none"></div>
 
-<!-- Navbar -->
-<nav class="navbar" role="navigation" aria-label="Main navigation">
-  <div class="container nav-inner">
-    <a href="/" class="nav-brand"><img src="/pms-logo.jpeg" alt="PIEAS Materials Society Logo" class="nav-logo" width="28" height="28"> PIEAS Materials Society</a>
-    <ul class="nav-links" id="nav-links" role="list">
-      <li><a href="/">Home</a></li>
-      <li><a href="/about">About</a></li>
-      <li><a href="/team">Team</a></li>
-      <li><a href="/events">Events</a></li>
-      <li><a href="/blog">Blog</a></li>
-      <li><a href="/resources">Resources</a></li>
-      <li><a href="/opportunities">Opportunities</a></li>
-      <li><a href="/alumni">Alumni</a></li>
-      <li><a href="/projects">Projects</a></li>
-      <li><a href="/gallery">Gallery</a></li>
-      <li><a href="/sponsors">Sponsors</a></li>
-      <li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li>
-    </ul>
-    <div class="nav-actions">
-      <button id="theme-toggle" class="theme-toggle-btn" type="button" aria-label="Toggle theme" title="Toggle theme"></button>
-      <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links">
-        <span></span><span></span><span></span>
-      </button>
-    </div>
-  </div>
-</nav>
+<!-- Shared Navbar -->
+<header id="site-header">
+  <noscript>
+    <nav class="navbar" role="navigation" aria-label="Main navigation">
+      <div class="container nav-inner">
+        <a href="/" class="nav-brand">PIEAS Materials Society</a>
+        <ul class="nav-links" role="list">
+          <li><a href="/">Home</a></li>
+          <li><a href="/about">About</a></li>
+          <li><a href="/team">Team</a></li>
+          <li><a href="/events">Events</a></li>
+          <li><a href="/blog">Blog</a></li>
+          <li><a href="/resources">Resources</a></li>
+          <li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li>
+        </ul>
+      </div>
+    </nav>
+  </noscript>
+</header>
 
 <main id="main-content">
 <!-- Hero -->
@@ -69,48 +62,17 @@
 </section>
 </main>
 
-<!-- Unified Footer -->
-<footer>
-  <div class="container">
-    <div class="footer-grid">
-      <div>
-        <div class="footer-title">PMS PIEAS</div>
-        <p style="font-size:13px;line-height:1.6">Official academic society of the Department of Metallurgy &amp; Materials Engineering (DMME), PIEAS Islamabad.</p>
-      </div>
-      <div>
-        <div class="footer-title">Quick Links</div>
-        <ul class="footer-links">
-          <li><a href="/events">Events</a></li>
-          <li><a href="/blog">Technical Blog</a></li>
-          <li><a href="/resources">Toolkit &amp; ASTM</a></li>
-          <li><a href="/opportunities">Opportunities</a></li>
-        </ul>
-      </div>
-      <div>
-        <div class="footer-title">Society</div>
-        <ul class="footer-links">
-          <li><a href="/about">About PMS</a></li>
-          <li><a href="/team">Our Council</a></li>
-          <li><a href="/alumni">Alumni Network</a></li>
-          <li><a href="/sponsors">Sponsors</a></li>
-        </ul>
-      </div>
-      <div>
-        <div class="footer-title">Contact &amp; Governance</div>
-        <p style="font-size:13px;line-height:1.6">
-          <a href="mailto:pms@pieas.edu.pk" class="pms-contact-email" style="color:var(--text-muted)">pms@pieas.edu.pk</a><br>
-          <span class="pms-office-location">DMME Block, PIEAS, Nilore, Islamabad</span><br>
-          <a href="#" class="pms-constitution-link" style="display:none;margin-top:.45rem;color:var(--text);font-weight:500">Society Constitution (PDF) ↗</a>
-        </p>
-      </div>
+<!-- Shared Footer -->
+<footer id="site-footer">
+  <noscript>
+    <div class="container footer-bottom">
+      <p>&copy; PIEAS Materials Society (PMS). Department of Metallurgy &amp; Materials Engineering &middot; <a href="mailto:pms@pieas.edu.pk">pms@pieas.edu.pk</a></p>
     </div>
-    <div class="footer-bottom">
-      <p>© 2026 PIEAS Materials Society (PMS). Department of Metallurgy &amp; Materials Engineering.</p>
-    </div>
-  </div>
+  </noscript>
 </footer>
 
-<script src="/assets/app.js" defer></script>
-<script src="/assets/pages/opportunities.js" defer></script>
+<script src="/assets/layout.js?v={{ASSET_V}}" defer></script>
+<script src="/assets/app.js?v={{ASSET_V}}" defer></script>
+<script src="/assets/pages/opportunities.js?v={{ASSET_V}}" defer></script>
 </body>
 </html>

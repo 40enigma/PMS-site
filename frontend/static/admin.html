@@ -9,31 +9,24 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
-  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="stylesheet" href="/assets/style.css?v={{ASSET_V}}">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <script src="/assets/theme.js"></script>
+  <script src="/assets/theme.js?v={{ASSET_V}}"></script>
 </head>
 <body>
 <a href="#main-content" class="skip-link">Skip to main content</a>
-<nav class="navbar" role="navigation" aria-label="Main navigation">
-  <div class="container nav-inner">
-    <a href="/" class="nav-brand">
-      <img src="/pms-logo.jpeg" alt="PIEAS Materials Society Logo" class="nav-logo" width="28" height="28">
-      PIEAS Materials Society <span>Admin</span>
-    </a>
-    <ul class="nav-links" id="nav-links" role="list">
-      <li><a href="/">View Live Site</a></li>
-      <li id="nav-user-item" style="display:none"><span id="nav-user" style="color:var(--text-muted);font-size:.85rem;font-weight:600"></span></li>
-      <li id="nav-logout-item" style="display:none"><button id="logout-btn" class="btn btn-outline btn-sm" style="display:none">Logout</button></li>
-    </ul>
-    <div class="nav-actions">
-      <button id="theme-toggle" class="theme-toggle-btn" type="button" aria-label="Toggle theme" title="Toggle theme"></button>
-      <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links">
-        <span></span><span></span><span></span>
-      </button>
-    </div>
-  </div>
-</nav>
+<header id="site-header" data-layout="admin">
+  <noscript>
+    <nav class="navbar" role="navigation" aria-label="Main navigation">
+      <div class="container nav-inner">
+        <a href="/" class="nav-brand">PIEAS Materials Society <span>Admin</span></a>
+        <ul class="nav-links" role="list">
+          <li><a href="/">View Live Site</a></li>
+        </ul>
+      </div>
+    </nav>
+  </noscript>
+</header>
 
 <main id="main-content">
 <div class="container section" style="min-height:75vh">
@@ -131,13 +124,20 @@
   </div>
 </dialog>
 
-<footer>
-  <div class="container footer-bottom">
-    <p>© 2026 PIEAS Materials Society (PMS) • Department of Metallurgy &amp; Materials Engineering (DMME)</p>
-  </div>
+<footer id="site-footer" data-layout="admin">
+  <noscript>
+    <div class="container footer-bottom">
+      <p>&copy; PIEAS Materials Society (PMS) &bull; Department of Metallurgy &amp; Materials Engineering (DMME)</p>
+    </div>
+  </noscript>
 </footer>
 
-<script src="/assets/app.js" defer></script>
-<script src="/assets/pages/admin.js" defer></script>
+<script src="/assets/layout.js?v={{ASSET_V}}" defer></script>
+<script src="/assets/app.js?v={{ASSET_V}}" defer></script>
+<script src="/assets/pages/admin/schemas.js?v={{ASSET_V}}" defer></script>
+<script src="/assets/pages/admin/auth.js?v={{ASSET_V}}" defer></script>
+<script src="/assets/pages/admin/modals.js?v={{ASSET_V}}" defer></script>
+<script src="/assets/pages/admin/tools.js?v={{ASSET_V}}" defer></script>
+<script src="/assets/pages/admin/table.js?v={{ASSET_V}}" defer></script>
 </body>
 </html>
