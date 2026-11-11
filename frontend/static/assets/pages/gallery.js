@@ -21,13 +21,13 @@
           data-img-url="${PMS.safeUrl(img.image_url)}"
           data-img-title="${PMS.escHtml(title)}"
           data-img-caption="${PMS.escHtml(captionDetail)}"
-          style="margin:0;padding:0;border-radius:var(--radius-lg);overflow:hidden;position:relative;aspect-ratio:4/3;background:var(--bg-card);border:1px solid var(--border);cursor:pointer;transition-delay:${idx * 60}ms">
+          style="margin:0;padding:0;border-radius:var(--radius-lg);overflow:hidden;position:relative;aspect-ratio:4/3;background:var(--bg-card);border:1px solid var(--border);cursor:pointer;transition-delay:${Math.min(idx, 8) * 60}ms">
           <img src="${PMS.safeUrl(img.image_url)}" alt="${PMS.escHtml(title)}" loading="lazy"
-            style="width:100%;height:100%;object-fit:cover;transition:transform .3s ease">
-          <figcaption style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.88));padding:.75rem 1rem;font-size:.8rem;color:#f8fafc;pointer-events:none">
-            <strong style="color:#fff">${PMS.escHtml(title)}</strong>
-            ${captionDetail ? `<br><small style="color:#94a3b8">${PMS.escHtml(captionDetail)}</small>` : ''}
-            <div style="font-size:12px;color:var(--text-muted);margin-top:4px;display:flex;align-items:center;gap:4px">${PMS.icon('search', 12)} Click to inspect</div>
+            style="width:100%;height:100%;object-fit:cover;transition:transform var(--dur-slow) var(--ease)">
+          <figcaption style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,var(--overlay-scrim));padding:.75rem 1rem;font-size:.8rem;color:var(--overlay-text);pointer-events:none">
+            <strong style="color:var(--overlay-text)">${PMS.escHtml(title)}</strong>
+            ${captionDetail ? `<br><small style="color:var(--overlay-text-muted)">${PMS.escHtml(captionDetail)}</small>` : ''}
+            <div style="font-size:12px;color:var(--overlay-text-muted);margin-top:4px;display:flex;align-items:center;gap:4px">${PMS.icon('search', 12)} Click to inspect</div>
           </figcaption>
         </figure>`;
     }).join('') : '<p style="color:var(--text-muted);grid-column:1/-1;text-align:center">No images in gallery.</p>';

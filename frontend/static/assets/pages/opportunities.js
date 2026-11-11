@@ -11,7 +11,7 @@
   try {
     const opps = await PMS.apiFetch('/api/opportunities');
     grid.innerHTML = opps.length ? opps.map((o, idx) => `
-      <article class="card fade-up" style="transition-delay:${idx * 60}ms">
+      <article class="card fade-up" style="transition-delay:${Math.min(idx, 8) * 60}ms">
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
           <span class="badge">${PMS.escHtml(o.opportunity_type)}</span>
           ${o.deadline ? `<span class="badge badge-accent">Deadline: ${PMS.escHtml(o.deadline)}</span>` : ''}

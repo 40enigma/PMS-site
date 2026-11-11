@@ -11,7 +11,7 @@
   try {
     const alumni = await PMS.apiFetch('/api/alumni');
     grid.innerHTML = alumni.length ? alumni.map((a, idx) => `
-      <article class="card fade-up" style="display:flex;gap:1.25rem;align-items:flex-start;transition-delay:${idx * 60}ms">
+      <article class="card fade-up" style="display:flex;gap:1.25rem;align-items:flex-start;transition-delay:${Math.min(idx, 8) * 60}ms">
         ${a.photo_url
           ? `<img src="${PMS.safeUrl(a.photo_url)}" alt="${PMS.escHtml(a.name)}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid var(--border)">`
           : `<div style="width:72px;height:72px;border-radius:50%;background:var(--bg-raised);border:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--text-muted)">${PMS.icon('graduation-cap', 26)}</div>`}

@@ -98,7 +98,9 @@ const iconPaths = {
   'sun': '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
   'moon': '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
   'chevron-left': '<path d="m15 18-6-6 6-6"/>',
-  'chevron-right': '<path d="m9 18 6-6-6-6"/>'
+  'chevron-right': '<path d="m9 18 6-6-6-6"/>',
+  'pause': '<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
+  'play': '<polygon points="6 3 20 12 6 21 6 3"/>'
 };
 
 function icon(name, size = 16, className = 'icon') {
@@ -261,7 +263,7 @@ function renderMarkdown(md) {
   // 6. Headings (shifted h1->h2, h2->h3, h3->h4 because article modal already contains an h1)
   text = text.replace(/^### (.*$)/gim, '\n\n<h4 style="font-size:1.05rem;margin:1.25rem 0 .45rem;color:var(--text)">$1</h4>\n\n');
   text = text.replace(/^## (.*$)/gim, '\n\n<h3 style="font-size:1.25rem;margin:1.5rem 0 .55rem;color:var(--text)">$1</h3>\n\n');
-  text = text.replace(/^# (.*$)/gim, '\n\n<h2 style="font-size:1.45rem;margin:1.75rem 0 .7rem;color:var(--primary-light)">$1</h2>\n\n');
+  text = text.replace(/^# (.*$)/gim, '\n\n<h2 style="font-size:1.45rem;margin:1.75rem 0 .7rem;color:var(--text)">$1</h2>\n\n');
 
   // 7. Bold & Italics
   text = text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
@@ -333,7 +335,7 @@ function renderMarkdown(md) {
     let formattedText = item.linkText
       .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
       .replace(/(^|[^\w*])\*([^*\n\s](?:[^*\n]*?[^*\n\s])?)\*(?=[^\w*]|$)/g, '$1<em>$2</em>');
-    return `<a href="${item.target}" target="_blank" rel="noopener" style="color:var(--primary-light);text-decoration:underline">${formattedText}</a>`;
+    return `<a href="${item.target}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">${formattedText}</a>`;
   });
 
   // 13. Restore images
@@ -347,14 +349,14 @@ function renderMarkdown(md) {
   text = text.replace(new RegExp(`\u0000PMS_${tok}_INLINE_CODE_(\\d+)\u0000`, 'g'), (match, idx) => {
     const item = inlineCodes[idx];
     if (item === undefined) return match;
-    return `<code style="background:rgba(255,255,255,.08);padding:.2rem .45rem;border-radius:4px;font-size:.875em;color:#93c5fd">${escHtml(item)}</code>`;
+    return `<code style="background:var(--code-bg);padding:.2rem .45rem;border-radius:4px;font-size:.875em;color:var(--code-fg)">${escHtml(item)}</code>`;
   });
 
   // 15. Restore code blocks
   text = text.replace(new RegExp(`\u0000PMS_${tok}_CODE_BLOCK_(\\d+)\u0000`, 'g'), (match, idx) => {
     const item = codeBlocks[idx];
     if (!item) return match;
-    return `<pre class="code-block" style="background:#050811;padding:1.1rem;border-radius:10px;overflow-x:auto;margin:1.25rem 0;border:1px solid var(--border);box-shadow:inset 0 2px 4px rgba(0,0,0,.5)"><code style="font-family:monospace;font-size:.875rem;line-height:1.55;color:#e2e8f0">${escHtml(item.code)}</code></pre>`;
+    return `<pre class="code-block" style="background:var(--bg-deep);padding:1.1rem;border-radius:10px;overflow-x:auto;margin:1.25rem 0;border:1px solid var(--border)"><code style="font-family:var(--font-mono);font-size:.875rem;line-height:1.55;color:var(--text)">${escHtml(item.code)}</code></pre>`;
   });
 
   return text;
@@ -386,32 +388,54 @@ function observeFadeElements(ctx = document) {
   qsa('.fade-up:not(.in-view)', ctx).forEach(el => scrollObserver.observe(el));
 }
 
+function prefersReducedMotion() {
+  return Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+
 /* ── Navbar ── */
 function initNavbar() {
   const hamburger = qs('.hamburger');
   const navLinks = qs('.nav-links');
   if (!hamburger || !navLinks) return;
 
+  if (!navLinks.id) navLinks.id = 'nav-links';
+  hamburger.setAttribute('aria-controls', navLinks.id);
+
+  function closeNav(returnFocus = false) {
+    navLinks.classList.remove('open');
+    hamburger.classList.remove('active');
+    hamburger.setAttribute('aria-expanded', 'false');
+    if (returnFocus) hamburger.focus();
+  }
+
   hamburger.addEventListener('click', () => {
     const isOpen = navLinks.classList.toggle('open');
     hamburger.classList.toggle('active', isOpen);
-    hamburger.setAttribute('aria-expanded', isOpen);
+    hamburger.setAttribute('aria-expanded', String(isOpen));
   });
 
   // Close mobile nav on click outside
   document.addEventListener('click', e => {
     if (!navLinks.contains(e.target) && !hamburger.contains(e.target) && navLinks.classList.contains('open')) {
-      navLinks.classList.remove('open');
-      hamburger.classList.remove('active');
-      hamburger.setAttribute('aria-expanded', 'false');
+      closeNav(false);
+    }
+  });
+
+  // Close mobile nav on Escape and return focus to hamburger
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && navLinks.classList.contains('open')) {
+      closeNav(true);
     }
   });
 
   // Mark current page as active
   const path = window.location.pathname.replace(/\/$/, '') || '/';
   qsa('.nav-links a').forEach(a => {
-    const href = a.getAttribute('href').replace(/\/$/, '') || '/';
-    if (href === path) a.classList.add('active');
+    const href = (a.getAttribute('href') || '').replace(/\/$/, '') || '/';
+    if (href === path) {
+      a.classList.add('active');
+      a.setAttribute('aria-current', 'page');
+    }
   });
 }
 
@@ -522,7 +546,8 @@ async function loadAnnouncements(container) {
             hasMultiple
               ? `<button type="button" class="announcement-nav-btn" id="announcement-prev" aria-label="Previous announcement">${icon('chevron-left', 14)}</button>
                  <span class="announcement-counter" id="announcement-counter" aria-live="polite">1 / ${active.length}</span>
-                 <button type="button" class="announcement-nav-btn" id="announcement-next" aria-label="Next announcement">${icon('chevron-right', 14)}</button>`
+                 <button type="button" class="announcement-nav-btn" id="announcement-next" aria-label="Next announcement">${icon('chevron-right', 14)}</button>
+                 <button type="button" class="announcement-pause-btn" id="announcement-pause" aria-label="Pause announcements" aria-pressed="false" title="Pause announcements">${icon('pause', 14)}</button>`
               : ''
           }
           <button type="button" class="announcement-close-btn" id="announcement-close" aria-label="Dismiss announcement" title="Dismiss announcement">
@@ -535,18 +560,35 @@ async function loadAnnouncements(container) {
 
     let currentIndex = 0;
     const track = qs('#announcement-track', container);
+    const slides = qsa('.announcement-slide', track);
     const counter = qs('#announcement-counter', container);
+    const pauseBtn = qs('#announcement-pause', container);
+    let isPaused = prefersReducedMotion();
     let slideTimer = null;
+
+    function updatePauseButton() {
+      if (!pauseBtn) return;
+      pauseBtn.innerHTML = icon(isPaused ? 'play' : 'pause', 14);
+      const label = isPaused ? 'Play announcements' : 'Pause announcements';
+      pauseBtn.setAttribute('aria-label', label);
+      pauseBtn.setAttribute('title', label);
+      pauseBtn.setAttribute('aria-pressed', String(isPaused));
+    }
 
     function goToSlide(idx) {
       if (!track) return;
       currentIndex = (idx + active.length) % active.length;
       track.style.transform = `translateX(-${currentIndex * 100}%)`;
+      slides.forEach((slide, i) => {
+        const isCurrent = i === currentIndex;
+        slide.setAttribute('aria-hidden', isCurrent ? 'false' : 'true');
+        slide.inert = !isCurrent;
+      });
       if (counter) counter.textContent = `${currentIndex + 1} / ${active.length}`;
     }
 
     function startTimer() {
-      if (!hasMultiple) return;
+      if (!hasMultiple || isPaused || prefersReducedMotion()) return;
       stopTimer();
       slideTimer = setInterval(() => {
         goToSlide(currentIndex + 1);
@@ -560,7 +602,10 @@ async function loadAnnouncements(container) {
       }
     }
 
+    goToSlide(0);
+
     if (hasMultiple) {
+      updatePauseButton();
       const prevBtn = qs('#announcement-prev', container);
       const nextBtn = qs('#announcement-next', container);
       if (prevBtn) {
@@ -579,11 +624,26 @@ async function loadAnnouncements(container) {
           startTimer();
         });
       }
+      if (pauseBtn) {
+        pauseBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          isPaused = !isPaused;
+          if (isPaused) {
+            stopTimer();
+          } else {
+            startTimer();
+          }
+          updatePauseButton();
+        });
+      }
 
       container.addEventListener('mouseenter', stopTimer);
       container.addEventListener('mouseleave', startTimer);
       container.addEventListener('focusin', stopTimer);
-      container.addEventListener('focusout', startTimer);
+      container.addEventListener('focusout', e => {
+        if (e.relatedTarget && container.contains(e.relatedTarget)) return;
+        startTimer();
+      });
       startTimer();
     }
 
@@ -609,6 +669,10 @@ async function loadAnnouncements(container) {
 /* ── Animated Number Counters & Live Site Stats ── */
 function animateCounter(el, target, duration = 1200) {
   if (!el || isNaN(target)) return;
+  if (prefersReducedMotion()) {
+    el.textContent = target;
+    return;
+  }
   const start = 0;
   const startTime = performance.now();
 
@@ -677,7 +741,7 @@ function skeletonGrid(count = 3) {
 
 /* ── Card Renderers with Staggered Cascading Animation ── */
 function eventCard(e, idx = 0) {
-  const delay = idx * 60;
+  const delay = Math.min(idx, 8) * 60;
   return `
     <article class="card fade-up ${e.is_featured ? 'card-featured' : ''}" style="transition-delay:${delay}ms">
       ${e.poster_url ? `<img src="${safeUrl(e.poster_url)}" alt="${escHtml(e.title)}" style="width:100%;height:180px;object-fit:cover;border-radius:8px;margin-bottom:16px;">` : ''}
@@ -704,7 +768,7 @@ function eventCard(e, idx = 0) {
 }
 
 function teamCard(m, idx = 0) {
-  const delay = idx * 60;
+  const delay = Math.min(idx, 8) * 60;
   return `
     <article class="card fade-up" style="text-align:center;transition-delay:${delay}ms">
       ${m.photo_url
@@ -723,7 +787,7 @@ function teamCard(m, idx = 0) {
 }
 
 function postCard(p, idx = 0) {
-  const delay = idx * 60;
+  const delay = Math.min(idx, 8) * 60;
   const authorInfo = [
     p.author_name || 'PMS',
     p.author_role,
@@ -750,7 +814,7 @@ function postCard(p, idx = 0) {
 }
 
 function resourceCard(r, idx = 0) {
-  const delay = idx * 60;
+  const delay = Math.min(idx, 8) * 60;
   return `
     <article class="card fade-up ${r.is_pinned ? 'card-featured' : ''}" style="transition-delay:${delay}ms">
       ${r.is_pinned ? '<div style="margin-bottom:10px"><span class="badge badge-accent">Pinned</span></div>' : ''}

@@ -14,10 +14,10 @@
       const aboutSecs = secs.filter(s => s.section_key.startsWith('about'));
       container.innerHTML = aboutSecs.length
         ? aboutSecs.map((s, idx) => `
-          <article class="card fade-up" style="transition-delay:${idx * 60}ms">
+          <article class="card fade-up" style="transition-delay:${Math.min(idx, 8) * 60}ms">
             <span class="badge" style="margin-bottom:.75rem">${PMS.escHtml(s.badge || s.section_key)}</span>
             <h2 style="font-size:1.3rem;margin-bottom:.5rem">${PMS.escHtml(s.title)}</h2>
-            ${s.subtitle ? `<p style="color:var(--primary-light);font-weight:600;margin-bottom:.75rem">${PMS.escHtml(s.subtitle)}</p>` : ''}
+            ${s.subtitle ? `<p style="color:var(--accent);font-weight:600;margin-bottom:.75rem">${PMS.escHtml(s.subtitle)}</p>` : ''}
             <p style="color:var(--text-muted);line-height:1.7">${PMS.escHtml(s.content)}</p>
           </article>`).join('')
         : '<p style="color:var(--text-muted);grid-column:1/-1">About information not available.</p>';

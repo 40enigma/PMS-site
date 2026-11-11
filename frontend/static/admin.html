@@ -21,14 +21,14 @@
       <img src="/pms-logo.jpeg" alt="PIEAS Materials Society Logo" class="nav-logo" width="28" height="28">
       PIEAS Materials Society <span>Admin</span>
     </a>
-    <ul class="nav-links" role="list">
+    <ul class="nav-links" id="nav-links" role="list">
       <li><a href="/">View Live Site</a></li>
       <li id="nav-user-item" style="display:none"><span id="nav-user" style="color:var(--text-muted);font-size:.85rem;font-weight:600"></span></li>
       <li id="nav-logout-item" style="display:none"><button id="logout-btn" class="btn btn-outline btn-sm" style="display:none">Logout</button></li>
     </ul>
     <div class="nav-actions">
       <button id="theme-toggle" class="theme-toggle-btn" type="button" aria-label="Toggle theme" title="Toggle theme"></button>
-      <button class="hamburger" aria-label="Toggle Navigation" aria-expanded="false">
+      <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links">
         <span></span><span></span><span></span>
       </button>
     </div>

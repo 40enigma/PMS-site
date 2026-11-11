@@ -4,6 +4,7 @@
  * Strict CSP compliant (loaded via script-src 'self').
  */
 (function () {
+  document.documentElement.classList.add('js');
   try {
     var saved = localStorage.getItem('pms_theme');
     var theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');

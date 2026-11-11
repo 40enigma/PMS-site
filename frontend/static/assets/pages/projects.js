@@ -11,7 +11,7 @@
   try {
     const projects = await PMS.apiFetch('/api/projects');
     grid.innerHTML = projects.length ? projects.map((p, idx) => `
-      <article class="card fade-up" style="transition-delay:${idx * 60}ms">
+      <article class="card fade-up" style="transition-delay:${Math.min(idx, 8) * 60}ms">
         ${p.image_url ? `<img src="${PMS.safeUrl(p.image_url)}" alt="${PMS.escHtml(p.title)}" style="width:100%;height:160px;object-fit:cover;border-radius:8px;margin-bottom:1rem">` : ''}
         <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">
           <span class="badge">${PMS.escHtml(p.project_type)}</span>
