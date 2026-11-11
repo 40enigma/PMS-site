@@ -158,7 +158,7 @@
     <p style="color:var(--text-muted);margin-bottom:1.5rem">Receive notifications on technical webinars, ASTM testing workshops, scholarship postings, and research updates.</p>
     <form id="newsletter-form" novalidate>
       <div style="display:flex;gap:.75rem;flex-wrap:wrap;justify-content:center">
-        <input id="newsletter-email" type="email" class="form-control" placeholder="student@pieas.edu.pk" required style="flex:1;min-width:220px" aria-label="Email address">
+        <input id="newsletter-email" type="email" inputmode="email" maxlength="254" autocomplete="email" class="form-control" placeholder="student@pieas.edu.pk" required style="flex:1;min-width:220px" aria-label="Email address">
         <button type="submit" class="btn btn-primary" id="newsletter-submit">Subscribe</button>
       </div>
       <div id="newsletter-msg" role="status" aria-live="polite" style="margin-top:.75rem"></div>

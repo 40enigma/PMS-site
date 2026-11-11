@@ -143,9 +143,11 @@
       const emailInput = document.getElementById('newsletter-email');
       const email = emailInput ? emailInput.value.trim() : '';
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        PMS.reportInvalidFields(newsletterForm, [emailInput]);
         PMS.showAlert(msgEl, 'Please enter a valid email address.');
         return;
       }
+      PMS.reportInvalidFields(newsletterForm, []);
       PMS.setLoading(btn, true);
       try {
         await PMS.apiPost('/api/newsletter', { email });

@@ -11,20 +11,30 @@ if (joinForm) {
     const btn = document.getElementById('join-submit');
     const msg = document.getElementById('join-msg');
 
-    const fullName = document.getElementById('join-name').value.trim();
-    const rollNumber = document.getElementById('join-roll').value.trim();
-    const batch = document.getElementById('join-batch').value.trim();
-    const department = document.getElementById('join-dept').value.trim();
-    const email = document.getElementById('join-email').value.trim();
+    const nameEl = document.getElementById('join-name');
+    const rollEl = document.getElementById('join-roll');
+    const batchEl = document.getElementById('join-batch');
+    const deptEl = document.getElementById('join-dept');
+    const emailEl = document.getElementById('join-email');
 
-    if (!fullName || !rollNumber || !batch || !department || !email) {
+    const fullName = nameEl.value.trim();
+    const rollNumber = rollEl.value.trim();
+    const batch = batchEl.value.trim();
+    const department = deptEl.value.trim();
+    const email = emailEl.value.trim();
+
+    const missing = [nameEl, rollEl, batchEl, deptEl, emailEl].filter(el => !el.value.trim());
+    if (missing.length) {
+      PMS.reportInvalidFields(joinForm, missing);
       PMS.showAlert(msg, 'Please complete all required fields (*).');
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      PMS.reportInvalidFields(joinForm, [emailEl]);
       PMS.showAlert(msg, 'Please provide a valid email address.');
       return;
     }
+    PMS.reportInvalidFields(joinForm, []);
 
     PMS.setLoading(btn, true);
     try {
@@ -55,18 +65,26 @@ if (contactForm) {
     const btn = document.getElementById('contact-submit');
     const msg = document.getElementById('contact-msg');
 
-    const name = document.getElementById('contact-name').value.trim();
-    const email = document.getElementById('contact-email').value.trim();
-    const message = document.getElementById('contact-message').value.trim();
+    const nameEl = document.getElementById('contact-name');
+    const emailEl = document.getElementById('contact-email');
+    const msgEl = document.getElementById('contact-message');
 
-    if (!name || !email || !message) {
+    const name = nameEl.value.trim();
+    const email = emailEl.value.trim();
+    const message = msgEl.value.trim();
+
+    const missing = [nameEl, emailEl, msgEl].filter(el => !el.value.trim());
+    if (missing.length) {
+      PMS.reportInvalidFields(contactForm, missing);
       PMS.showAlert(msg, 'Please fill in your name, email, and message.');
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      PMS.reportInvalidFields(contactForm, [emailEl]);
       PMS.showAlert(msg, 'Please enter a valid email address.');
       return;
     }
+    PMS.reportInvalidFields(contactForm, []);
 
     PMS.setLoading(btn, true);
     try {

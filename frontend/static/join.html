@@ -67,39 +67,39 @@
       <form id="join-form" novalidate>
         <div class="form-group">
           <label class="form-label" for="join-name">Full Name *</label>
-          <input id="join-name" class="form-control" required placeholder="e.g. Muhammad Ahmed">
+          <input id="join-name" class="form-control" required maxlength="200" autocomplete="name" placeholder="e.g. Muhammad Ahmed">
         </div>
         <div class="grid grid-2" style="gap:1rem">
           <div class="form-group">
             <label class="form-label" for="join-roll">Roll Number *</label>
-            <input id="join-roll" class="form-control" required placeholder="e.g. 22-DMME-15">
+            <input id="join-roll" class="form-control" required maxlength="50" autocomplete="off" placeholder="e.g. 22-DMME-15">
           </div>
           <div class="form-group">
             <label class="form-label" for="join-batch">Batch *</label>
-            <input id="join-batch" class="form-control" required placeholder="e.g. 2022-2026">
+            <input id="join-batch" class="form-control" required maxlength="50" autocomplete="off" placeholder="e.g. 2022-2026">
           </div>
         </div>
         <div class="form-group">
           <label class="form-label" for="join-dept">Department *</label>
-          <input id="join-dept" class="form-control" required placeholder="e.g. Metallurgy &amp; Materials Engineering (DMME)">
+          <input id="join-dept" class="form-control" required maxlength="200" autocomplete="organization" placeholder="e.g. Metallurgy &amp; Materials Engineering (DMME)">
         </div>
         <div class="grid grid-2" style="gap:1rem">
           <div class="form-group">
             <label class="form-label" for="join-email">Email Address *</label>
-            <input id="join-email" type="email" class="form-control" required placeholder="student@pieas.edu.pk">
+            <input id="join-email" type="email" inputmode="email" class="form-control" required maxlength="254" autocomplete="email" placeholder="student@pieas.edu.pk">
           </div>
           <div class="form-group">
             <label class="form-label" for="join-phone">Contact Phone</label>
-            <input id="join-phone" class="form-control" placeholder="+92 300 1234567">
+            <input id="join-phone" type="tel" inputmode="tel" class="form-control" maxlength="50" autocomplete="tel" placeholder="+92 300 1234567">
           </div>
         </div>
         <div class="form-group">
           <label class="form-label" for="join-interests">Areas of Metallurgical / Research Interest</label>
-          <textarea id="join-interests" class="form-control" rows="2" placeholder="e.g. Mechanical testing, phase transformations, corrosion engineering, computational thermodynamics"></textarea>
+          <textarea id="join-interests" class="form-control" rows="2" maxlength="2000" placeholder="e.g. Mechanical testing, phase transformations, corrosion engineering, computational thermodynamics"></textarea>
         </div>
         <div class="form-group">
           <label class="form-label" for="join-why">Why would you like to join PMS?</label>
-          <textarea id="join-why" class="form-control" rows="2" placeholder="Tell us your motivation and how you would like to contribute..."></textarea>
+          <textarea id="join-why" class="form-control" rows="2" maxlength="2000" placeholder="Tell us your motivation and how you would like to contribute..."></textarea>
         </div>
         <div id="join-msg" role="status" aria-live="polite"></div>
         <button type="submit" class="btn btn-primary" style="width:100%;margin-top:.75rem" id="join-submit">Submit Membership Application</button>
@@ -116,20 +116,20 @@
         <div class="grid grid-2" style="gap:1rem">
           <div class="form-group">
             <label class="form-label" for="contact-name">Your Name *</label>
-            <input id="contact-name" class="form-control" required placeholder="Your full name">
+            <input id="contact-name" class="form-control" required maxlength="200" autocomplete="name" placeholder="Your full name">
           </div>
           <div class="form-group">
             <label class="form-label" for="contact-email">Your Email *</label>
-            <input id="contact-email" type="email" class="form-control" required placeholder="your.name@domain.com">
+            <input id="contact-email" type="email" inputmode="email" class="form-control" required maxlength="254" autocomplete="email" placeholder="your.name@domain.com">
           </div>
         </div>
         <div class="form-group">
           <label class="form-label" for="contact-subject">Subject</label>
-          <input id="contact-subject" class="form-control" placeholder="e.g. Workshop Suggestion / Industrial Visit Proposal">
+          <input id="contact-subject" class="form-control" maxlength="200" autocomplete="off" placeholder="e.g. Workshop Suggestion / Industrial Visit Proposal">
         </div>
         <div class="form-group">
           <label class="form-label" for="contact-message">Message *</label>
-          <textarea id="contact-message" class="form-control" rows="4" required placeholder="Write your message here..."></textarea>
+          <textarea id="contact-message" class="form-control" rows="4" required maxlength="5000" placeholder="Write your message here..."></textarea>
         </div>
         <div id="contact-msg" role="status" aria-live="polite"></div>
         <button type="submit" class="btn btn-outline" style="width:100%;margin-top:.75rem" id="contact-submit">Send Message</button>

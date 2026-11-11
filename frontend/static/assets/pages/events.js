@@ -48,8 +48,14 @@ if (verifyForm) {
     ev.preventDefault();
     const btn = document.getElementById('verify-submit');
     const msgEl = document.getElementById('verify-msg');
-    const code = document.getElementById('verify-code').value.trim();
-    if (!code) { PMS.showAlert(msgEl, 'Please enter a certificate verification code.'); return; }
+    const codeInput = document.getElementById('verify-code');
+    const code = codeInput ? codeInput.value.trim() : '';
+    if (!code) {
+      PMS.reportInvalidFields(verifyForm, [codeInput]);
+      PMS.showAlert(msgEl, 'Please enter a certificate verification code.');
+      return;
+    }
+    PMS.reportInvalidFields(verifyForm, []);
     PMS.setLoading(btn, true);
     try {
       const res = await PMS.apiFetch(`/api/certificates/verify?code=${encodeURIComponent(code)}`);

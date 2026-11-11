@@ -65,13 +65,13 @@ const SCHEMAS = {
       { name: 'title', label: 'Event Title *', type: 'text', required: true },
       { name: 'slug', label: 'Slug / URL Key (Leave empty to auto-generate)', type: 'text', placeholder: 'e.g. annual-metallurgy-symposium-2026' },
       { name: 'category', label: 'Category', type: 'select', options: ['Seminar', 'Workshop', 'Competition', 'Industrial Visit', 'Symposium', 'Lab Visit', 'Alumni Talk'] },
-      { name: 'date', label: 'Event Date * (YYYY-MM-DD)', type: 'text', required: true, placeholder: '2026-10-25' },
+      { name: 'date', label: 'Event Date *', type: 'date', required: true },
       { name: 'time_range', label: 'Time Range', type: 'text', placeholder: 'e.g. 10:00 AM – 1:00 PM' },
       { name: 'venue', label: 'Venue', type: 'text', placeholder: 'e.g. DMME Block Lecture Hall A' },
       { name: 'speaker_or_organizer', label: 'Speaker / Organizer', type: 'text', placeholder: 'e.g. Dr. Engr. Asim (NESCOM)' },
       { name: 'short_description', label: 'Short Description', type: 'textarea' },
       { name: 'full_summary', label: 'Full Agenda / Summary', type: 'textarea' },
-      { name: 'poster_url', label: 'Poster Image URL', type: 'text', placeholder: 'https:// or /uploads/...' },
+      { name: 'poster_url', label: 'Poster Image URL', type: 'text', upload: true, placeholder: 'https:// or /uploads/...' },
       { name: 'registration_link', label: 'External Registration Link', type: 'text', placeholder: 'Optional external form' },
       { name: 'is_past', label: 'Mark as Past Event', type: 'checkbox', default: false },
       { name: 'is_featured', label: 'Feature on Homepage', type: 'checkbox', default: false }
@@ -95,7 +95,7 @@ const SCHEMAS = {
       { name: 'name', label: 'Full Name *', type: 'text', required: true },
       { name: 'role', label: 'Role / Designation *', type: 'text', required: true, placeholder: 'e.g. President, General Secretary' },
       { name: 'role_responsibility', label: 'Key Responsibilities', type: 'text' },
-      { name: 'photo_url', label: 'Photo URL', type: 'text', placeholder: '/uploads/... or https://' },
+      { name: 'photo_url', label: 'Photo URL', type: 'text', upload: true, placeholder: '/uploads/... or https://' },
       { name: 'batch', label: 'Batch', type: 'text', placeholder: 'e.g. 2022-2026' },
       { name: 'tenure_year', label: 'Tenure Year *', type: 'text', required: true, placeholder: `e.g. ${currentAcademicYear()}` },
       { name: 'is_current', label: 'Current Council Member', type: 'checkbox', default: true },
@@ -120,7 +120,7 @@ const SCHEMAS = {
       { name: 'body_markdown', label: 'Full Article Markdown *', type: 'textarea', required: true, rows: 10 },
       { name: 'material_formula', label: 'Chemical / Alloy Formula', type: 'text', placeholder: 'e.g. Zr-1.5Sn-0.2Fe or Inconel 718' },
       { name: 'crystal_structure', label: 'Crystal Structure', type: 'text', placeholder: 'e.g. HCP (α), FCC (γ)' },
-      { name: 'cover_image_url', label: 'Cover Image URL', type: 'text' },
+      { name: 'cover_image_url', label: 'Cover Image URL', type: 'text', upload: true },
       { name: 'author_name', label: 'Author Name', type: 'text', default: 'PIEAS Materials Society' },
       { name: 'author_role', label: 'Author Title / Batch', type: 'text', placeholder: "e.g. Technical Head (DMME '26)" },
       { name: 'author_batch', label: 'Author Batch', type: 'text', placeholder: 'e.g. 2022-2026' },
@@ -138,7 +138,7 @@ const SCHEMAS = {
       { name: 'title', label: 'Resource Title *', type: 'text', required: true },
       { name: 'category', label: 'Category *', type: 'select', options: ['Standards', 'Software', 'Safety', 'Databases', 'Books', 'Tools'] },
       { name: 'description', label: 'Description', type: 'textarea' },
-      { name: 'url', label: 'URL / Document Link *', type: 'text', required: true },
+      { name: 'url', label: 'URL / Document Link *', type: 'text', upload: true, required: true },
       { name: 'software_tag', label: 'Software / Sub-Tag', type: 'text', placeholder: 'e.g. Thermo-Calc, ASTM E8, ImageJ' },
       { name: 'is_pinned', label: 'Pin to Top of Toolkit', type: 'checkbox', default: false }
     ]
@@ -154,7 +154,7 @@ const SCHEMAS = {
       { name: 'organization', label: 'Organization / University *', type: 'text', required: true },
       { name: 'opportunity_type', label: 'Type *', type: 'select', options: ['Internship', 'Scholarship', 'Job', 'Research', 'Research Position', 'Conference', 'Competition'] },
       { name: 'location', label: 'Location', type: 'text', placeholder: 'e.g. Islamabad, Remote, Germany' },
-      { name: 'deadline', label: 'Application Deadline', type: 'text', placeholder: 'e.g. 2026-11-30' },
+      { name: 'deadline', label: 'Application Deadline', type: 'date' },
       { name: 'description', label: 'Summary Details', type: 'textarea' },
       { name: 'posted_by_alumnus', label: 'Posted By Alumnus / Referral', type: 'text', placeholder: 'e.g. Dr. Fatima Zahra (Batch 2018)' },
       { name: 'apply_url', label: 'Application Link', type: 'text' },
@@ -176,7 +176,7 @@ const SCHEMAS = {
       { name: 'location', label: 'Location', type: 'text', placeholder: 'e.g. Cambridge, MA, USA' },
       { name: 'quote_testimonial', label: 'Quote / Testimonial', type: 'textarea' },
       { name: 'linkedin_url', label: 'LinkedIn Profile URL', type: 'text' },
-      { name: 'photo_url', label: 'Photo URL', type: 'text' }
+      { name: 'photo_url', label: 'Photo URL', type: 'text', upload: true }
     ]
   },
   projects: {
@@ -193,7 +193,7 @@ const SCHEMAS = {
       { name: 'supervisors', label: 'Faculty Supervisors', type: 'text', placeholder: 'Dr. ..., Engr. ...' },
       { name: 'abstract', label: 'Abstract / Technical Summary', type: 'textarea' },
       { name: 'tags', label: 'Tags / Keywords', type: 'text', placeholder: 'e.g. Titanium, SLM, Microstructure' },
-      { name: 'image_url', label: 'Project Image URL', type: 'text' },
+      { name: 'image_url', label: 'Project Image URL', type: 'text', upload: true },
       { name: 'paper_or_repo_url', label: 'Paper / Code Repository URL', type: 'text' }
     ]
   },
@@ -204,7 +204,7 @@ const SCHEMAS = {
     columns: ['id', 'image_url', 'caption', 'event_name', 'year'],
     canCreate: true,
     fields: [
-      { name: 'image_url', label: 'Image URL *', type: 'text', required: true, placeholder: 'https:// or /uploads/...' },
+      { name: 'image_url', label: 'Image URL *', type: 'text', upload: true, required: true, placeholder: 'https:// or /uploads/...' },
       { name: 'caption', label: 'Caption / Micrograph Spec', type: 'text', placeholder: 'e.g. Ti-6Al-4V SLM Microstructure (1000x)' },
       { name: 'event_name', label: 'Event / Context', type: 'text' },
       { name: 'event_id', label: 'Linked Event ID (Optional)', type: 'number' },
@@ -220,7 +220,7 @@ const SCHEMAS = {
     fields: [
       { name: 'name', label: 'Partner / Company Name *', type: 'text', required: true },
       { name: 'tier', label: 'Partnership Tier', type: 'select', options: ['Platinum', 'Gold', 'Silver', 'Bronze', 'Partner'] },
-      { name: 'logo_url', label: 'Logo URL *', type: 'text', required: true },
+      { name: 'logo_url', label: 'Logo URL', type: 'text', upload: true, required: false },
       { name: 'website_url', label: 'Website URL', type: 'text' },
       { name: 'since_year', label: 'Partner Since (Year)', type: 'text', placeholder: 'e.g. 2024' },
       { name: 'display_order', label: 'Display Order', type: 'number', default: 0 }
@@ -329,11 +329,20 @@ if (loginForm) {
     ev.preventDefault();
     const btn = document.getElementById('login-submit');
     const msg = document.getElementById('login-msg');
+    const emailEl = document.getElementById('login-email');
+    const pwEl = document.getElementById('login-password');
+    const missing = [emailEl, pwEl].filter(el => !el || !el.value.trim());
+    if (missing.length) {
+      PMS.reportInvalidFields(loginForm, missing);
+      PMS.showAlert(msg, 'Please enter your administrator email and password.');
+      return;
+    }
+    PMS.reportInvalidFields(loginForm, []);
     PMS.setLoading(btn, true);
     try {
       const res = await PMS.apiPost('/api/auth/login', {
-        email: document.getElementById('login-email').value,
-        password: document.getElementById('login-password').value,
+        email: emailEl.value,
+        password: pwEl.value,
       });
       showDashboard(res.admin || res);
     } catch (e) {
@@ -743,10 +752,16 @@ async function renderStatsEditor(container) {
       const years_active = parseInt(document.getElementById('stat-years').value, 10) || 0;
       const industrial_partners = parseInt(document.getElementById('stat-partners').value, 10) || 0;
 
-      if (active_members < 0 || events_held < 0 || years_active < 0 || industrial_partners < 0) {
+      const statsForm = document.getElementById('stats-form');
+      const statInputs = ['stat-members', 'stat-events', 'stat-years', 'stat-partners']
+        .map(id => document.getElementById(id));
+      const negativeInputs = statInputs.filter(el => (parseInt(el.value, 10) || 0) < 0);
+      if (negativeInputs.length) {
+        PMS.reportInvalidFields(statsForm, negativeInputs);
         PMS.showAlert(msg, 'Statistic counts cannot be negative numbers.');
         return;
       }
+      PMS.reportInvalidFields(statsForm, []);
 
       PMS.setLoading(btn, true);
       try {
@@ -870,7 +885,8 @@ function renderFields(fields, currentData) {
   const container = document.getElementById('crud-fields');
   if (!container) return;
   container.innerHTML = fields.map(f => {
-    const val = currentData[f.name] !== undefined ? currentData[f.name] : (f.default !== undefined ? f.default : '');
+    const rawVal = currentData[f.name] !== undefined ? currentData[f.name] : (f.default !== undefined ? f.default : '');
+    const val = f.type === 'date' && /^\d{4}-\d{2}-\d{2}/.test(String(rawVal || '')) ? String(rawVal).slice(0, 10) : rawVal;
     const isSectionKeyEdit = currentEditingId && f.name === 'section_key';
 
     if (f.type === 'textarea') {
@@ -900,7 +916,7 @@ function renderFields(fields, currentData) {
           <select id="f-${f.name}" class="form-control">${opts}</select>
         </div>`;
     }
-    if (f.name.endsWith('_url') || f.name === 'url') {
+    if (f.upload) {
       return `
         <div class="form-group">
           <label class="form-label" for="f-${f.name}">${PMS.escHtml(f.label)}</label>
@@ -983,6 +999,8 @@ if (crudForm) {
     if (!schema) return;
 
     const payload = {};
+    const missingFields = [];
+    let firstMissingLabel = '';
     for (const f of schema.fields) {
       const el = document.getElementById(`f-${f.name}`);
       if (!el) continue;
@@ -1005,9 +1023,14 @@ if (crudForm) {
         }
       }
       if (f.required && (payload[f.name] === null || payload[f.name] === '')) {
-        PMS.showAlert(msg, `Please fill out required field: ${f.label.replace('*', '').trim()}`);
-        return;
+        missingFields.push(el);
+        if (!firstMissingLabel) firstMissingLabel = f.label.replace('*', '').trim();
       }
+    }
+    if (missingFields.length) {
+      PMS.reportInvalidFields(crudForm, missingFields);
+      PMS.showAlert(msg, `Please fill out required field: ${firstMissingLabel}`);
+      return;
     }
 
     // Client-Side extra_json Validation
@@ -1015,10 +1038,12 @@ if (crudForm) {
       try {
         JSON.parse(payload.extra_json);
       } catch (jsonErr) {
+        PMS.reportInvalidFields(crudForm, [document.getElementById('f-extra_json')]);
         PMS.showAlert(msg, `Invalid JSON in Extra JSON field: ${jsonErr.message}`);
         return;
       }
     }
+    PMS.reportInvalidFields(crudForm, []);
 
     PMS.setLoading(btn, true);
     try {

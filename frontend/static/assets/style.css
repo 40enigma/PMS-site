@@ -682,6 +682,10 @@ code, pre, .mono {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
 }
+.form-control[aria-invalid="true"] {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
+}
 .form-control::placeholder {
   color: var(--text-muted);
 }

@@ -82,7 +82,7 @@
     <p style="color:var(--text-secondary);margin-bottom:24px">Enter your unique certificate verification code (e.g. <code class="mono">PMS-1-XXXXXXXX</code>) to validate official event attendance.</p>
     <form id="verify-form" novalidate>
       <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
-        <input id="verify-code" class="form-control" placeholder="PMS-1-XXXXXXXX" required style="flex:1;min-width:220px" aria-label="Certificate Code">
+        <input id="verify-code" class="form-control" maxlength="50" autocomplete="off" placeholder="PMS-1-XXXXXXXX" required style="flex:1;min-width:220px" aria-label="Certificate Code">
         <button type="submit" class="btn btn-primary" id="verify-submit">Verify Certificate</button>
       </div>
       <div id="verify-msg" role="status" aria-live="polite" style="margin-top:16px"></div>

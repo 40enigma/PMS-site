@@ -122,6 +122,31 @@ function showAlert(container, message, type = 'error', isHtml = false) {
   container.innerHTML = `<div class="alert alert-${type}" role="${roleAttr}">${isHtml ? message : escHtml(message)}</div>`;
 }
 
+function clearInvalidOnInput(formEl) {
+  if (!formEl || formEl.dataset.invalidClearBound) return;
+  formEl.dataset.invalidClearBound = 'true';
+  const clear = ev => {
+    if (ev.target instanceof HTMLElement && ev.target.hasAttribute('aria-invalid')) {
+      ev.target.removeAttribute('aria-invalid');
+    }
+  };
+  formEl.addEventListener('input', clear);
+  formEl.addEventListener('change', clear);
+}
+
+function reportInvalidFields(formEl, invalidEls) {
+  if (formEl) {
+    formEl.querySelectorAll('[aria-invalid]').forEach(el => el.removeAttribute('aria-invalid'));
+    clearInvalidOnInput(formEl);
+  }
+  const list = (invalidEls || []).filter(Boolean);
+  list.forEach(el => el.setAttribute('aria-invalid', 'true'));
+  if (list.length > 0 && typeof list[0].focus === 'function') {
+    list[0].focus();
+  }
+  return list.length > 0;
+}
+
 function escHtml(str) {
   if (str === null || str === undefined) return '';
   return String(str)
@@ -892,29 +917,29 @@ function openRegistrationModal(eventId, eventTitle, triggerEl) {
         <input type="hidden" id="reg-event-id">
         <div class="form-group">
           <label class="form-label" for="reg-name">Full Name *</label>
-          <input id="reg-name" class="form-control" required placeholder="Your full name">
+          <input id="reg-name" class="form-control" required maxlength="200" autocomplete="name" placeholder="Your full name">
         </div>
         <div class="grid grid-2" style="gap:.75rem">
           <div class="form-group">
             <label class="form-label" for="reg-roll">Roll Number *</label>
-            <input id="reg-roll" class="form-control" required placeholder="e.g. 22-DMME-01">
+            <input id="reg-roll" class="form-control" required maxlength="50" autocomplete="off" placeholder="e.g. 22-DMME-01">
           </div>
           <div class="form-group">
             <label class="form-label" for="reg-batch">Batch *</label>
-            <input id="reg-batch" class="form-control" required placeholder="e.g. 2022-2026">
+            <input id="reg-batch" class="form-control" required maxlength="50" autocomplete="off" placeholder="e.g. 2022-2026">
           </div>
         </div>
         <div class="form-group">
           <label class="form-label" for="reg-dept">Academic Department *</label>
-          <input id="reg-dept" class="form-control" required placeholder="e.g. Metallurgy & Materials Engineering (DMME)">
+          <input id="reg-dept" class="form-control" required maxlength="200" autocomplete="organization" placeholder="e.g. Metallurgy & Materials Engineering (DMME)">
         </div>
         <div class="form-group">
           <label class="form-label" for="reg-email">PIEAS Email *</label>
-          <input id="reg-email" type="email" class="form-control" required placeholder="student@pieas.edu.pk">
+          <input id="reg-email" type="email" inputmode="email" class="form-control" required maxlength="254" autocomplete="email" placeholder="student@pieas.edu.pk">
         </div>
         <div class="form-group">
           <label class="form-label" for="reg-phone">Contact Phone</label>
-          <input id="reg-phone" class="form-control" placeholder="Optional for SMS updates">
+          <input id="reg-phone" type="tel" inputmode="tel" class="form-control" maxlength="50" autocomplete="tel" placeholder="Optional for SMS updates">
         </div>
         <div id="reg-msg" role="status" aria-live="polite" style="margin-top:1rem"></div>
         <div style="display:flex;justify-content:flex-end;gap:.75rem;margin-top:1.5rem">
@@ -931,6 +956,7 @@ function openRegistrationModal(eventId, eventTitle, triggerEl) {
   const form = modal.querySelector('#reg-form');
   if (form) {
     form.reset();
+    reportInvalidFields(form, []);
   }
   const titleEl = modal.querySelector('#reg-modal-title');
   if (titleEl) titleEl.textContent = eventTitle ? `Register: ${eventTitle}` : 'Register for Event';
@@ -990,14 +1016,20 @@ function openRegistrationModal(eventId, eventTitle, triggerEl) {
         const email = (emailInput?.value || '').trim();
         const phone = (phoneInput?.value || '').trim();
 
-        if (!name || !roll || !batch || !dept || !email) {
+        const missingInputs = [nameInput, rollInput, batchInput, deptInput, emailInput].filter(
+          el => !el || !el.value.trim()
+        );
+        if (missingInputs.length) {
+          reportInvalidFields(formEl, missingInputs);
           showAlert(curMsgBox, 'Please fill in all required fields.', 'error');
           return;
         }
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          reportInvalidFields(formEl, [emailInput]);
           showAlert(curMsgBox, 'Please enter a valid email address.', 'error');
           return;
         }
+        reportInvalidFields(formEl, []);
 
         let isSuccess = false;
         setLoading(curSubmitBtn, true);
@@ -1246,6 +1278,7 @@ window.PMS = {
   showModalWithFocusReturn,
   skeletonGrid,
   showAlert,
+  reportInvalidFields,
   setLoading,
   observeFadeElements,
   eventCard,
