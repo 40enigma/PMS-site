@@ -55,7 +55,10 @@ PMS-site/
 │       ├── public.rs        # Public read endpoints, filter queries, rate-limited submissions
 │       └── admin.rs         # Protected admin CRUD, stats editor, file uploader, session verification
 ├── migrations/
-│   └── 0001_initial_schema.sql # Canonical single source of truth for all 16 SQLite tables
+│   ├── 0001_initial_schema.sql              # Core schema for application tables
+│   ├── 0002_token_revocation.sql            # Token revocation denylist for admin sessions
+│   ├── 0003_email_lowercasing.sql           # Lowercase email normalization
+│   └── 0004_event_registrations_attended.sql # Participant attendance tracking column
 ├── frontend/
 │   └── static/
 │       ├── index.html       # Homepage with dynamic hero & activities
@@ -73,8 +76,11 @@ PMS-site/
 │       ├── admin.html       # Full Admin Console with Create/Edit modal, tabs, status toggle
 │       ├── 404.html         # Responsive 404 page with complete navbar and footer
 │       └── assets/
-│           ├── style.css    # Premium design system tokens, components, responsive layout
-│           └── app.js       # PMS namespace, safeUrl XSS sanitizer, API clients, helpers
+│           ├── style.css    # Design system tokens (dark & light themes), components, responsive layout
+│           ├── theme.js     # Early theme initialization
+│           ├── layout.js    # Shared public/admin navbar & footer injection
+│           ├── app.js       # PMS namespace, safeUrl XSS sanitizer, API clients, helpers
+│           └── pages/       # Modular deferred page scripts & split admin/*.js console modules
 ├── uploads/                 # Storage for uploaded media assets (non-executable permissions)
 ├── tests/
 │   └── smoke_test.rs        # Integration test suite (auth, rate limits, upload sniff, CRUD, 404)
@@ -89,7 +95,7 @@ PMS-site/
 
 The database schema is managed via sequential, numbered migrations tracked in `_pms_migrations`:
 - `migrations/0001_initial_schema.sql` — Initial schema establishing all core tables
-- `migrations/0002_fix_lowercasing.sql` — Deprecated placeholder
+- `migrations/0002_token_revocation.sql` — Created `revoked_tokens` table and expiration index for admin logout revocation
 - `migrations/0003_email_lowercasing.sql` — Normalized emails to lowercase across all account and submission tables
 - `migrations/0004_event_registrations_attended.sql` — Added `attended` BOOLEAN column to `event_registrations`
 
@@ -145,9 +151,10 @@ The database schema is managed via sequential, numbered migrations tracked in `_
 ## 5. API Reference & Features
 
 - **Health Check**: `GET /healthz` checks database connectivity with `SELECT 1` and returns 200 `{"status":"ok"}` (503 on error). Not rate limited.
-- **Sitemap**: `GET /sitemap.xml` dynamically generates XML sitemap including static pages, published posts, and events.
+- **Sitemap**: `GET /sitemap.xml` dynamically generates an XML sitemap using `APP_URL`, including static pages, article `/blog/{slug}` URLs, and `/events`.
 - **Pagination**: All public and admin list endpoints support `limit` (default: 50, maximum: 200) and `offset` query parameters.
-- **Certificate Verification**: `GET /api/certificates/verify?code=...` only returns `valid: true` if the participant attended the event (`attended = 1`).
+- **Certificate Verification**: `GET /api/certificates/verify?code=...` returns `valid: true` if `attended = 1`, or `valid: false` with `reason: "not_attended"` / `"not_found"`.
+- **HTML Template Rendering**: Pretty pages and `/blog/{slug}` substitute `{{ASSET_V}}` (from `ASSET_V` env var or hashed assets digest) and `{{APP_URL}}` at serve time.
 - **Attendance Toggling**: Admins can toggle event attendance via `PUT /api/admin/registrations/{id}` with `{"attended": true | false}`.
 - **Programmatic Logins**: `POST /api/auth/login` supports optional header `X-Return-Token: 1` to receive the JWT token in the JSON body.
 - **File Upload Security**: `/api/admin/upload` sniffs MIME magic bytes, generates safe UUID filenames `{uuid}.{ext}`, and wraps `/uploads` with strict sandbox and cache headers.

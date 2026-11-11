@@ -71,6 +71,24 @@ This document details all bugs fixed, architectural improvements, files touched,
 - **Robots & Sitemap**: Created `frontend/static/robots.txt` and dynamic `/sitemap.xml` route in Axum app.
 - **SEO & Accessibility**: Added `<meta property="og:*">` tags and canonical links on public pages. Added "Skip to main content" link and `<main id="main-content">` landmark across all HTML pages with `:focus-visible` styles in `style.css`.
 
+### Phase 6 & Audit Remediation (Phases 1–6)
+- **Data Integrity & API Correctness**:
+  - Added `fetchAllRows` pagination (200 rows/page, up to 500 pages) for `/api/admin/registrations`, `/api/admin/membership`, `/api/admin/contacts`, and `/api/admin/newsletter` so CSV exports and counts include all rows.
+  - Preserved `savedRegFilter` before clearing the admin toolbar, cleared optional stats/section strings with `''` while keeping `null` on create, replaced brittle 401 string matching with `isUnauthorized(err)` (`err.status === 401`), and added a sequence guard in `events.js` to discard stale async filter responses.
+  - Escaped gallery `data-img-url` with `PMS.safeUrl`, normalized `'Partner'` tier labels, stopped HTML-escaping `mailto:` `href` attributes in `loadStats` (and removed dead stat selectors), formatted date-only and SQLite UTC timestamps consistently in `fmtDate`, joined only non-empty alumni subtitle parts, grouped past team members under `tenure_year`, and updated `renderMarkdown` to emit `<h2>`–`<h4>` with collision-proof per-call NUL-delimited tokens.
+  - Added `CertificateVerification.reason` (`"not_found"` / `"not_attended"`), fixed `sitemap_xml` to emit `/blog/{slug}` and `/events`, and replaced hardcoded default years with computed academic tenure year (Aug–Jul rollover) and current calendar year.
+- **Modals, Scroll Lock & Shared UX**:
+  - Replaced click-to-close backdrop listeners with drag-safe `enableBackdropClose(dialog)` requiring `pointerdown` and `pointerup` outside dialog bounds.
+  - Unified `.modal` / `.modal--sm|--md|--lg` styles and outline Close buttons in `style.css`, added `body:has(dialog[open])` scroll lock, wired `aria-labelledby` and focus restoration across public and admin dialogs, enforced `defer` ordering (`layout.js` -> `app.js` -> page script), switched announcement bar to slide/pause/dismiss, and rendered `"PIEAS Materials Society"` on a single navbar row on desktop.
+- **Design Tokens, Light Theme, Accessibility & Performance**:
+  - Expanded `:root` and `[data-theme="light"]` tokens (`color-scheme`, `--fs-*`, `--sp-*`, `--dur-*`, `--z-*`, `--tap-min`, `--overlay`, `--code-*`, `--tag-bg`, `--tier-*`), verified WCAG AA 4.5:1 text contrast on surface tokens, prevented grid overflow down to 320px, aligned `.fade-up` transitions with `.card`, enforced minimum 44px touch targets on coarse pointers, and converted clickable `<figure>` items, FAQ disclosures, form `aria-invalid`, and admin `role="tab"` keyboard navigation to accessible semantics.
+  - Aligned static `index.html` hero markup with seeded database copy (`home_hero`) to prevent first-paint flash.
+- **Routing, Asset Versioning, Shared Layout, Admin Split & Dev Tooling**:
+  - Added `/blog/{slug}` and `/blog/{slug}/` Axum routes plus History API URL updates and `?article=<slug>` deep-link normalization in `app.js`.
+  - Added server-side HTML template substitution (`render_html`) for `{{ASSET_V}}` (from `ASSET_V` env var or 8-char SHA-256 hash of `frontend/static/assets`) and `{{APP_URL}}` across all HTML templates.
+  - Extracted duplicated navbar/footer HTML into `frontend/static/assets/layout.js` (`#site-header` / `#site-footer`) and split monolithic `pages/admin.js` into `pages/admin/{schemas,auth,modals,tools,table}.js`.
+  - Added `PMS.isEmail`, `PMS.emptyState`, `PMS.errorState`, removed unused SVG icons, added explicit image `width`/`height`/`decoding="async"`/`loading="lazy"`, and configured ESLint v8 (`.eslintrc.json`), Prettier (`.prettierrc`), TypeScript `--checkJs` (`@ts-check` in `app.js`/`layout.js`), and the CI `frontend-lint` job.
+
 ---
 
 ## 📂 Files Touched & Created
@@ -119,6 +137,10 @@ This document details all bugs fixed, architectural improvements, files touched,
 - `migrations/0003_email_lowercasing.sql`
 - `migrations/0004_event_registrations_attended.sql`
 - `frontend/static/robots.txt`
+- `.eslintrc.json`
+- `.prettierrc`
+- `frontend/static/assets/theme.js`
+- `frontend/static/assets/layout.js`
 - `frontend/static/assets/pages/index.js`
 - `frontend/static/assets/pages/about.js`
 - `frontend/static/assets/pages/team.js`
@@ -131,7 +153,11 @@ This document details all bugs fixed, architectural improvements, files touched,
 - `frontend/static/assets/pages/gallery.js`
 - `frontend/static/assets/pages/sponsors.js`
 - `frontend/static/assets/pages/join.js`
-- `frontend/static/assets/pages/admin.js`
+- `frontend/static/assets/pages/admin/schemas.js` (replacing `frontend/static/assets/pages/admin.js`)
+- `frontend/static/assets/pages/admin/auth.js`
+- `frontend/static/assets/pages/admin/modals.js`
+- `frontend/static/assets/pages/admin/tools.js`
+- `frontend/static/assets/pages/admin/table.js`
 
 ---
 
@@ -146,7 +172,8 @@ This document details all bugs fixed, architectural improvements, files touched,
 | `RATE_LIMIT_NEWSLETTER_RPM` | Integer (`10`) | Per-IP requests per minute for `/api/newsletter`. |
 | `RATE_LIMIT_MEMBERSHIP_RPM` | Integer (`15`) | Per-IP requests per minute for `/api/membership`. |
 | `RATE_LIMIT_CERT_VERIFY_RPM` | Integer (`30`) | Per-IP requests per minute for `/api/certificates/verify`. |
-| `APP_URL` | String (`https://pms.pieas.edu.pk`) | Base URL used for generating URLs in `/sitemap.xml`. |
+| `APP_URL` | String (`https://pms.pieas.edu.pk`) | Canonical base URL for `/sitemap.xml` and `{{APP_URL}}` HTML canonical/OG placeholders. |
+| `ASSET_V` | String (optional; default 8-char SHA-256 digest of `frontend/static/assets`) | Cache-busting query value substituted for `{{ASSET_V}}` in HTML `/assets/*` URLs. |
 
 ---
 
@@ -155,7 +182,7 @@ This document details all bugs fixed, architectural improvements, files touched,
 1. **`RateLimitState::default`**:
    - Clippy rule `clippy::new_without_default` requires `impl Default for RateLimitState` when `pub fn new() -> Self` takes no parameters. The method was retained while the truly unused `cleanup()` method was removed.
 2. **Migrations Ordering**:
-   - `0002_fix_lowercasing.sql` was an existing file from an earlier phase. To ensure existing and clean databases upgrade identically without destructive changes, migration `0003_email_lowercasing.sql` was added to apply idempotent lowercase normalization across all tables, and migration `0004_event_registrations_attended.sql` added the `attended` column. Both upgrades are verified in the test suite.
+   - `migrations/0002_token_revocation.sql` created the `revoked_tokens` table and expiration index. To ensure existing and clean databases upgrade identically without destructive changes, migration `0003_email_lowercasing.sql` was added to apply idempotent lowercase normalization across all tables, and migration `0004_event_registrations_attended.sql` added the `attended` column. Both upgrades are verified in the test suite.
 3. **CSP Nonce vs External Page Scripts**:
    - Rather than introducing dynamic server-side HTML templating or script nonces into a pure static file server, all page-specific scripts were extracted into static deferred JavaScript files (`assets/pages/*.js`). This cleanly eliminated the need for `'unsafe-inline'` script execution under Content-Security-Policy.
 

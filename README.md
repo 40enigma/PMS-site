@@ -95,7 +95,7 @@ PMS-site/
 ├── pms.db                     # SQLite database (auto-created on first run)
 ├── migrations/                # Numbered database schema migrations (tracked in _pms_migrations)
 │   ├── 0001_initial_schema.sql# Initial core database schema
-│   ├── 0002_fix_lowercasing.sql# Deprecated placeholder
+│   ├── 0002_token_revocation.sql# Token revocation denylist for invalidated admin sessions
 │   ├── 0003_email_lowercasing.sql# Lowercase email normalization
 │   └── 0004_event_registrations_attended.sql# Added attended column to event_registrations
 ├── tests/                     # Integration tests
@@ -131,8 +131,11 @@ PMS-site/
 │       ├── 404.html           # Not found page
 │       ├── pms-logo.jpeg      # Society emblem
 │       └── assets/
-│           ├── style.css      # Shared design tokens & responsive CSS
-│           └── app.js         # Lightweight API client & UI helpers
+│           ├── style.css      # Shared design tokens, light/dark themes, responsive CSS
+│           ├── theme.js       # Early dark/light theme initialization
+│           ├── layout.js      # Shared navbar & footer injector (#site-header / #site-footer)
+│           ├── app.js         # Lightweight API client, markdown renderer, & UI helpers
+│           └── pages/         # Externalized deferred page scripts + admin/*.js modules
 │
 └── uploads/                   # Uploaded media and PDFs (validated & non-executable)
     └── .gitkeep
@@ -149,6 +152,7 @@ The backend uses Axum's `ServeDir` and explicit route services:
 - Visiting `/` serves `frontend/static/index.html`.
 - Visiting `/about` serves `frontend/static/about.html`.
 - Visiting `/team`, `/events`, `/resources`, `/blog`, `/opportunities`, `/alumni`, `/projects`, `/gallery`, `/sponsors`, `/join`, and `/admin` automatically resolve to their corresponding `.html` files.
+- Visiting `/blog/{slug}` serves `frontend/static/blog.html` and opens the corresponding article directly, with canonical/OG tags rendered using `{{APP_URL}}` and static asset query strings versioned via `{{ASSET_V}}`.
 - Unknown non-API paths return HTTP 404 with `frontend/static/404.html`.
 - Static assets (stylesheets, scripts, images) are served directly under `/assets/*` or root.
 
@@ -190,6 +194,8 @@ The platform reads all security and networking configurations from `.env` or sys
 | `TRUST_PROXY` | Trust proxy headers (`X-Real-IP`, rightmost `X-Forwarded-For`) (`true`/`false`) | `false` | Set `true` behind reverse proxy (Nginx/Caddy) to prevent all users sharing `127.0.0.1` |
 | `TRUST_CLOUDFLARE` | Trust `CF-Connecting-IP` / `True-Client-IP` when `TRUST_PROXY=true` | `false` | Set `true` only if deployed directly behind Cloudflare |
 | `UPLOAD_DIR` | Directory to store uploaded media assets | `uploads` | `/var/www/pms-platform/uploads` |
+| `APP_URL` | Canonical public base URL for `/sitemap.xml` and `{{APP_URL}}` HTML meta/canonical tags | `https://pms.pieas.edu.pk` | Your public site URL (e.g. `https://pms.pieas.edu.pk`) |
+| `ASSET_V` | Override for `{{ASSET_V}}` cache-busting query string on `/assets/*` URLs | 8-char SHA-256 hash of `frontend/static/assets` | Optional explicit version override or leave unset for content hash |
 
 ### Generating a Secure JWT Secret
 Run the following command on Linux/macOS to generate a cryptographically strong 256-bit hexadecimal key:
@@ -246,10 +252,13 @@ Run the test suite including smoke and integration tests:
 cargo test
 ```
 
-Check code formatting and linter:
+Check code formatting, linter, and optional zero-build frontend checks:
 ```bash
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
+ESLINT_USE_FLAT_CONFIG=false npx --yes eslint@8 frontend/static/assets
+npx --yes prettier --check "frontend/static/assets/**/*.js"
+npx --yes -p typescript tsc --noEmit --allowJs --checkJs frontend/static/assets/app.js frontend/static/assets/layout.js
 ```
 
 ---
@@ -374,9 +383,9 @@ All list endpoints accept optional pagination query parameters: `limit` (default
 | `GET` | `/api/stats` | Society metrics (active members, events held, years active, contact) | Cached 60s |
 | `GET` | `/api/announcements` | Active announcement banners | Cached 60s |
 | `GET` | `/api/events` | Event listings. Filters: `is_past=false` (sorted ASC) or `is_past=true` (sorted DESC), `is_featured=true` | Unthrottled |
-| `GET` | `/api/events/{slug}` | Detailed event information | Unthrottled |
+| `GET` | `/api/events/{id}` | Detailed event information | Unthrottled |
 | `POST` | `/api/events/{id}/register` | Event registration (trims and lowercases email; issues certificate code) | `RATE_LIMIT_REGISTER_RPM` (60) |
-| `GET` | `/api/certificates/verify?code=...` | Verify participation certificate (`valid: true` only if `attended = 1`) | `RATE_LIMIT_CERT_VERIFY_RPM` (30) |
+| `GET` | `/api/certificates/verify?code=...` | Verify participation certificate (`valid: true` if `attended = 1`; otherwise `valid: false` with `reason: "not_attended"` or `"not_found"`) | `RATE_LIMIT_CERT_VERIFY_RPM` (30) |
 | `GET` | `/api/team` | Team directory and council members | Unthrottled |
 | `GET` | `/api/resources` | Categorized ASTM standards and academic guides | Unthrottled |
 | `GET` | `/api/posts` | Technical articles summary list (omits `body_markdown` for bandwidth efficiency) | Unthrottled |
@@ -402,7 +411,7 @@ All list endpoints accept optional pagination query parameters: `limit` (default
 | `POST` | `/api/admin/upload` | Multipart file upload (validates MIME bytes: PNG/JPG/WebP/PDF/TXT; stores as `{uuid}.{ext}`). |
 | `GET` | `/api/admin/registrations` | Admin list of event registrations (supports `limit` and `offset`). |
 | `PUT` | `/api/admin/registrations/{id}` | Toggle participant attendance (`{"attended": true \| false}`). |
-| `GET` | `/api/admin/memberships` | Admin list of membership applications (supports `limit` and `offset`). |
+| `GET` | `/api/admin/membership` | Admin list of membership applications (supports `limit` and `offset`). |
 | `GET` | `/api/admin/contacts` | Admin list of contact messages (supports `limit` and `offset`). |
 | `GET` | `/api/admin/newsletter` | Admin list of newsletter subscribers (supports `limit` and `offset`). |
 | `GET/POST/PUT/DELETE`| `/api/admin/*` | Secured CMS CRUD endpoints for announcements, events, posts, team, resources, opportunities, alumni, projects, gallery, sponsors, faqs, sections, and stats. |
