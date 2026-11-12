@@ -98,7 +98,7 @@
           evts.forEach(e => {
             PMSAdmin.eventsMap[e.id] = e.title;
           });
-        } catch (_) { }
+        } catch (_) {}
       }
 
       const data = PMSAdmin.PAGINATED_TABS.has(tab)
