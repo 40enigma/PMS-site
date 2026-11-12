@@ -23,8 +23,9 @@
         ? events.map((e, idx) => PMS.eventCard(e, idx)).join('')
         : PMS.emptyState('No events found in this category.');
       PMS.observeFadeElements(grid);
-    } catch (_) {
+    } catch (err) {
       if (req !== eventsLoadSeq) return;
+      PMS.reportError('events', err);
       grid.innerHTML = PMS.errorState('Could not load events.');
     } finally {
       if (req === eventsLoadSeq) grid.setAttribute('aria-busy', 'false');
@@ -54,7 +55,7 @@
       const codeInput = document.getElementById('verify-code');
       const code = codeInput ? codeInput.value.trim() : '';
       if (!code) {
-        PMS.reportInvalidFields(verifyForm, [codeInput]);
+        PMS.reportInvalidFields(verifyForm, [codeInput], msgEl);
         PMS.showAlert(msgEl, 'Please enter a certificate verification code.');
         return;
       }
@@ -82,8 +83,9 @@
             'error'
           );
         }
-      } catch (e) {
-        PMS.showAlert(msgEl, e.message || 'Verification service error.');
+      } catch (err) {
+        PMS.reportError('certificate-verify', err);
+        PMS.showAlert(msgEl, err.message || 'Verification service error.');
       } finally {
         PMS.setLoading(btn, false);
       }

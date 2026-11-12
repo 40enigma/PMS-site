@@ -22,6 +22,16 @@
    * Display the login view and hide dashboard controls.
    */
   function showLogin() {
+    // Never leave previously loaded records (member PII) in the DOM after logout
+    const content = document.getElementById('admin-content');
+    if (content) content.innerHTML = '';
+    document.querySelectorAll('dialog[open]').forEach(dialog => {
+      if (dialog instanceof HTMLDialogElement) dialog.close();
+    });
+    if (window.PMSAdmin) {
+      window.PMSAdmin.currentCache = [];
+      window.PMSAdmin.currentEditingId = null;
+    }
     const loginSec = document.getElementById('login-section');
     if (loginSec) loginSec.style.display = '';
     const dash = document.getElementById('admin-dashboard');
@@ -69,8 +79,13 @@
         const pwEl = document.getElementById('login-password');
         const missing = [emailEl, pwEl].filter(el => !el || !el.value.trim());
         if (missing.length) {
-          PMS.reportInvalidFields(loginForm, missing);
+          PMS.reportInvalidFields(loginForm, missing, msg);
           PMS.showAlert(msg, 'Please enter your administrator email and password.');
+          return;
+        }
+        if (emailEl && !PMS.isEmail(emailEl.value)) {
+          PMS.reportInvalidFields(loginForm, [emailEl], msg);
+          PMS.showAlert(msg, 'Please enter a valid administrator email address.');
           return;
         }
         PMS.reportInvalidFields(loginForm, []);
@@ -82,6 +97,7 @@
           });
           showDashboard(res.admin || res);
         } catch (e) {
+          PMS.reportError('login', e);
           PMS.showAlert(msg, e.message || 'Invalid administrator credentials.');
         } finally {
           PMS.setLoading(btn, false);

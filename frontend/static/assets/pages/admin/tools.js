@@ -47,7 +47,7 @@
               <input id="stat-email" type="email" class="form-control" value="${PMS.escHtml(stats.contact_email || '')}">
             </div>
           </div>
-          <div id="stats-msg" role="status" aria-live="polite" style="margin-top:1rem"></div>
+          <div id="stats-msg" aria-live="polite" style="margin-top:1rem"></div>
           <button type="submit" class="btn btn-primary" style="margin-top:1rem" id="stats-save-btn">Save Statistics</button>
         </form>
       `;
@@ -69,7 +69,7 @@
         );
         const negativeInputs = statInputs.filter(el => (parseInt(el.value, 10) || 0) < 0);
         if (negativeInputs.length) {
-          PMS.reportInvalidFields(statsForm, negativeInputs);
+          PMS.reportInvalidFields(statsForm, negativeInputs, msg);
           PMS.showAlert(msg, 'Statistic counts cannot be negative numbers.');
           return;
         }
@@ -121,7 +121,7 @@
           <label class="form-label" for="upload-file">Select File</label>
           <input id="upload-file" type="file" class="form-control" accept="image/*,application/pdf,text/plain" required>
         </div>
-        <div id="upload-msg" role="status" aria-live="polite" style="margin-top:1rem"></div>
+        <div id="upload-msg" aria-live="polite" style="margin-top:1rem"></div>
         <button type="submit" class="btn btn-primary" style="margin-top:1rem" id="upload-submit">Upload Asset</button>
       </form>
     `;
@@ -162,6 +162,7 @@
           true
         );
       } catch (e) {
+        PMS.reportError('upload', e);
         PMS.showAlert(msg, e.message);
       } finally {
         PMS.setLoading(btn, false);

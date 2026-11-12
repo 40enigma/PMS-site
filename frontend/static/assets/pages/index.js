@@ -11,7 +11,7 @@
   if (actGrid) actGrid.setAttribute('aria-busy', 'true');
   // 1. Fetch Dynamic Site Sections (home_hero, home_activities)
   try {
-    const sections = await PMS.apiFetch('/api/sections');
+    const sections = await PMS.apiFetchCached('/api/sections');
     const heroSec = sections.find(s => s.section_key === 'home_hero');
     if (heroSec) {
       if (heroSec.badge) {
@@ -43,7 +43,9 @@
               ${cfg.cta_secondary_url ? `<a href="${PMS.safeUrl(cfg.cta_secondary_url)}" class="btn btn-outline">${PMS.escHtml(cfg.cta_secondary_text || 'Student Resources')}</a>` : ''}
             `;
           }
-        } catch (_) {}
+        } catch (err) {
+          PMS.reportError('home-hero-json', err);
+        }
       }
     }
 
@@ -79,9 +81,9 @@
               .map(
                 c => `
               <article class="card fade-up">
-                <div style="margin-bottom:14px;color:var(--text)">${PMS.icon(icons[c.icon] || 'layers', 22)}</div>
-                <h3 style="font-size:15px;margin-bottom:8px">${PMS.escHtml(c.title)}</h3>
-                <p style="color:var(--text-secondary);font-size:13.5px;line-height:1.5">${PMS.escHtml(c.desc)}</p>
+                <div class="card__icon">${PMS.icon(icons[c.icon] || 'layers', 22)}</div>
+                <h3 class="card__title card__title--sm">${PMS.escHtml(c.title)}</h3>
+                <p class="card__text card__text--sm">${PMS.escHtml(c.desc)}</p>
               </article>
             `
               )
@@ -89,56 +91,55 @@
             PMS.observeFadeElements(actGrid);
             rendered = true;
           }
-        } catch (_) {}
+        } catch (err) {
+          PMS.reportError('home-activities-json', err);
+        }
       }
       if (!rendered) {
-        actGrid.innerHTML = PMS.emptyState('Activities configured in site sections.');
+        actGrid.innerHTML = PMS.emptyState('Programme details will be announced soon.');
       }
     } else if (actGrid) {
-      actGrid.innerHTML = PMS.emptyState('Activities information will be announced soon.');
+      actGrid.innerHTML = PMS.emptyState('Programme details will be announced soon.');
     }
-  } catch (_) {
+  } catch (err) {
+    PMS.reportError('home-sections', err);
     if (actGrid) actGrid.innerHTML = PMS.errorState('Could not load activities.');
   } finally {
     if (actGrid) actGrid.setAttribute('aria-busy', 'false');
   }
 
-  // 2. Load featured events
+  // 2. Load featured events (three only)
   const eventsGrid = document.getElementById('events-grid');
   if (eventsGrid) {
     eventsGrid.setAttribute('aria-busy', 'true');
     eventsGrid.innerHTML = PMS.skeletonGrid(3);
     try {
-      const events = await PMS.apiFetch('/api/events?is_featured=true&is_past=false');
+      const events = await PMS.apiFetch('/api/events?is_featured=true&is_past=false&limit=3');
       eventsGrid.innerHTML = events.length
-        ? events
-            .slice(0, 3)
-            .map((e, idx) => PMS.eventCard(e, idx))
-            .join('')
+        ? events.map((e, idx) => PMS.eventCard(e, idx)).join('')
         : PMS.emptyState('No upcoming featured events listed at this time.');
       PMS.observeFadeElements(eventsGrid);
-    } catch (_) {
+    } catch (err) {
+      PMS.reportError('home-events', err);
       eventsGrid.innerHTML = PMS.errorState('Could not load events.');
     } finally {
       eventsGrid.setAttribute('aria-busy', 'false');
     }
   }
 
-  // 3. Load latest technical posts
+  // 3. Load latest technical posts (three only)
   const postsGrid = document.getElementById('posts-grid');
   if (postsGrid) {
     postsGrid.setAttribute('aria-busy', 'true');
     postsGrid.innerHTML = PMS.skeletonGrid(3);
     try {
-      const posts = await PMS.apiFetch('/api/posts');
+      const posts = await PMS.apiFetch('/api/posts?limit=3');
       postsGrid.innerHTML = posts.length
-        ? posts
-            .slice(0, 3)
-            .map((p, idx) => PMS.postCard(p, idx))
-            .join('')
+        ? posts.map((p, idx) => PMS.postCard(p, idx)).join('')
         : PMS.emptyState('No articles published yet.');
       PMS.observeFadeElements(postsGrid);
-    } catch (_) {
+    } catch (err) {
+      PMS.reportError('home-posts', err);
       postsGrid.innerHTML = PMS.errorState('Could not load posts.');
     } finally {
       postsGrid.setAttribute('aria-busy', 'false');
@@ -155,7 +156,7 @@
       const emailInput = document.getElementById('newsletter-email');
       const email = emailInput ? emailInput.value.trim() : '';
       if (!email || !PMS.isEmail(email)) {
-        PMS.reportInvalidFields(newsletterForm, [emailInput]);
+        PMS.reportInvalidFields(newsletterForm, [emailInput], msgEl);
         PMS.showAlert(msgEl, 'Please enter a valid email address.');
         return;
       }
@@ -165,8 +166,9 @@
         await PMS.apiPost('/api/newsletter', { email });
         PMS.showAlert(msgEl, 'Subscribed to the PMS Bulletin.', 'success');
         if (emailInput) emailInput.value = '';
-      } catch (e) {
-        PMS.showAlert(msgEl, e.message || 'Could not subscribe. Please try again.');
+      } catch (err) {
+        PMS.reportError('newsletter', err);
+        PMS.showAlert(msgEl, err.message || 'Could not subscribe. Please try again.');
       } finally {
         PMS.setLoading(btn, false);
       }

@@ -22,12 +22,12 @@
 <a href="#main-content" class="skip-link">Skip to main content</a>
 
 <!-- Announcement Banner -->
-<div id="announcement-banner" class="banner" style="display:none"></div>
+<div id="announcement-banner" role="region" aria-label="Announcements" style="display:none"></div>
 
 <!-- Shared Navbar -->
 <header id="site-header">
   <noscript>
-    <nav class="navbar" role="navigation" aria-label="Main navigation">
+    <nav class="navbar" aria-label="Main navigation">
       <div class="container nav-inner">
         <a href="/" class="nav-brand">PIEAS Materials Society</a>
         <ul class="nav-links" role="list">
@@ -37,6 +37,11 @@
           <li><a href="/events">Events</a></li>
           <li><a href="/blog">Blog</a></li>
           <li><a href="/resources">Resources</a></li>
+          <li><a href="/opportunities">Opportunities</a></li>
+          <li><a href="/alumni">Alumni</a></li>
+          <li><a href="/projects">Projects</a></li>
+          <li><a href="/gallery">Gallery</a></li>
+          <li><a href="/sponsors">Sponsors</a></li>
           <li><a href="/join" class="nav-cta btn btn-primary btn-sm">Join PMS</a></li>
         </ul>
       </div>
@@ -103,7 +108,7 @@
       <p id="activities-desc">PMS organizes structured academic and industrial initiatives to support undergraduate and graduate materials engineering students.</p>
     </div>
     <div id="activities-grid" class="grid grid-4">
-      <div class="spinner" role="status" aria-live="polite" aria-label="Loading"></div>
+      <div class="spinner" aria-live="polite" aria-label="Loading"></div>
     </div>
   </div>
 </section>
@@ -117,7 +122,7 @@
       <p>Technical seminars, hands-on software workshops, competitions, and industrial tours.</p>
     </div>
     <div id="events-grid" class="grid grid-3">
-      <div class="spinner" role="status" aria-live="polite" aria-label="Loading"></div>
+      <div class="spinner" aria-live="polite" aria-label="Loading"></div>
     </div>
     <div style="text-align:center;margin-top:32px">
       <a href="/events" class="btn btn-outline" id="view-all-events">View All Events</a>
@@ -134,7 +139,7 @@
       <p>Deep-dives into advanced alloys, phase transformations, and materials characterization by DMME researchers.</p>
     </div>
     <div id="posts-grid" class="grid grid-3">
-      <div class="spinner" role="status" aria-live="polite" aria-label="Loading"></div>
+      <div class="spinner" aria-live="polite" aria-label="Loading"></div>
     </div>
     <div style="text-align:center;margin-top:32px">
       <a href="/blog" class="btn btn-outline" id="view-all-posts">Explore Full Technical Library</a>
@@ -153,7 +158,7 @@
         <input id="newsletter-email" type="email" inputmode="email" maxlength="254" autocomplete="email" class="form-control" placeholder="student@pieas.edu.pk" required style="flex:1;min-width:220px" aria-label="Email address">
         <button type="submit" class="btn btn-primary" id="newsletter-submit">Subscribe</button>
       </div>
-      <div id="newsletter-msg" role="status" aria-live="polite" style="margin-top:.75rem"></div>
+      <div id="newsletter-msg" aria-live="polite" style="margin-top:.75rem"></div>
     </form>
   </div>
 </section>
@@ -163,7 +168,7 @@
 <footer id="site-footer">
   <noscript>
     <div class="container footer-bottom">
-      <p>&copy; PIEAS Materials Society (PMS). Department of Metallurgy &amp; Materials Engineering &middot; <a href="mailto:pms@pieas.edu.pk">pms@pieas.edu.pk</a></p>
+      <p>&copy; PIEAS Materials Society (PMS) &middot; Department of Metallurgy &amp; Materials Engineering &middot; <a href="mailto:pms@pieas.edu.pk">pms@pieas.edu.pk</a></p>
     </div>
   </noscript>
 </footer>

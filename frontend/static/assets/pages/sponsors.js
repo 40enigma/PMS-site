@@ -12,35 +12,14 @@
   if (grid) {
     grid.setAttribute('aria-busy', 'true');
     grid.innerHTML = PMS.skeletonGrid(3);
-    const tierColor = {
-      Platinum: 'var(--tier-platinum, #c9ced6)',
-      Gold: 'var(--tier-gold, #fbbf24)',
-      Silver: 'var(--tier-silver, #94a3b8)',
-      Bronze: 'var(--tier-bronze, #d97706)',
-      Partner: 'var(--accent)',
-    };
     try {
       const sponsors = await PMS.apiFetch('/api/sponsors');
       grid.innerHTML = sponsors.length
-        ? sponsors
-            .map(
-              (s, idx) => `
-        <article class="card fade-up" style="text-align:center;transition-delay:${Math.min(idx, 8) * 60}ms">
-          ${
-            s.logo_url
-              ? `<img src="${PMS.safeUrl(s.logo_url)}" alt="${PMS.escHtml(s.name)}" width="180" height="80" loading="lazy" decoding="async" style="max-height:80px;max-width:180px;width:auto;height:auto;margin:0 auto 1.25rem;object-fit:contain">`
-              : `<div style="width:64px;height:64px;border-radius:50%;background:var(--bg-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;color:var(--text-muted)">${PMS.icon('building', 24)}</div>`
-          }
-          <h3 style="font-size:1.1rem;margin-bottom:.35rem">${PMS.escHtml(s.name)}</h3>
-          <span class="badge" style="color:${tierColor[s.tier] || 'var(--text-muted)'}">${PMS.escHtml(s.tier === 'Partner' ? 'Partner' : `${s.tier} Partner`)}</span>
-          ${s.since_year ? `<p style="font-size:.8rem;color:var(--text-muted);margin-top:.35rem">Partner Since ${PMS.escHtml(s.since_year)}</p>` : ''}
-          ${s.website_url ? `<div style="margin-top:1rem"><a href="${PMS.safeUrl(s.website_url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;gap:6px">${PMS.icon('external', 13)} Visit Website</a></div>` : ''}
-        </article>`
-            )
-            .join('')
+        ? sponsors.map((s, idx) => PMS.sponsorCard(s, idx)).join('')
         : PMS.emptyState('No active sponsors listed.');
       PMS.observeFadeElements(grid);
-    } catch (_) {
+    } catch (err) {
+      PMS.reportError('sponsors', err);
       grid.innerHTML = PMS.errorState('Could not load sponsors.');
     } finally {
       grid.setAttribute('aria-busy', 'false');
@@ -52,7 +31,7 @@
   if (pitchGrid) {
     pitchGrid.setAttribute('aria-busy', 'true');
     try {
-      const sections = await PMS.apiFetch('/api/sections');
+      const sections = await PMS.apiFetchCached('/api/sections');
       const sec = sections.find(s => s.section_key === 'sponsors_pitch');
       if (sec) {
         if (sec.badge) {
@@ -82,20 +61,23 @@
               .map(
                 c => `
               <article class="card fade-up">
-                <h3 style="font-size:15px;margin-bottom:8px;color:var(--text)">${PMS.escHtml(c.title)}</h3>
-                <p style="color:var(--text-secondary);font-size:13.5px;line-height:1.55">${PMS.escHtml(c.desc)}</p>
+                <h3 class="card__title card__title--sm">${PMS.escHtml(c.title)}</h3>
+                <p class="card__text card__text--sm">${PMS.escHtml(c.desc)}</p>
               </article>
             `
               )
               .join('');
             PMS.observeFadeElements(pitchGrid);
             return;
-          } catch (_) {}
+          } catch (err) {
+            PMS.reportError('sponsors-pitch-json', err);
+          }
         }
       }
-      pitchGrid.innerHTML = '';
-    } catch (_) {
-      pitchGrid.innerHTML = '';
+      pitchGrid.innerHTML = PMS.emptyState('Partnership details will be published soon.');
+    } catch (err) {
+      PMS.reportError('sponsors-pitch', err);
+      pitchGrid.innerHTML = PMS.emptyState('Partnership details will be published soon.');
     } finally {
       pitchGrid.setAttribute('aria-busy', 'false');
     }

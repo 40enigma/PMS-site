@@ -20,12 +20,12 @@
 </head>
 <body>
 <a href="#main-content" class="skip-link">Skip to main content</a>
-<div id="announcement-banner" class="banner" style="display:none"></div>
+<div id="announcement-banner" role="region" aria-label="Announcements" style="display:none"></div>
 
 <!-- Navbar -->
 <header id="site-header">
   <noscript>
-    <nav class="navbar" role="navigation" aria-label="Main navigation">
+    <nav class="navbar" aria-label="Main navigation">
       <div class="container nav-inner">
         <a href="/" class="nav-brand">PIEAS Materials Society</a>
         <ul class="nav-links" role="list">
@@ -62,7 +62,7 @@
   <div class="container">
     <h2 class="sr-only">Active Sponsors &amp; Industrial Partners</h2>
     <div id="sponsors-grid" class="grid grid-3">
-      <div class="spinner" role="status" aria-live="polite" aria-label="Loading"></div>
+      <div class="spinner" aria-live="polite" aria-label="Loading"></div>
     </div>
   </div>
 </section>
@@ -77,10 +77,10 @@
       <p id="pitch-desc">Connect with future materials engineers, sponsor technical workshops, and collaborate on strategic engineering challenges.</p>
     </div>
     <div id="pitch-grid" class="grid grid-3" style="margin-bottom:32px">
-      <div class="spinner" role="status" aria-live="polite" aria-label="Loading"></div>
+      <div class="spinner" aria-live="polite" aria-label="Loading"></div>
     </div>
     <div style="text-align:center">
-      <a href="/join" class="btn btn-primary">Initiate Corporate Partnership</a>
+      <a href="/join#contact-form" class="btn btn-primary">Initiate Corporate Partnership</a>
     </div>
   </div>
 </section>
@@ -89,11 +89,11 @@
 <!-- Unified Footer -->
 <footer id="site-footer">
   <noscript>
-    <footer>
-      <div class="container footer-bottom">
-        <p>© PIEAS Materials Society (PMS). Department of Metallurgy &amp; Materials Engineering.</p>
-      </div>
-    </footer>
+    <div class="container footer-bottom">
+      <p>&copy; PIEAS Materials Society (PMS) &middot; Department of Metallurgy &amp; Materials Engineering &middot; <a href="mailto:pms@pieas.edu.pk">pms@pieas.edu.pk</a></p>
+    </div>
+  </noscript>
+</footer>
   </noscript>
 </footer>
 

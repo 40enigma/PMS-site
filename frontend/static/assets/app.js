@@ -13,11 +13,16 @@
 (() => {
   'use strict';
 
-  document.documentElement.classList.add('js');
-  document.documentElement.classList.remove('no-js');
-
-  /* ── API base ── */
-  const API = ''; // Same-origin: requests go to /api/*
+  /* ── Tunables (single source of truth for client timing) ── */
+  const REQUEST_TIMEOUT_MS = 15000;
+  const CACHE_TTL_MS = 60000;
+  const STAGGER_STEP_MS = 60;
+  const STAGGER_MAX_INDEX = 8;
+  const CAROUSEL_INTERVAL_MS = 5000;
+  const DISMISS_ANIMATION_MS = 220;
+  const COPY_FEEDBACK_MS = 2000;
+  const COUNTER_DURATION_MS = 1200;
+  const TOAST_DURATION_MS = 4000;
 
   /**
    * Generic API fetch wrapper.
@@ -33,11 +38,30 @@
       'X-Requested-With': 'PMS-Client',
       ...(customHeaders || {}),
     };
-    const res = await fetch(`${API}${path}`, {
-      credentials: 'include', // send cookies for authenticated requests
-      ...restOptions,
-      headers: mergedHeaders,
-    });
+    const timeoutSignal =
+      typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+        ? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+        : undefined;
+
+    let res;
+    try {
+      res = await fetch(path, {
+        credentials: 'include', // send cookies for authenticated requests
+        ...restOptions,
+        headers: mergedHeaders,
+        signal: restOptions.signal ?? timeoutSignal,
+      });
+    } catch (err) {
+      const timedOut = err instanceof DOMException && err.name === 'TimeoutError';
+      throw Object.assign(
+        new Error(
+          timedOut
+            ? 'The server took too long to respond. Please try again.'
+            : 'Network error — please check your connection and try again.'
+        ),
+        { status: 0, cause: err }
+      );
+    }
 
     if (!res.ok) {
       let msg = `HTTP ${res.status}`;
@@ -86,6 +110,120 @@
    */
   async function apiDelete(path) {
     return apiFetch(path, { method: 'DELETE' });
+  }
+
+  /**
+   * Log a handled failure so it is visible in diagnostics instead of vanishing.
+   * @param {string} scope
+   * @param {unknown} err
+   * @returns {unknown}
+   */
+  function reportError(scope, err) {
+    // eslint-disable-next-line no-console
+    console.error(`[PMS] ${scope}`, err);
+    return err;
+  }
+
+  /**
+   * Fetch JSON with a short-lived sessionStorage cache for public read endpoints.
+   * @param {string} path
+   * @param {number} [ttlMs]
+   * @returns {Promise<any>}
+   */
+  async function apiFetchCached(path, ttlMs = CACHE_TTL_MS) {
+    const key = `pms_cache:${path}`;
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (raw) {
+        const entry = JSON.parse(raw);
+        if (entry && typeof entry.at === 'number' && Date.now() - entry.at < ttlMs) {
+          return entry.data;
+        }
+      }
+    } catch (err) {
+      reportError('cache-read', err);
+    }
+    const data = await apiFetch(path);
+    try {
+      sessionStorage.setItem(key, JSON.stringify({ at: Date.now(), data }));
+    } catch (err) {
+      reportError('cache-write', err);
+    }
+    return data;
+  }
+
+  /**
+   * Inline reveal delay for a card at `idx` (kept in one place).
+   * @param {number} [idx]
+   * @returns {string}
+   */
+  function stagger(idx = 0) {
+    return `transition-delay:${Math.min(idx, STAGGER_MAX_INDEX) * STAGGER_STEP_MS}ms`;
+  }
+
+  /** @type {HTMLElement | null} */
+  let toastRegion = null;
+  /** Monotonic id source for generated error containers. */
+  let errorRegionSeq = 0;
+
+  /**
+   * Show a transient, non-blocking message (replaces window.alert).
+   * @param {string} message
+   * @param {'success'|'error'|'info'} [type]
+   */
+  function toast(message, type = 'info') {
+    if (!toastRegion) {
+      toastRegion = document.createElement('div');
+      toastRegion.className = 'toast-region';
+      document.body.appendChild(toastRegion);
+    }
+    const el = document.createElement('div');
+    el.className = `toast toast--${type}`;
+    el.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    el.textContent = message;
+    toastRegion.appendChild(el);
+    window.setTimeout(() => {
+      el.classList.add('toast--leaving');
+      window.setTimeout(() => el.remove(), DISMISS_ANIMATION_MS);
+    }, TOAST_DURATION_MS);
+  }
+
+  /**
+   * Promise-based confirmation dialog (replaces window.confirm).
+   * @param {string} message
+   * @param {{ confirmLabel?: string, tone?: 'danger'|'primary' }} [opts]
+   * @returns {Promise<boolean>}
+   */
+  function confirmDialog(message, opts = {}) {
+    return new Promise(resolve => {
+      const dialog = document.createElement('dialog');
+      dialog.className = 'modal modal--sm confirm-dialog';
+      dialog.setAttribute('aria-labelledby', 'confirm-dialog-title');
+      dialog.innerHTML = `
+        <h2 id="confirm-dialog-title" class="confirm-dialog__title">Please confirm</h2>
+        <p class="confirm-dialog__text">${escHtml(message)}</p>
+        <div class="confirm-dialog__actions">
+          <button type="button" class="btn btn-outline" data-confirm="no">Cancel</button>
+          <button type="button" class="btn ${opts.tone === 'primary' ? 'btn-primary' : 'btn-danger'}" data-confirm="yes">${escHtml(opts.confirmLabel || 'Confirm')}</button>
+        </div>`;
+      document.body.appendChild(dialog);
+      /** @param {boolean} value */
+      const finish = value => {
+        dialog.close();
+        dialog.remove();
+        resolve(value);
+      };
+      dialog.addEventListener('click', ev => {
+        const btn = ev.target instanceof Element ? ev.target.closest('[data-confirm]') : null;
+        if (btn instanceof HTMLElement) finish(btn.dataset.confirm === 'yes');
+      });
+      dialog.addEventListener('cancel', ev => {
+        ev.preventDefault();
+        finish(false);
+      });
+      enableBackdropClose(dialog);
+      dialog.showModal();
+    });
   }
 
   /* ── SVG Icon Registry (Lucide Craft, 1.5 Stroke, 16px Base) ── */
@@ -227,18 +365,44 @@
   }
 
   /**
-   * Mark invalid form controls with `aria-invalid="true"` and focus the first one.
+   * Mark invalid form controls with `aria-invalid="true"`, associate the error
+   * message via `aria-describedby`, and focus the first invalid control.
    * @param {HTMLFormElement | null} formEl
    * @param {Array<Element | null | undefined>} invalidEls
+   * @param {HTMLElement | null} [messageEl] Container that will receive the error text
    * @returns {boolean}
    */
-  function reportInvalidFields(formEl, invalidEls) {
+  function reportInvalidFields(formEl, invalidEls, messageEl) {
     if (formEl) {
-      formEl.querySelectorAll('[aria-invalid]').forEach(el => el.removeAttribute('aria-invalid'));
+      formEl.querySelectorAll('[aria-invalid]').forEach(el => {
+        el.removeAttribute('aria-invalid');
+        if (el.dataset.pmsBaseDescribedby !== undefined) {
+          if (el.dataset.pmsBaseDescribedby) {
+            el.setAttribute('aria-describedby', el.dataset.pmsBaseDescribedby);
+          } else {
+            el.removeAttribute('aria-describedby');
+          }
+          delete el.dataset.pmsBaseDescribedby;
+        }
+      });
       clearInvalidOnInput(formEl);
     }
     const list = /** @type {HTMLElement[]} */ ((invalidEls || []).filter(Boolean));
     list.forEach(el => el.setAttribute('aria-invalid', 'true'));
+    if (messageEl) {
+      if (!messageEl.id) {
+        errorRegionSeq += 1;
+        messageEl.id = `pms-form-error-${errorRegionSeq}`;
+      }
+      list.forEach(el => {
+        if (el.dataset.pmsBaseDescribedby === undefined) {
+          el.dataset.pmsBaseDescribedby = el.getAttribute('aria-describedby') || '';
+        }
+        const ids = (el.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
+        if (!ids.includes(messageEl.id)) ids.push(messageEl.id);
+        el.setAttribute('aria-describedby', ids.join(' '));
+      });
+    }
     if (list.length > 0 && typeof list[0].focus === 'function') {
       list[0].focus();
     }
@@ -311,8 +475,6 @@
       if (btn.dataset.orig !== undefined) {
         btn.textContent = btn.dataset.orig;
         delete btn.dataset.orig;
-      } else {
-        btn.textContent = 'Submit';
       }
     }
   }
@@ -583,6 +745,7 @@
       navLinks?.classList.remove('open');
       hamburger?.classList.remove('active');
       hamburger?.setAttribute('aria-expanded', 'false');
+      document.body.classList.remove('nav-open');
       if (returnFocus) hamburger?.focus();
     }
 
@@ -590,6 +753,33 @@
       const isOpen = navLinks.classList.toggle('open');
       hamburger.classList.toggle('active', isOpen);
       hamburger.setAttribute('aria-expanded', String(isOpen));
+      document.body.classList.toggle('nav-open', isOpen);
+      if (isOpen) {
+        const firstLink = qs('a, button', navLinks);
+        if (firstLink) firstLink.focus();
+      }
+    });
+
+    // Contain keyboard focus inside the open mobile menu
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Tab' || !navLinks.classList.contains('open')) return;
+      const focusables = [hamburger, ...qsa('a[href], button:not([disabled])', navLinks)].filter(
+        el => el instanceof HTMLElement
+      );
+      if (!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      } else if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (active !== hamburger && !navLinks.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
     });
 
     // Close mobile nav on click outside
@@ -734,7 +924,7 @@
           ${
             hasMultiple
               ? `<button type="button" class="announcement-nav-btn" id="announcement-prev" aria-label="Previous announcement">${icon('chevron-left', 14)}</button>
-                 <span class="announcement-counter" id="announcement-counter" aria-live="polite">1 / ${active.length}</span>
+                 <span class="announcement-counter" id="announcement-counter">1 / ${active.length}</span>
                  <button type="button" class="announcement-nav-btn" id="announcement-next" aria-label="Next announcement">${icon('chevron-right', 14)}</button>
                  <button type="button" class="announcement-pause-btn" id="announcement-pause" aria-label="Pause announcements" aria-pressed="false" title="Pause announcements">${icon('pause', 14)}</button>`
               : ''
@@ -790,7 +980,7 @@
         stopTimer();
         slideTimer = setInterval(() => {
           goToSlide(currentIndex + 1);
-        }, 5000);
+        }, CAROUSEL_INTERVAL_MS);
       };
 
       goToSlide(0);
@@ -849,10 +1039,11 @@
           } catch (_) {}
           setTimeout(() => {
             container.style.display = 'none';
-          }, 220);
+          }, DISMISS_ANIMATION_MS);
         });
       }
-    } catch (_) {
+    } catch (err) {
+      reportError('announcements', err);
       container.style.display = 'none';
     }
   }
@@ -864,7 +1055,7 @@
    * @param {number} target
    * @param {number} [duration]
    */
-  function animateCounter(el, target, duration = 1200) {
+  function animateCounter(el, target, duration = COUNTER_DURATION_MS) {
     if (!el || isNaN(target)) return;
     if (prefersReducedMotion()) {
       el.textContent = String(target);
@@ -896,8 +1087,15 @@
    * @param {Element | null} container
    */
   async function loadStats(container) {
+    const hasTargets = Boolean(
+      container ||
+      qs('.pms-contact-email') ||
+      qs('.pms-office-location') ||
+      qs('.pms-constitution-link')
+    );
+    if (!hasTargets) return;
     try {
-      const s = await apiFetch('/api/stats');
+      const s = await apiFetchCached('/api/stats');
       if (container) {
         const elM = container.querySelector('[data-stat="members"]');
         const elE = container.querySelector('[data-stat="events"]');
@@ -928,8 +1126,8 @@
           }
         }
       });
-    } catch (_) {
-      /* ignore */
+    } catch (err) {
+      reportError('stats', err);
     }
   }
 
@@ -949,30 +1147,29 @@
    * @returns {string}
    */
   function eventCard(e, idx = 0) {
-    const delay = Math.min(idx, 8) * 60;
     return `
-    <article class="card fade-up ${e.is_featured ? 'card-featured' : ''}" style="transition-delay:${delay}ms">
-      ${e.poster_url ? `<img src="${safeUrl(e.poster_url)}" alt="" width="400" height="180" loading="lazy" decoding="async" style="width:100%;height:180px;object-fit:cover;border-radius:8px;margin-bottom:16px;">` : ''}
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+    <article class="card fade-up ${e.is_featured ? 'card-featured' : ''}" style="${stagger(idx)}">
+      ${e.poster_url ? `<img src="${safeUrl(e.poster_url)}" alt="${escHtml(e.title)}" width="400" height="180" loading="lazy" decoding="async" class="card__thumb card__thumb--wide">` : ''}
+      <div class="card__badges">
         <span class="badge">${escHtml(e.category)}</span>
-        ${e.is_past ? '<span class="badge" style="color:var(--text-muted)">Past</span>' : '<span class="badge badge-success">Upcoming</span>'}
+        ${e.is_past ? '<span class="badge">Past</span>' : '<span class="badge badge-success">Upcoming</span>'}
         ${e.is_featured ? '<span class="badge badge-accent">Featured</span>' : ''}
       </div>
-      <h3 style="margin-bottom:8px">${escHtml(e.title)}</h3>
-      ${e.speaker_or_organizer ? `<p style="color:var(--text);font-size:13px;font-weight:500;margin-bottom:6px;display:flex;align-items:center;gap:6px">${icon('user', 14)} ${escHtml(e.speaker_or_organizer)}</p>` : ''}
-      <p style="color:var(--text-muted);font-size:13px;margin-bottom:6px;display:flex;align-items:center;gap:6px">${icon('calendar', 14)} <span class="tabular-nums">${escHtml(fmtDate(e.date))}${e.time_range ? ' · ' + escHtml(e.time_range) : ''}</span></p>
-      ${e.venue ? `<p style="color:var(--text-muted);font-size:13px;margin-bottom:12px;display:flex;align-items:center;gap:6px">${icon('map-pin', 14)} ${escHtml(e.venue)}</p>` : ''}
-      <p style="color:var(--text-secondary);font-size:14px;margin-bottom:12px;line-height:1.5">${escHtml(e.short_description || '')}</p>
+      <h3 class="card__title card__title--sm">${escHtml(e.title)}</h3>
+      ${e.speaker_or_organizer ? `<p class="card__meta card__meta--strong">${icon('user', 14)} ${escHtml(e.speaker_or_organizer)}</p>` : ''}
+      <p class="card__meta">${icon('calendar', 14)} <span class="tabular-nums">${escHtml(fmtDate(e.date))}${e.time_range ? ' · ' + escHtml(e.time_range) : ''}</span></p>
+      ${e.venue ? `<p class="card__meta">${icon('map-pin', 14)} ${escHtml(e.venue)}</p>` : ''}
+      <p class="card__text">${escHtml(e.short_description || '')}</p>
       ${
         e.full_summary
           ? `
-        <details style="margin:12px 0;font-size:13.5px;color:var(--text-secondary);cursor:pointer">
-          <summary style="color:var(--text);font-weight:500">View Agenda Details</summary>
-          <div style="padding-top:8px;line-height:1.6">${escHtml(e.full_summary)}</div>
+        <details class="card__details">
+          <summary>View Agenda Details</summary>
+          <div class="card__details-body">${escHtml(e.full_summary)}</div>
         </details>`
           : ''
       }
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:16px">
+      <div class="card__footer">
         ${e.registration_link ? `<a href="${safeUrl(e.registration_link)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">${icon('external', 13)} Details</a>` : ''}
         ${!e.is_past ? `<button class="btn btn-primary btn-sm btn-open-reg" data-event-id="${e.id}" data-event-title="${escHtml(e.title)}">Register</button>` : ''}
       </div>
@@ -985,22 +1182,21 @@
    * @returns {string}
    */
   function teamCard(m, idx = 0) {
-    const delay = Math.min(idx, 8) * 60;
     return `
-    <article class="card fade-up" style="text-align:center;transition-delay:${delay}ms">
+    <article class="card card--center fade-up" style="${stagger(idx)}">
       ${
         m.photo_url
-          ? `<img src="${safeUrl(m.photo_url)}" alt="${escHtml(m.name)}" width="72" height="72" loading="lazy" decoding="async" style="width:72px;height:72px;border-radius:50%;object-fit:cover;margin:0 auto 12px;border:1px solid var(--border)">`
-          : `<div style="width:72px;height:72px;border-radius:50%;background:var(--bg-raised);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;color:var(--text-muted)">${icon('user', 28)}</div>`
+          ? `<img src="${safeUrl(m.photo_url)}" alt="${escHtml(m.name)}" width="72" height="72" loading="lazy" decoding="async" class="avatar">`
+          : `<div class="avatar avatar--placeholder">${icon('user', 28)}</div>`
       }
-      <h3 style="font-size:15px;margin-bottom:4px">${escHtml(m.name)}</h3>
-      <p style="color:var(--text);font-size:13.5px;font-weight:500;margin-bottom:4px">${!m.is_current ? '<span class="badge" style="margin-right:6px">Former</span>' : ''}${escHtml(m.role)}</p>
-      ${m.role_responsibility ? `<p style="color:var(--text-secondary);font-size:12.5px;margin-bottom:6px">${escHtml(m.role_responsibility)}</p>` : ''}
-      ${m.batch ? `<p style="color:var(--text-muted);font-size:12.5px;font-family:var(--font-mono)">Batch ${escHtml(m.batch)}</p>` : ''}
-      ${m.bio ? `<p style="color:var(--text-secondary);font-size:13px;margin-top:8px;line-height:1.5">${escHtml(m.bio)}</p>` : ''}
-      <div style="display:flex;justify-content:center;gap:12px;margin-top:12px;flex-wrap:wrap">
-        ${m.email ? `<a href="mailto:${escHtml(m.email)}" style="font-size:13px;color:var(--text-muted);display:inline-flex;align-items:center;gap:4px">${icon('mail', 13)} Email</a>` : ''}
-        ${m.linkedin_url ? `<a href="${safeUrl(m.linkedin_url)}" target="_blank" rel="noopener" style="font-size:13px;color:var(--text-secondary);display:inline-flex;align-items:center;gap:4px">${icon('external', 13)} LinkedIn</a>` : ''}
+      <h3 class="card__title card__title--xs">${escHtml(m.name)}</h3>
+      <p class="card__meta card__meta--strong">${!m.is_current ? '<span class="badge">Former</span>' : ''}${escHtml(m.role)}</p>
+      ${m.role_responsibility ? `<p class="card__text card__text--sm">${escHtml(m.role_responsibility)}</p>` : ''}
+      ${m.batch ? `<p class="card__meta card__meta--mono">Batch ${escHtml(m.batch)}</p>` : ''}
+      ${m.bio ? `<p class="card__text card__text--sm">${escHtml(m.bio)}</p>` : ''}
+      <div class="card__footer card__footer--center">
+        ${m.email ? `<a href="mailto:${escHtml(m.email)}" class="card__link">${icon('mail', 13)} Email</a>` : ''}
+        ${m.linkedin_url ? `<a href="${safeUrl(m.linkedin_url)}" target="_blank" rel="noopener" class="card__link">${icon('external', 13)} LinkedIn</a>` : ''}
       </div>
     </article>`;
   }
@@ -1011,7 +1207,6 @@
    * @returns {string}
    */
   function postCard(p, idx = 0) {
-    const delay = Math.min(idx, 8) * 60;
     const authorInfo = [
       p.author_name || 'PMS',
       p.author_role,
@@ -1022,21 +1217,21 @@
       .join(' · ');
 
     return `
-    <article class="card fade-up ${p.is_featured ? 'card-featured' : ''}" style="transition-delay:${delay}ms">
-      ${p.cover_image_url ? `<img src="${safeUrl(p.cover_image_url)}" alt="" width="400" height="160" loading="lazy" decoding="async" style="width:100%;height:160px;object-fit:cover;border-radius:8px;margin-bottom:14px;border:1px solid var(--border-subtle)">` : ''}
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+    <article class="card fade-up ${p.is_featured ? 'card-featured' : ''}" style="${stagger(idx)}">
+      ${p.cover_image_url ? `<img src="${safeUrl(p.cover_image_url)}" alt="" width="400" height="160" loading="lazy" decoding="async" class="card__thumb">` : ''}
+      <div class="card__badges">
         <span class="badge">${escHtml(p.category)}</span>
         ${p.material_formula ? `<span class="tag">[${escHtml(p.material_formula)}]</span>` : ''}
         ${p.is_featured ? '<span class="badge badge-accent">Featured</span>' : ''}
       </div>
-      <h3 style="margin-bottom:8px">${escHtml(p.title)}</h3>
-      <p style="color:var(--text-secondary);font-size:14px;margin-bottom:12px;line-height:1.5">${escHtml(p.excerpt || '')}</p>
-      ${p.crystal_structure ? `<p style="color:var(--text-muted);font-size:12.5px;font-family:var(--font-mono);margin-bottom:8px">Lattice: ${escHtml(p.crystal_structure)}</p>` : ''}
-      <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--text-muted);margin-top:auto;padding-top:12px;border-top:1px solid var(--border-subtle);flex-wrap:wrap;gap:6px">
+      <h3 class="card__title card__title--sm">${escHtml(p.title)}</h3>
+      <p class="card__text">${escHtml(p.excerpt || '')}</p>
+      ${p.crystal_structure ? `<p class="card__meta card__meta--mono">Lattice: ${escHtml(p.crystal_structure)}</p>` : ''}
+      <div class="card__foot-line">
         <span>${authorInfo}</span>
         <span class="tabular-nums">${p.read_time_minutes ? `${p.read_time_minutes} min · ` : ''}${fmtDate(p.published_at)}</span>
       </div>
-      <button class="btn btn-outline btn-sm btn-read-article" data-slug="${escHtml(p.slug)}" style="width:100%;margin-top:12px">Read Article</button>
+      <button class="btn btn-outline btn-sm btn-block btn-read-article" data-slug="${escHtml(p.slug)}">Read Article</button>
     </article>`;
   }
 
@@ -1046,19 +1241,144 @@
    * @returns {string}
    */
   function resourceCard(r, idx = 0) {
-    const delay = Math.min(idx, 8) * 60;
     return `
-    <article class="card fade-up ${r.is_pinned ? 'card-featured' : ''}" style="transition-delay:${delay}ms">
-      ${r.is_pinned ? '<div style="margin-bottom:10px"><span class="badge badge-accent">Pinned</span></div>' : ''}
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+    <article class="card fade-up ${r.is_pinned ? 'card-featured' : ''}" style="${stagger(idx)}">
+      ${r.is_pinned ? '<div class="card__badges"><span class="badge badge-accent">Pinned</span></div>' : ''}
+      <div class="card__spread">
         <span class="badge">${escHtml(r.category)}</span>
         ${r.software_tag ? `<span class="tag">${escHtml(r.software_tag)}</span>` : ''}
       </div>
-      <h3 style="font-size:15px;margin-bottom:6px">${escHtml(r.title)}</h3>
-      <p style="color:var(--text-secondary);font-size:13.5px;margin:8px 0;line-height:1.5">${escHtml(r.description || '')}</p>
-      <div style="margin-top:auto;padding-top:12px">
-        <a href="${safeUrl(r.url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="width:100%">${icon('external', 13)} Open Resource</a>
+      <h3 class="card__title card__title--xs">${escHtml(r.title)}</h3>
+      <p class="card__text card__text--sm">${escHtml(r.description || '')}</p>
+      <div class="card__footer">
+        <a href="${safeUrl(r.url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm btn-block">${icon('external', 13)} Open Resource</a>
       </div>
+    </article>`;
+  }
+
+  /**
+   * @param {any} a
+   * @param {number} [idx]
+   * @returns {string}
+   */
+  function alumniCard(a, idx = 0) {
+    const roleParts = [a.current_role, a.current_organization]
+      .map(v => (v ? String(v).trim() : ''))
+      .filter(Boolean)
+      .map(escHtml)
+      .join(' · ');
+    return `
+    <article class="card card--row fade-up" style="${stagger(idx)}">
+      ${
+        a.photo_url
+          ? `<img src="${safeUrl(a.photo_url)}" alt="${escHtml(a.name)}" width="72" height="72" loading="lazy" decoding="async" class="avatar">`
+          : `<div class="avatar avatar--placeholder">${icon('graduation-cap', 26)}</div>`
+      }
+      <div class="card__body">
+        <div class="card__spread">
+          <h3 class="card__title card__title--xs">${escHtml(a.name)}</h3>
+          <span class="badge">Batch ${escHtml(a.graduating_batch)}</span>
+        </div>
+        ${roleParts ? `<p class="card__meta card__meta--strong">${roleParts}</p>` : ''}
+        ${a.industry_sector ? `<p class="card__meta">${icon('building', 13)} Sector: ${escHtml(a.industry_sector)}</p>` : ''}
+        ${a.location ? `<p class="card__meta">${icon('map-pin', 13)} ${escHtml(a.location)}</p>` : ''}
+        ${a.quote_testimonial ? `<blockquote class="card__quote">“${escHtml(a.quote_testimonial)}”</blockquote>` : ''}
+        ${a.linkedin_url ? `<a href="${safeUrl(a.linkedin_url)}" target="_blank" rel="noopener" class="card__link">${icon('external', 13)} LinkedIn Profile</a>` : ''}
+      </div>
+    </article>`;
+  }
+
+  /**
+   * @param {any} p
+   * @param {number} [idx]
+   * @returns {string}
+   */
+  function projectCard(p, idx = 0) {
+    const tags = p.tags
+      ? `<div class="card__tags">${String(p.tags)
+          .split(',')
+          .map(t => `<span class="tag">${escHtml(t.trim())}</span>`)
+          .join('')}</div>`
+      : '';
+    return `
+    <article class="card fade-up" style="${stagger(idx)}">
+      ${p.image_url ? `<img src="${safeUrl(p.image_url)}" alt="" width="400" height="160" loading="lazy" decoding="async" class="card__thumb">` : ''}
+      <div class="card__badges">
+        <span class="badge">${escHtml(p.project_type)}</span>
+        <span class="badge badge-accent">Batch ${escHtml(p.batch)}</span>
+      </div>
+      <h3 class="card__title card__title--xs">${escHtml(p.title)}</h3>
+      ${p.students ? `<p class="card__meta card__meta--strong">${icon('users', 14)} Investigators: ${escHtml(p.students)}</p>` : ''}
+      ${p.supervisors ? `<p class="card__meta">${icon('microscope', 14)} Supervisors: ${escHtml(p.supervisors)}</p>` : ''}
+      <p class="card__text">${escHtml(p.abstract || '')}</p>
+      ${tags}
+      ${
+        p.paper_or_repo_url
+          ? `<div class="card__footer"><a href="${safeUrl(p.paper_or_repo_url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">${icon('external', 13)} View Paper / Repository</a></div>`
+          : ''
+      }
+    </article>`;
+  }
+
+  /**
+   * @param {any} o
+   * @param {number} [idx]
+   * @returns {string}
+   */
+  function opportunityCard(o, idx = 0) {
+    return `
+    <article class="card fade-up" style="${stagger(idx)}">
+      <div class="card__badges">
+        <span class="badge">${escHtml(o.opportunity_type)}</span>
+        ${o.deadline ? `<span class="badge badge-accent">Deadline: ${escHtml(o.deadline)}</span>` : ''}
+        ${o.posted_by_alumnus ? `<span class="badge">Shared by ${escHtml(o.posted_by_alumnus)}</span>` : ''}
+      </div>
+      <h3 class="card__title card__title--xs">${escHtml(o.title)}</h3>
+      <p class="card__meta card__meta--strong">${escHtml(o.organization)}</p>
+      ${o.location ? `<p class="card__meta">${icon('map-pin', 13)} ${escHtml(o.location)}</p>` : ''}
+      <p class="card__text">${escHtml(o.description || '')}</p>
+      ${
+        o.apply_url
+          ? `<div class="card__footer"><a href="${safeUrl(o.apply_url)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">${icon('external', 13)} Apply</a></div>`
+          : ''
+      }
+    </article>`;
+  }
+
+  /**
+   * Sponsor tier → CSS class (whitelisted; never interpolated into a style attribute).
+   * @param {unknown} tier
+   * @returns {string}
+   */
+  function sponsorTierClass(tier) {
+    const key = String(tier || '').toLowerCase();
+    return ['platinum', 'gold', 'silver', 'bronze', 'partner'].includes(key)
+      ? `tier-${key}`
+      : 'tier-partner';
+  }
+
+  /**
+   * @param {any} s
+   * @param {number} [idx]
+   * @returns {string}
+   */
+  function sponsorCard(s, idx = 0) {
+    const tierLabel = s.tier === 'Partner' ? 'Partner' : `${escHtml(s.tier)} Partner`;
+    return `
+    <article class="card card--center fade-up" style="${stagger(idx)}">
+      ${
+        s.logo_url
+          ? `<img src="${safeUrl(s.logo_url)}" alt="${escHtml(s.name)}" width="180" height="80" loading="lazy" decoding="async" class="card__logo">`
+          : `<div class="avatar avatar--placeholder avatar--sm">${icon('building', 24)}</div>`
+      }
+      <h3 class="card__title card__title--sm">${escHtml(s.name)}</h3>
+      <span class="badge ${sponsorTierClass(s.tier)}">${tierLabel}</span>
+      ${s.since_year ? `<p class="card__meta card__meta--mono">Partner Since ${escHtml(s.since_year)}</p>` : ''}
+      ${
+        s.website_url
+          ? `<div class="card__footer card__footer--center"><a href="${safeUrl(s.website_url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">${icon('external', 13)} Visit Website</a></div>`
+          : ''
+      }
     </article>`;
   }
 
@@ -1163,7 +1483,7 @@
           <label class="form-label" for="reg-phone">Contact Phone</label>
           <input id="reg-phone" type="tel" inputmode="tel" class="form-control" maxlength="50" autocomplete="tel" placeholder="Optional for SMS updates">
         </div>
-        <div id="reg-msg" role="status" aria-live="polite" style="margin-top:1rem"></div>
+        <div id="reg-msg" aria-live="polite" style="margin-top:1rem"></div>
         <div style="display:flex;justify-content:flex-end;gap:.75rem;margin-top:1.5rem">
           <button type="button" class="btn btn-outline" id="reg-close">Cancel</button>
           <button type="submit" class="btn btn-primary" id="reg-submit">Confirm Registration</button>
@@ -1188,25 +1508,27 @@
     const msgBox = modal.querySelector('#reg-msg');
     if (msgBox) msgBox.innerHTML = '';
 
-    // Check if code is already stored in localStorage
+    // Previously saved passcode (session-scoped): prevents a guaranteed 409 resubmission
     let savedCode = null;
     try {
-      savedCode = localStorage.getItem(`pms_cert_${eventId}`);
-    } catch (_) {}
+      savedCode = sessionStorage.getItem(`pms_cert_${eventId}`);
+    } catch (err) {
+      reportError('passcode-read', err);
+    }
     if (savedCode && msgBox) {
       showAlert(
         msgBox,
-        `Previously registered for this event. Saved verification passcode: <br><strong style="font-size:1.1rem;color:var(--text);font-family:var(--font-mono)">${escHtml(savedCode)}</strong>`,
+        `You already registered for this event. Your saved verification passcode:<br><strong class="cert-code">${escHtml(savedCode)}</strong>`,
         'info',
         true
       );
     }
 
-    // Ensure submit button is re-enabled and visible on opening modal
+    // Keep the submit button in sync with the registration state
     const submitBtn = /** @type {HTMLButtonElement | null} */ (modal.querySelector('#reg-submit'));
     if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.style.display = '';
+      submitBtn.disabled = Boolean(savedCode);
+      submitBtn.style.display = savedCode ? 'none' : '';
     }
 
     // Bind close buttons and form submit once
@@ -1260,12 +1582,12 @@
             el => !el || !el.value.trim()
           );
           if (missingInputs.length) {
-            reportInvalidFields(formEl, missingInputs);
+            reportInvalidFields(formEl, missingInputs, curMsgBox);
             showAlert(curMsgBox, 'Please fill in all required fields.', 'error');
             return;
           }
           if (!isEmail(email)) {
-            reportInvalidFields(formEl, [emailInput]);
+            reportInvalidFields(formEl, [emailInput], curMsgBox);
             showAlert(curMsgBox, 'Please enter a valid email address.', 'error');
             return;
           }
@@ -1285,8 +1607,10 @@
 
             const code = result.certificate_code;
             try {
-              localStorage.setItem(`pms_cert_${curEventId}`, code);
-            } catch (_) {}
+              sessionStorage.setItem(`pms_cert_${curEventId}`, code);
+            } catch (err) {
+              reportError('passcode-save', err);
+            }
 
             showAlert(
               curMsgBox,
@@ -1299,21 +1623,34 @@
               dialogEl.querySelector('#btn-copy-cert-code')
             );
             if (copyBtn) {
+              // Manual copy fallback: select the passcode so it can be copied without prompt()
+              const selectCode = () => {
+                const codeEl = dialogEl.querySelector('#cert-code-text');
+                if (!codeEl || typeof window.getSelection !== 'function') return;
+                const range = document.createRange();
+                range.selectNodeContents(codeEl);
+                const selection = window.getSelection();
+                if (selection) {
+                  selection.removeAllRanges();
+                  selection.addRange(range);
+                }
+              };
               copyBtn.onclick = () => {
                 if (navigator.clipboard && navigator.clipboard.writeText) {
                   navigator.clipboard
                     .writeText(code)
                     .then(() => {
                       copyBtn.textContent = 'Copied';
-                      setTimeout(() => {
+                      window.setTimeout(() => {
                         copyBtn.innerHTML = `${icon('copy', 13)} Copy Passcode`;
-                      }, 2000);
+                      }, COPY_FEEDBACK_MS);
                     })
-                    .catch(() => {
-                      prompt('Copy your code:', code);
+                    .catch(err => {
+                      reportError('clipboard', err);
+                      selectCode();
                     });
                 } else {
-                  prompt('Copy your code:', code);
+                  selectCode();
                 }
               };
             }
@@ -1405,6 +1742,66 @@
     return new URLSearchParams(window.location.search).get('article');
   }
 
+  /** @type {{ title: string, description: string, canonical: string } | null} */
+  let listingMeta = null;
+
+  /** Capture the listing page metadata once so it can be restored on close. */
+  function captureListingMeta() {
+    if (listingMeta) return;
+    const desc = document.querySelector('meta[name="description"]');
+    const canonical = document.querySelector('link[rel="canonical"]');
+    listingMeta = {
+      title: document.title,
+      description: desc ? desc.getAttribute('content') || '' : '',
+      canonical: canonical ? canonical.getAttribute('href') || '' : '',
+    };
+  }
+
+  /**
+   * Keep the tab title, description and canonical URL accurate for a deep-linked article.
+   * @param {any} post
+   */
+  function applyArticleMeta(post) {
+    captureListingMeta();
+    const title = `${post.title} — PIEAS Materials Society`;
+    const description = String(post.excerpt || '').slice(0, 155);
+    document.title = title;
+    const set = (
+      /** @type {string} */ selector,
+      /** @type {string} */ attr,
+      /** @type {string} */ value
+    ) => {
+      const el = document.querySelector(selector);
+      if (el) el.setAttribute(attr, value);
+    };
+    set('meta[name="description"]', 'content', description);
+    set('meta[property="og:title"]', 'content', title);
+    set('meta[property="og:description"]', 'content', description);
+    set(
+      'link[rel="canonical"]',
+      'href',
+      `${window.location.origin}/blog/${encodeURIComponent(post.slug)}`
+    );
+  }
+
+  /** Restore the listing metadata after the article dialog closes. */
+  function restoreListingMeta() {
+    if (!listingMeta) return;
+    document.title = listingMeta.title;
+    const set = (
+      /** @type {string} */ selector,
+      /** @type {string} */ attr,
+      /** @type {string} */ value
+    ) => {
+      const el = document.querySelector(selector);
+      if (el && value) el.setAttribute(attr, value);
+    };
+    set('meta[name="description"]', 'content', listingMeta.description);
+    set('meta[property="og:title"]', 'content', listingMeta.title);
+    set('meta[property="og:description"]', 'content', listingMeta.description);
+    set('link[rel="canonical"]', 'href', listingMeta.canonical);
+  }
+
   /* ── Open Article Modal and load full article (with URL Deep Linking) ── */
   /**
    * Open the article reader dialog and load a blog post by slug.
@@ -1447,6 +1844,7 @@
           articleModal._closingFromPopstate = false;
           return;
         }
+        restoreListingMeta();
         try {
           const url = new URL(window.location.href);
           if (/^\/blog\/[^/]+\/?$/.test(url.pathname)) {
@@ -1461,11 +1859,12 @@
     }
 
     articleModal.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
+    <div class="dialog-head">
       <span class="badge">Technical Article</span>
       <button type="button" id="close-article-modal" class="btn btn-outline btn-sm" aria-label="Close dialog">${icon('x', 14)} Close</button>
     </div>
-    <div id="article-reader-content" aria-busy="true"><div class="spinner" role="status" aria-live="polite" aria-label="Loading article"></div></div>
+    <h2 id="article-reader-title" class="sr-only"></h2>
+    <div id="article-reader-content" aria-busy="true"><div class="spinner" role="status" aria-label="Loading article"></div></div>
   `;
     showModalWithFocusReturn(articleModal, triggerEl);
     const closeArticleBtn = /** @type {HTMLButtonElement | null} */ (
@@ -1477,14 +1876,17 @@
     if (!contentEl) return;
     try {
       const post = await apiFetch(`/api/posts/${encodeURIComponent(slug)}`);
+      const readerTitle = document.getElementById('article-reader-title');
+      if (readerTitle) readerTitle.textContent = post.title;
+      applyArticleMeta(post);
       contentEl.innerHTML = `
-      ${post.cover_image_url ? `<img src="${safeUrl(post.cover_image_url)}" alt="" width="720" height="300" decoding="async" style="width:100%;height:auto;max-height:300px;object-fit:cover;border-radius:10px;margin-bottom:1.5rem">` : ''}
+      ${post.cover_image_url ? `<img src="${safeUrl(post.cover_image_url)}" alt="" width="720" height="300" decoding="async" class="article-cover">` : ''}
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">
         <span class="badge">${escHtml(post.category)}</span>
         ${post.material_formula ? `<span class="tag">[${escHtml(post.material_formula)}]</span>` : ''}
         ${post.crystal_structure ? `<span class="tag">Lattice: ${escHtml(post.crystal_structure)}</span>` : ''}
       </div>
-      <h1 id="article-reader-title" style="font-size:1.8rem;margin-bottom:.75rem;color:var(--text)">${escHtml(post.title)}</h1>
+      <h2 class="article-title">${escHtml(post.title)}</h2>
       <div style="display:flex;gap:1.5rem;font-size:.85rem;color:var(--text-muted);border-bottom:1px solid var(--border);padding-bottom:1rem;margin-bottom:1.5rem;flex-wrap:wrap">
         <span style="display:inline-flex;align-items:center;gap:6px">${icon('user', 14)} <strong>${escHtml(post.author_name || 'PMS Technical Council')}</strong> ${post.author_role ? '· ' + escHtml(post.author_role) : ''}</span>
         <span style="display:inline-flex;align-items:center;gap:6px">${icon('calendar', 14)} ${fmtDate(post.published_at)}</span>
@@ -1566,24 +1968,21 @@
   });
 
   /** Export shared client helpers for use across page scripts. */
-  /** @type {any} */ (window).PMS = {
-    initTheme,
+  /** @type {any} */ (window).PMS = Object.freeze({
     icon,
     apiFetch,
+    apiFetchCached,
     apiPost,
     apiPut,
     apiDelete,
+    reportError,
     escHtml,
-    safeUrlRaw,
     safeUrl,
     isEmail,
     emptyState,
     errorState,
     fmtDate,
-    renderMarkdown,
     openArticleModal,
-    openRegistrationModal,
-    openLightbox,
     enableBackdropClose,
     showModalWithFocusReturn,
     skeletonGrid,
@@ -1591,9 +1990,17 @@
     reportInvalidFields,
     setLoading,
     observeFadeElements,
+    toast,
+    confirmDialog,
+    stagger,
     eventCard,
     teamCard,
     postCard,
     resourceCard,
-  };
+    alumniCard,
+    projectCard,
+    opportunityCard,
+    sponsorCard,
+    sponsorTierClass,
+  });
 })();

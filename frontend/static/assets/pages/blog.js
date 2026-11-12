@@ -17,7 +17,8 @@
       ? posts.map((p, idx) => PMS.postCard(p, idx)).join('')
       : PMS.emptyState('No articles published yet.');
     PMS.observeFadeElements(grid);
-  } catch (_) {
+  } catch (err) {
+    PMS.reportError('posts', err);
     grid.innerHTML = PMS.errorState('Could not load posts.');
   } finally {
     grid.setAttribute('aria-busy', 'false');

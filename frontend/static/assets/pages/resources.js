@@ -25,7 +25,8 @@
     try {
       allResources = await PMS.apiFetch('/api/resources');
       renderFilteredResources('');
-    } catch (_) {
+    } catch (err) {
+      PMS.reportError('resources', err);
       grid.innerHTML = PMS.errorState('Could not load resources.');
     } finally {
       grid.setAttribute('aria-busy', 'false');
@@ -71,7 +72,7 @@
     if (!strip) return;
     strip.setAttribute('aria-busy', 'true');
     try {
-      const sections = await PMS.apiFetch('/api/sections');
+      const sections = await PMS.apiFetchCached('/api/sections');
       const sec = sections.find(s => s.section_key === 'resources_standards');
       if (sec) {
         if (sec.badge) {
@@ -93,21 +94,25 @@
             strip.innerHTML = protocols
               .map(
                 p => `
-              <div class="card" style="padding:20px;border-left:2px solid var(--accent)">
-                <span class="tag" style="margin-bottom:8px;font-family:var(--font-mono);color:var(--text)">${PMS.escHtml(p.code)}</span>
-                <h3 style="font-size:14px;margin-bottom:6px;color:var(--text)">${PMS.escHtml(p.title)}</h3>
-                <p style="font-size:13px;color:var(--text-secondary);line-height:1.5">${PMS.escHtml(p.detail)}</p>
+              <div class="card fade-up protocol-card">
+                <span class="tag">${PMS.escHtml(p.code)}</span>
+                <h3 class="card__title card__title--xs">${PMS.escHtml(p.title)}</h3>
+                <p class="card__text card__text--sm">${PMS.escHtml(p.detail)}</p>
               </div>
             `
               )
               .join('');
+            PMS.observeFadeElements(strip);
             return;
-          } catch (_) {}
+          } catch (err) {
+            PMS.reportError('standards-json', err);
+          }
         }
       }
-      strip.innerHTML = '';
-    } catch (_) {
-      strip.innerHTML = '';
+      strip.innerHTML = PMS.emptyState('Testing protocols will be published soon.');
+    } catch (err) {
+      PMS.reportError('standards', err);
+      strip.innerHTML = PMS.errorState('Could not load testing protocols.');
     } finally {
       strip.setAttribute('aria-busy', 'false');
     }

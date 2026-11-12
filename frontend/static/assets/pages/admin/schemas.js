@@ -6,7 +6,10 @@
 (() => {
   'use strict';
 
-  const PAGINATED_TABS = new Set(['registrations', 'membership', 'contacts', 'newsletter']);
+  /** Rows requested per page when walking a list endpoint. */
+  const PAGE_SIZE = 200;
+  /** Hard stop so a broken endpoint cannot loop forever. */
+  const MAX_PAGES = 100;
 
   /**
    * Detect an HTTP 401 Unauthorized error thrown by `PMS.apiFetch`.
@@ -38,15 +41,15 @@
     if (!PAGINATED_TABS.has(tab)) {
       return PMS.apiFetch(api);
     }
-    const limit = 200;
-    const maxIterations = 500;
     const all = [];
-    for (let iter = 0; iter < maxIterations; iter++) {
+    for (let page = 0; page < MAX_PAGES; page++) {
       const sep = api.includes('?') ? '&' : '?';
-      const page = await PMS.apiFetch(`${api}${sep}limit=${limit}&offset=${iter * limit}`);
-      if (!Array.isArray(page) || page.length === 0) break;
-      all.push(...page);
-      if (page.length < limit) break;
+      const rows = await PMS.apiFetch(`${api}${sep}limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`);
+      if (!Array.isArray(rows) || rows.length === 0) break;
+      // Guard against endpoints that ignore offset and replay the first page.
+      if (all.length && rows[0] && all[0] && rows[0].id === all[0].id) break;
+      all.push(...rows);
+      if (rows.length < PAGE_SIZE) break;
     }
     return all;
   }
@@ -579,6 +582,9 @@
       canEdit: false,
     },
   };
+
+  /** Every admin collection is paginated so no record is invisible past row 50. */
+  const PAGINATED_TABS = new Set(Object.keys(SCHEMAS));
 
   window.PMSAdmin = Object.assign(window.PMSAdmin || {}, {
     currentTab: 'announcements',

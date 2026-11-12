@@ -13,23 +13,24 @@
     container.setAttribute('aria-busy', 'true');
     container.innerHTML = PMS.skeletonGrid(3);
     try {
-      const secs = await PMS.apiFetch('/api/sections');
+      const secs = await PMS.apiFetchCached('/api/sections');
       const aboutSecs = secs.filter(s => s.section_key.startsWith('about'));
       container.innerHTML = aboutSecs.length
         ? aboutSecs
             .map(
               (s, idx) => `
-          <article class="card fade-up" style="transition-delay:${Math.min(idx, 8) * 60}ms">
-            <span class="badge" style="margin-bottom:.75rem">${PMS.escHtml(s.badge || s.section_key)}</span>
-            <h2 style="font-size:1.3rem;margin-bottom:.5rem">${PMS.escHtml(s.title)}</h2>
-            ${s.subtitle ? `<p style="color:var(--accent);font-weight:600;margin-bottom:.75rem">${PMS.escHtml(s.subtitle)}</p>` : ''}
-            <p style="color:var(--text-muted);line-height:1.7">${PMS.escHtml(s.content)}</p>
+          <article class="card fade-up" style="${PMS.stagger(idx)}">
+            <span class="badge" style="margin-bottom:var(--sp-3)">${PMS.escHtml(s.badge || s.section_key)}</span>
+            <h2 class="card__title card__title--sm">${PMS.escHtml(s.title)}</h2>
+            ${s.subtitle ? `<p class="card__meta card__meta--strong" style="color:var(--accent)">${PMS.escHtml(s.subtitle)}</p>` : ''}
+            <p class="card__text">${PMS.escHtml(s.content)}</p>
           </article>`
             )
             .join('')
-        : PMS.emptyState('About information not available.');
+        : PMS.emptyState('About information is not available yet.');
       PMS.observeFadeElements(container);
-    } catch (_) {
+    } catch (err) {
+      PMS.reportError('about-sections', err);
       container.innerHTML = PMS.errorState('Could not load about sections.');
     } finally {
       container.setAttribute('aria-busy', 'false');
@@ -46,12 +47,12 @@
         ? faqs
             .map(
               f => `
-          <details class="card" style="margin-bottom:1rem;cursor:pointer">
-            <summary style="font-weight:500;font-size:15px;color:var(--text);display:flex;justify-content:space-between;align-items:center">
-              <span>${PMS.escHtml(f.question)}</span>
-              <span class="badge" style="font-size:12px">${PMS.escHtml(f.category || 'General')}</span>
+          <details class="card" style="margin-bottom:var(--sp-4);cursor:pointer">
+            <summary>
+              <h3 class="card__title card__title--xs" style="margin:0">${PMS.escHtml(f.question)}</h3>
+              <span class="badge">${PMS.escHtml(f.category || 'General')}</span>
             </summary>
-            <div style="padding-top:12px;margin-top:10px;border-top:1px solid var(--border-subtle);color:var(--text-secondary);line-height:1.6">
+            <div class="card__text" style="padding-top:var(--sp-3);margin-top:var(--sp-2);border-top:1px solid var(--border-subtle);margin-bottom:0">
               ${PMS.escHtml(f.answer)}
             </div>
           </details>
@@ -59,7 +60,8 @@
             )
             .join('')
         : PMS.emptyState('No frequently asked questions published yet.');
-    } catch (_) {
+    } catch (err) {
+      PMS.reportError('faqs', err);
       faqsEl.innerHTML = PMS.errorState('Could not load FAQs.');
     } finally {
       faqsEl.setAttribute('aria-busy', 'false');

@@ -17,7 +17,8 @@
     try {
       allMembers = await PMS.apiFetch('/api/team');
       renderFilteredTeam('current');
-    } catch (_) {
+    } catch (err) {
+      PMS.reportError('team', err);
       grid.innerHTML = PMS.errorState('Could not load team directory.');
     } finally {
       grid.setAttribute('aria-busy', 'false');
@@ -49,7 +50,7 @@
       );
       grid.innerHTML = sortedYears
         .map(yr => {
-          const heading = `<h2 style="grid-column:1/-1;font-size:1.25rem;color:var(--text);margin:1rem 0 .25rem;padding-bottom:.4rem;border-bottom:1px solid var(--border)">${PMS.escHtml(yr)}</h2>`;
+          const heading = `<h2 class="council-year">${PMS.escHtml(yr)}</h2>`;
           const cards = groups
             .get(yr)
             .map((m, idx) => PMS.teamCard(m, idx))
@@ -92,7 +93,7 @@
     if (!grid) return;
     grid.setAttribute('aria-busy', 'true');
     try {
-      const sections = await PMS.apiFetch('/api/sections');
+      const sections = await PMS.apiFetchCached('/api/sections');
       const sec = sections.find(s => s.section_key === 'team_guidance');
       if (sec) {
         if (sec.badge) {
@@ -122,20 +123,23 @@
               .map(
                 p => `
               <article class="card fade-up">
-                <span class="badge" style="margin-bottom:.5rem">${PMS.escHtml(p.scope)}</span>
-                <h3 style="font-size:1.15rem;margin-bottom:.5rem;color:var(--text)">${PMS.escHtml(p.title)}</h3>
-                <p style="color:var(--text-muted);font-size:.875rem;line-height:1.6">${PMS.escHtml(p.desc)}</p>
+                <span class="badge" style="margin-bottom:var(--sp-2)">${PMS.escHtml(p.scope)}</span>
+                <h3 class="card__title card__title--xs">${PMS.escHtml(p.title)}</h3>
+                <p class="card__text card__text--sm">${PMS.escHtml(p.desc)}</p>
               </article>
             `
               )
               .join('');
             PMS.observeFadeElements(grid);
             return;
-          } catch (_) {}
+          } catch (err) {
+            PMS.reportError('team-guidance-json', err);
+          }
         }
       }
-      grid.innerHTML = PMS.emptyState('Portfolios configured in administration.');
-    } catch (_) {
+      grid.innerHTML = PMS.emptyState('Portfolio details will be announced soon.');
+    } catch (err) {
+      PMS.reportError('team-guidance', err);
       grid.innerHTML = PMS.errorState('Could not load guidance portfolios.');
     } finally {
       grid.setAttribute('aria-busy', 'false');

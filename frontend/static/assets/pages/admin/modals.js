@@ -221,7 +221,7 @@
           PMSAdmin.currentEditingId === expectedEditingId &&
           PMSAdmin.currentTab === expectedTab
         ) {
-          alert('Upload failed: ' + err.message);
+          PMS.toast(`Upload failed: ${err.message}`, 'error');
           if (statusSpan) statusSpan.textContent = 'Upload';
         }
       } finally {
@@ -269,7 +269,7 @@
         }
       }
       if (missingFields.length) {
-        PMS.reportInvalidFields(crudForm, missingFields);
+        PMS.reportInvalidFields(crudForm, missingFields, msg);
         PMS.showAlert(msg, `Please fill out required field: ${firstMissingLabel}`);
         return;
       }
@@ -279,7 +279,7 @@
         try {
           JSON.parse(payload.extra_json);
         } catch (jsonErr) {
-          PMS.reportInvalidFields(crudForm, [document.getElementById('f-extra_json')]);
+          PMS.reportInvalidFields(crudForm, [document.getElementById('f-extra_json')], msg);
           PMS.showAlert(msg, `Invalid JSON in Extra JSON field: ${jsonErr.message}`);
           return;
         }
@@ -300,6 +300,7 @@
           PMSAdmin.showLogin();
           return;
         }
+        PMS.reportError('crud-save', err);
         PMS.showAlert(msg, err.message || 'Operation failed.');
       } finally {
         PMS.setLoading(btn, false);

@@ -107,11 +107,6 @@
       if (req !== PMSAdmin.loadSeq) return;
       PMSAdmin.currentCache = data;
 
-      if (!data.length) {
-        content.innerHTML = PMS.emptyState(`No records found in ${schema.title}.`);
-        return;
-      }
-
       if (tab === 'registrations' && toolbar) {
         const uniqueEvents = Object.keys(PMSAdmin.eventsMap).map(id => ({
           id,
@@ -190,7 +185,13 @@
 
       const ths = schema.columns.map(c => `<th>${PMS.escHtml(c.replace(/_/g, ' '))}</th>`).join('');
 
+      if (!data.length) {
+        content.innerHTML = PMS.emptyState(`No records found in ${schema.title}.`);
+        return;
+      }
+
       content.innerHTML = `
+        <p class="table-meta" role="status">Showing all ${data.length} record${data.length === 1 ? '' : 's'}</p>
         <div style="overflow-x:auto">
           <table>
             <thead><tr>${ths}<th>Actions</th></tr></thead>
@@ -219,7 +220,7 @@
         if (exportBtn) {
           exportBtn.onclick = () => {
             if (!displayed.length) {
-              alert('No registrations to export.');
+              PMS.toast('No registrations to export.', 'error');
               return;
             }
             const headers = [
@@ -306,28 +307,34 @@
           tab === 'events'
             ? 'Are you sure you want to permanently delete this event? WARNING: All registrations and issued certificates for this event will also be deleted!'
             : 'Are you sure you want to permanently delete this record?';
-        if (!confirm(confirmMsg)) return;
+        const confirmed = await PMS.confirmDialog(confirmMsg, {
+          confirmLabel: 'Delete',
+          tone: 'danger',
+        });
+        if (!confirmed) return;
         try {
           await PMS.apiDelete(`${schema.api}/${id}`);
+          PMS.toast('Record deleted.', 'success');
           loadSection(tab);
         } catch (err) {
           if (PMSAdmin.isUnauthorized(err)) {
             PMSAdmin.showLogin();
             return;
           }
-          alert('Delete failed: ' + err.message);
+          PMS.toast(`Delete failed: ${err.message}`, 'error');
         }
       } else if (action === 'toggle-attended') {
         const isAttended = btn.dataset.attended === 'true';
         try {
           await PMS.apiPut(`/api/admin/registrations/${id}`, { attended: !isAttended });
+          PMS.toast(isAttended ? 'Marked absent.' : 'Marked attended.', 'success');
           loadSection(tab);
         } catch (err) {
           if (PMSAdmin.isUnauthorized(err)) {
             PMSAdmin.showLogin();
             return;
           }
-          alert('Attendance update failed: ' + err.message);
+          PMS.toast(`Attendance update failed: ${err.message}`, 'error');
         }
       } else if (action === 'edit') {
         PMSAdmin.openEditModal(tab, id, btn);
@@ -337,13 +344,14 @@
         const status = btn.dataset.status;
         try {
           await PMS.apiPut(`/api/admin/membership/${id}`, { status });
+          PMS.toast(`Application marked ${status.toLowerCase()}.`, 'success');
           loadSection(tab);
         } catch (err) {
           if (PMSAdmin.isUnauthorized(err)) {
             PMSAdmin.showLogin();
             return;
           }
-          alert('Status update failed: ' + err.message);
+          PMS.toast(`Status update failed: ${err.message}`, 'error');
         }
       }
     });

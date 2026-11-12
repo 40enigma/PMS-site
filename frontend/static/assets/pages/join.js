@@ -7,6 +7,18 @@
 (() => {
   'use strict';
 
+  /**
+   * Read a trimmed value without assuming the element exists.
+   * @param {string} id
+   * @returns {string}
+   */
+  const valueOf = id => {
+    const el = /** @type {HTMLInputElement | HTMLTextAreaElement | null} */ (
+      document.getElementById(id)
+    );
+    return el ? el.value.trim() : '';
+  };
+
   const joinForm = document.getElementById('join-form');
   if (joinForm) {
     joinForm.addEventListener('submit', async ev => {
@@ -20,20 +32,23 @@
       const deptEl = document.getElementById('join-dept');
       const emailEl = document.getElementById('join-email');
 
-      const fullName = nameEl.value.trim();
-      const rollNumber = rollEl.value.trim();
-      const batch = batchEl.value.trim();
-      const department = deptEl.value.trim();
-      const email = emailEl.value.trim();
+      const fullName = valueOf('join-name');
+      const rollNumber = valueOf('join-roll');
+      const batch = valueOf('join-batch');
+      const department = valueOf('join-dept');
+      const email = valueOf('join-email');
 
-      const missing = [nameEl, rollEl, batchEl, deptEl, emailEl].filter(el => !el.value.trim());
+      const fieldEls = [nameEl, rollEl, batchEl, deptEl, emailEl];
+      const missing = fieldEls.filter(
+        el => !el || !(/** @type {HTMLInputElement} */ (el).value.trim())
+      );
       if (missing.length) {
-        PMS.reportInvalidFields(joinForm, missing);
+        PMS.reportInvalidFields(joinForm, missing, msg);
         PMS.showAlert(msg, 'Please complete all required fields (*).');
         return;
       }
       if (!PMS.isEmail(email)) {
-        PMS.reportInvalidFields(joinForm, [emailEl]);
+        PMS.reportInvalidFields(joinForm, [emailEl], msg);
         PMS.showAlert(msg, 'Please provide a valid email address.');
         return;
       }
@@ -44,12 +59,12 @@
         await PMS.apiPost('/api/membership', {
           full_name: fullName,
           roll_number: rollNumber,
-          batch: batch,
-          department: department,
-          email: email,
-          phone: document.getElementById('join-phone').value.trim() || null,
-          interests: document.getElementById('join-interests').value.trim() || null,
-          why_join: document.getElementById('join-why').value.trim() || null,
+          batch,
+          department,
+          email,
+          phone: valueOf('join-phone') || null,
+          interests: valueOf('join-interests') || null,
+          why_join: valueOf('join-why') || null,
         });
         PMS.showAlert(
           msg,
@@ -57,8 +72,9 @@
           'success'
         );
         joinForm.reset();
-      } catch (e) {
-        PMS.showAlert(msg, e.message || 'Submission failed. Please try again.');
+      } catch (err) {
+        PMS.reportError('membership', err);
+        PMS.showAlert(msg, err.message || 'Submission failed. Please try again.');
       } finally {
         PMS.setLoading(btn, false);
       }
@@ -74,20 +90,23 @@
 
       const nameEl = document.getElementById('contact-name');
       const emailEl = document.getElementById('contact-email');
-      const msgEl = document.getElementById('contact-message');
+      const messageEl = document.getElementById('contact-message');
 
-      const name = nameEl.value.trim();
-      const email = emailEl.value.trim();
-      const message = msgEl.value.trim();
+      const name = valueOf('contact-name');
+      const email = valueOf('contact-email');
+      const message = valueOf('contact-message');
 
-      const missing = [nameEl, emailEl, msgEl].filter(el => !el.value.trim());
+      const fieldEls = [nameEl, emailEl, messageEl];
+      const missing = fieldEls.filter(
+        el => !el || !(/** @type {HTMLInputElement} */ (el).value.trim())
+      );
       if (missing.length) {
-        PMS.reportInvalidFields(contactForm, missing);
+        PMS.reportInvalidFields(contactForm, missing, msg);
         PMS.showAlert(msg, 'Please fill in your name, email, and message.');
         return;
       }
       if (!PMS.isEmail(email)) {
-        PMS.reportInvalidFields(contactForm, [emailEl]);
+        PMS.reportInvalidFields(contactForm, [emailEl], msg);
         PMS.showAlert(msg, 'Please enter a valid email address.');
         return;
       }
@@ -96,15 +115,16 @@
       PMS.setLoading(btn, true);
       try {
         await PMS.apiPost('/api/contact', {
-          name: name,
-          email: email,
-          subject: document.getElementById('contact-subject').value.trim() || null,
-          message: message,
+          name,
+          email,
+          subject: valueOf('contact-subject') || null,
+          message,
         });
         PMS.showAlert(msg, 'Message sent to society administration.', 'success');
         contactForm.reset();
-      } catch (e) {
-        PMS.showAlert(msg, e.message || 'Message could not be sent. Please try again.');
+      } catch (err) {
+        PMS.reportError('contact', err);
+        PMS.showAlert(msg, err.message || 'Message could not be sent. Please try again.');
       } finally {
         PMS.setLoading(btn, false);
       }
