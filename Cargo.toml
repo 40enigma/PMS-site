@@ -17,7 +17,7 @@ tokio = { version = "1.43", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "macros", "chrono", "uuid"] }
-tower-http = { version = "0.6", features = ["cors", "fs", "trace", "compression-gzip", "compression-br"] }
+tower-http = { version = "0.6", features = ["cors", "fs", "trace", "compression-gzip", "compression-br", "catch-panic", "request-id"] }
 jsonwebtoken = "9.3"
 argon2 = "0.5"
 rand_core = { version = "0.6", features = ["getrandom"] }

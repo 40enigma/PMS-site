@@ -52,7 +52,7 @@ pub fn admin_routes() -> Router<SqlitePool> {
         // Upload
         .route(
             "/api/admin/upload",
-            post(upload_file).layer(DefaultBodyLimit::max(20 * 1024 * 1024)),
+            post(upload_file).layer(DefaultBodyLimit::max(crate::config::max_upload_bytes())),
         )
         .route("/api/admin/uploads", get(list_uploads))
         .route("/api/admin/uploads/{filename}", delete(delete_upload))
@@ -159,16 +159,9 @@ pub fn admin_routes() -> Router<SqlitePool> {
 // Auth
 // ---------------------------------------------------------------------------
 
-/// Returns `true` if the server is running in production mode.
-fn is_production() -> bool {
-    std::env::var("RUST_ENV").unwrap_or_default().to_lowercase() == "production"
-}
-
 /// Returns `true` if the auth cookie should have the Secure flag set.
 fn is_cookie_secure() -> bool {
-    std::env::var("JWT_COOKIE_SECURE")
-        .map(|v| v.to_lowercase() != "false")
-        .unwrap_or(is_production())
+    crate::config::cookie_secure()
 }
 
 /// Build the auth cookie with appropriate security attributes.
@@ -178,7 +171,7 @@ fn build_auth_cookie(token: String) -> Cookie<'static> {
     cookie.set_secure(is_cookie_secure());
     cookie.set_same_site(SameSite::Lax);
     cookie.set_path("/");
-    cookie.set_max_age(Duration::hours(24));
+    cookie.set_max_age(Duration::seconds(crate::config::jwt_ttl_seconds()));
     cookie
 }
 
@@ -187,7 +180,6 @@ pub async fn login(
     State(pool): State<SqlitePool>,
     jar: CookieJar,
     ClientIp(ip): ClientIp,
-    headers: axum::http::HeaderMap,
     Json(payload): Json<LoginRequest>,
 ) -> Result<(CookieJar, Json<LoginResponse>), AppError> {
     // Enforce rate limiting per client IP
@@ -204,6 +196,10 @@ pub async fn login(
     if email.len() > 254 {
         return Err(AppError::BadRequest("Email too long".into()));
     }
+
+    // Per-account budget on top of the per-IP one, so a single shared proxy address
+    // cannot be used to lock the administrator out of the panel.
+    RateLimitState::global().check_login_account(&email)?;
 
     let user = sqlx::query_as::<_, AdminUser>(
         "SELECT id, email, password_hash, name FROM admin_users WHERE email = ?1",
@@ -243,24 +239,17 @@ pub async fn login(
 
     let token = create_token(user.id, &user.email)?;
 
-    // Set httpOnly cookie
-    let cookie = build_auth_cookie(token.clone());
-    let updated_jar = jar.add(cookie);
+    // The token only ever travels in the httpOnly cookie. Returning it in the JSON
+    // body (the old `X-Return-Token` behaviour) handed any same-origin script a
+    // 24-hour bearer token and bypassed the cookie protections entirely.
+    let updated_jar = jar.add(build_auth_cookie(token));
 
-    let return_token = headers
-        .get("x-return-token")
-        .and_then(|v| v.to_str().ok())
-        .map(|v| v.trim() == "1")
-        .unwrap_or(false);
-
-    let response_token = if return_token { Some(token) } else { None };
-
-    tracing::info!(user_id = user.id, email = %user.email, "Admin login successful");
+    tracing::info!(user_id = user.id, "Admin login successful");
 
     Ok((
         updated_jar,
         Json(LoginResponse {
-            token: response_token,
+            token: None,
             name: user.name,
             email: user.email,
         }),
@@ -324,8 +313,8 @@ pub async fn verify_session(
     claims: AdminClaims,
     State(pool): State<SqlitePool>,
 ) -> Result<Json<LoginResponse>, AppError> {
-    let user = sqlx::query_as::<_, AdminUser>(
-        "SELECT id, email, password_hash, name FROM admin_users WHERE id = ?1",
+    let (email, name) = sqlx::query_as::<_, (String, String)>(
+        "SELECT email, name FROM admin_users WHERE id = ?1",
     )
     .bind(claims.sub)
     .fetch_optional(&pool)
@@ -334,8 +323,8 @@ pub async fn verify_session(
 
     Ok(Json(LoginResponse {
         token: None,
-        name: user.name,
-        email: user.email,
+        name,
+        email,
     }))
 }
 
@@ -383,8 +372,11 @@ async fn upload_file(
             .await
             .map_err(|e| AppError::BadRequest(e.to_string()))?;
 
-        if data.len() > 20 * 1024 * 1024 {
-            return Err(AppError::BadRequest("File exceeds 20MB limit".into()));
+        if data.len() > crate::config::max_upload_bytes() {
+            return Err(AppError::BadRequest(format!(
+                "File exceeds the {}MB limit",
+                crate::config::max_upload_bytes() / (1024 * 1024)
+            )));
         }
 
         // Sniff the actual MIME type from magic bytes.
@@ -520,13 +512,13 @@ async fn delete_upload(
         .ok_or_else(|| AppError::BadRequest("Invalid filename".into()))?;
 
     let path = format!("{}/{}", crate::upload_dir(), safe_filename);
-    if !std::path::Path::new(&path).exists() {
-        return Err(AppError::NotFound);
-    }
-
-    tokio::fs::remove_file(&path)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    tokio::fs::remove_file(&path).await.map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            AppError::NotFound
+        } else {
+            AppError::Internal(e.to_string())
+        }
+    })?;
 
     Ok(Json(DeleteResponse {
         message: "File deleted successfully".into(),
@@ -541,10 +533,14 @@ async fn delete_upload(
 async fn list_announcements(
     _claims: AdminClaims,
     State(pool): State<SqlitePool>,
+    Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<Vec<Announcement>>, AppError> {
     let rows = sqlx::query_as::<_, Announcement>(
-        "SELECT id, message, link_text, link_url, priority, is_active, created_at FROM announcements ORDER BY id DESC"
-    ).fetch_all(&pool).await?;
+        "SELECT id, message, link_text, link_url, priority, is_active, created_at FROM announcements ORDER BY id DESC LIMIT ?1 OFFSET ?2"
+    )
+    .bind(pagination.limit())
+    .bind(pagination.offset())
+    .fetch_all(&pool).await?;
     Ok(Json(rows))
 }
 
@@ -589,10 +585,10 @@ async fn update_announcement(
             "message must be at most 1000 characters".into(),
         ));
     }
-    let res = sqlx::query("UPDATE announcements SET message=?1, link_text=?2, link_url=?3, priority=?4, is_active=?5 WHERE id=?6")
+    let res = sqlx::query("UPDATE announcements SET message=?1, link_text=?2, link_url=?3, priority=COALESCE(?4, priority), is_active=COALESCE(?5, is_active) WHERE id=?6")
         .bind(&p.message).bind(&p.link_text).bind(&p.link_url)
-        .bind(p.priority.as_deref().unwrap_or("info"))
-        .bind(p.is_active.unwrap_or(true))
+        .bind(p.priority.as_deref())
+        .bind(p.is_active)
         .bind(id)
         .execute(&pool).await?;
     if res.rows_affected() == 0 {
@@ -707,10 +703,14 @@ async fn update_stats(
 async fn list_events(
     _claims: AdminClaims,
     State(pool): State<SqlitePool>,
+    Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<Vec<Event>>, AppError> {
     let rows = sqlx::query_as::<_, Event>(
-        "SELECT id, title, slug, date, time_range, venue, category, short_description, full_summary, poster_url, registration_link, speaker_or_organizer, is_past, is_featured FROM events ORDER BY date DESC"
-    ).fetch_all(&pool).await?;
+        "SELECT id, title, slug, date, time_range, venue, category, short_description, full_summary, poster_url, registration_link, speaker_or_organizer, is_past, is_featured FROM events ORDER BY date DESC LIMIT ?1 OFFSET ?2"
+    )
+    .bind(pagination.limit())
+    .bind(pagination.offset())
+    .fetch_all(&pool).await?;
     Ok(Json(rows))
 }
 
@@ -729,9 +729,7 @@ async fn create_event(
             "title must be at most 300 characters".into(),
         ));
     }
-    if p.date.trim().is_empty() {
-        return Err(AppError::BadRequest("date is required".into()));
-    }
+    crate::util::validate_iso_date("date", &p.date)?;
 
     let slug = p.slug.unwrap_or_else(|| slugify(&p.title));
     let res = sqlx::query("INSERT INTO events (title,slug,date,time_range,venue,category,short_description,full_summary,poster_url,registration_link,speaker_or_organizer,is_past,is_featured) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)")
@@ -768,16 +766,14 @@ async fn update_event(
             "title must be at most 300 characters".into(),
         ));
     }
-    if p.date.trim().is_empty() {
-        return Err(AppError::BadRequest("date is required".into()));
-    }
+    crate::util::validate_iso_date("date", &p.date)?;
     let slug = p.slug.unwrap_or_else(|| slugify(&p.title));
-    let res = sqlx::query("UPDATE events SET title=?1,slug=?2,date=?3,time_range=?4,venue=?5,category=?6,short_description=?7,full_summary=?8,poster_url=?9,registration_link=?10,speaker_or_organizer=?11,is_past=?12,is_featured=?13 WHERE id=?14")
+    let res = sqlx::query("UPDATE events SET title=?1,slug=?2,date=?3,time_range=?4,venue=?5,category=COALESCE(?6, category),short_description=?7,full_summary=?8,poster_url=?9,registration_link=?10,speaker_or_organizer=?11,is_past=COALESCE(?12, is_past),is_featured=COALESCE(?13, is_featured) WHERE id=?14")
         .bind(&p.title).bind(&slug).bind(&p.date).bind(&p.time_range).bind(&p.venue)
-        .bind(p.category.as_deref().unwrap_or("Seminar"))
+        .bind(p.category.as_deref())
         .bind(&p.short_description).bind(&p.full_summary).bind(&p.poster_url)
         .bind(&p.registration_link).bind(&p.speaker_or_organizer)
-        .bind(p.is_past.unwrap_or(false)).bind(p.is_featured.unwrap_or(false))
+        .bind(p.is_past).bind(p.is_featured)
         .bind(id)
         .execute(&pool).await;
 
@@ -842,27 +838,15 @@ async fn update_registration(
     Path(id): Path<i64>,
     Json(payload): Json<UpdateEventRegistration>,
 ) -> Result<Json<EventRegistration>, AppError> {
-    let current: Option<(bool,)> =
-        sqlx::query_as("SELECT attended FROM event_registrations WHERE id = ?1")
-            .bind(id)
-            .fetch_optional(&pool)
-            .await?;
-
-    let (current_attended,) = current.ok_or(AppError::NotFound)?;
-    let new_attended = payload.attended.unwrap_or(!current_attended);
-
-    sqlx::query("UPDATE event_registrations SET attended = ?1 WHERE id = ?2")
-        .bind(new_attended)
-        .bind(id)
-        .execute(&pool)
-        .await?;
-
+    // One atomic statement: the previous read-then-write lost concurrent toggles.
     let updated = sqlx::query_as::<_, EventRegistration>(
-        "SELECT id, event_id, student_name, roll_number, batch, department, email, phone, certificate_code, attended, created_at FROM event_registrations WHERE id = ?1"
+        "UPDATE event_registrations SET attended = COALESCE(?1, NOT attended) WHERE id = ?2 RETURNING id, event_id, student_name, roll_number, batch, department, email, phone, certificate_code, attended, created_at"
     )
+    .bind(payload.attended)
     .bind(id)
-    .fetch_one(&pool)
-    .await?;
+    .fetch_optional(&pool)
+    .await?
+    .ok_or(AppError::NotFound)?;
 
     Ok(Json(updated))
 }
@@ -893,10 +877,14 @@ async fn delete_registration(
 async fn list_team(
     _claims: AdminClaims,
     State(pool): State<SqlitePool>,
+    Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<Vec<TeamMember>>, AppError> {
     let rows = sqlx::query_as::<_, TeamMember>(
-        "SELECT id, name, role, role_responsibility, photo_url, batch, tenure_year, is_current, is_faculty_advisor, bio, linkedin_url, email, display_order FROM team_members ORDER BY display_order ASC"
-    ).fetch_all(&pool).await?;
+        "SELECT id, name, role, role_responsibility, photo_url, batch, tenure_year, is_current, is_faculty_advisor, bio, linkedin_url, email, display_order FROM team_members ORDER BY display_order ASC LIMIT ?1 OFFSET ?2"
+    )
+    .bind(pagination.limit())
+    .bind(pagination.offset())
+    .fetch_all(&pool).await?;
     Ok(Json(rows))
 }
 
@@ -937,12 +925,11 @@ async fn update_team_member(
     if p.role.trim().is_empty() {
         return Err(AppError::BadRequest("role is required".into()));
     }
-    let default_tenure = current_academic_year();
-    let res = sqlx::query("UPDATE team_members SET name=?1,role=?2,role_responsibility=?3,photo_url=?4,batch=?5,tenure_year=?6,is_current=?7,is_faculty_advisor=?8,bio=?9,linkedin_url=?10,email=?11,display_order=?12 WHERE id=?13")
+    let res = sqlx::query("UPDATE team_members SET name=?1,role=?2,role_responsibility=?3,photo_url=?4,batch=?5,tenure_year=COALESCE(?6, tenure_year),is_current=COALESCE(?7, is_current),is_faculty_advisor=COALESCE(?8, is_faculty_advisor),bio=?9,linkedin_url=?10,email=?11,display_order=COALESCE(?12, display_order) WHERE id=?13")
         .bind(&p.name).bind(&p.role).bind(&p.role_responsibility).bind(&p.photo_url)
-        .bind(&p.batch).bind(p.tenure_year.as_deref().unwrap_or(&default_tenure))
-        .bind(p.is_current.unwrap_or(true)).bind(p.is_faculty_advisor.unwrap_or(false))
-        .bind(&p.bio).bind(&p.linkedin_url).bind(&p.email).bind(p.display_order.unwrap_or(99))
+        .bind(&p.batch).bind(p.tenure_year.as_deref())
+        .bind(p.is_current).bind(p.is_faculty_advisor)
+        .bind(&p.bio).bind(&p.linkedin_url).bind(&p.email).bind(p.display_order)
         .bind(id)
         .execute(&pool).await?;
     if res.rows_affected() == 0 {
@@ -979,10 +966,14 @@ async fn delete_team_member(
 async fn list_gallery(
     _claims: AdminClaims,
     State(pool): State<SqlitePool>,
+    Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<Vec<GalleryImage>>, AppError> {
     let rows = sqlx::query_as::<_, GalleryImage>(
-        "SELECT id, image_url, caption, event_id, event_name, year, created_at FROM gallery_images ORDER BY id DESC"
-    ).fetch_all(&pool).await?;
+        "SELECT id, image_url, caption, event_id, event_name, year, created_at FROM gallery_images ORDER BY id DESC LIMIT ?1 OFFSET ?2"
+    )
+    .bind(pagination.limit())
+    .bind(pagination.offset())
+    .fetch_all(&pool).await?;
     Ok(Json(rows))
 }
 
@@ -1050,10 +1041,14 @@ async fn delete_gallery_image(
 async fn list_posts(
     _claims: AdminClaims,
     State(pool): State<SqlitePool>,
+    Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<Vec<Post>>, AppError> {
     let rows = sqlx::query_as::<_, Post>(
-        "SELECT id, title, slug, excerpt, body_markdown, author_name, author_role, author_batch, cover_image_url, category, material_formula, crystal_structure, read_time_minutes, is_featured, published_at FROM posts ORDER BY published_at DESC"
-    ).fetch_all(&pool).await?;
+        "SELECT id, title, slug, excerpt, body_markdown, author_name, author_role, author_batch, cover_image_url, category, material_formula, crystal_structure, read_time_minutes, is_featured, published_at FROM posts ORDER BY published_at DESC LIMIT ?1 OFFSET ?2"
+    )
+    .bind(pagination.limit())
+    .bind(pagination.offset())
+    .fetch_all(&pool).await?;
     Ok(Json(rows))
 }
 
@@ -1108,13 +1103,13 @@ async fn update_post(
         ));
     }
     let slug = p.slug.unwrap_or_else(|| slugify(&p.title));
-    let res = sqlx::query("UPDATE posts SET title=?1,slug=?2,excerpt=?3,body_markdown=?4,author_name=?5,author_role=?6,author_batch=?7,cover_image_url=?8,category=?9,material_formula=?10,crystal_structure=?11,read_time_minutes=?12,is_featured=?13 WHERE id=?14")
+    let res = sqlx::query("UPDATE posts SET title=?1,slug=?2,excerpt=?3,body_markdown=?4,author_name=?5,author_role=?6,author_batch=?7,cover_image_url=?8,category=COALESCE(?9, category),material_formula=?10,crystal_structure=?11,read_time_minutes=COALESCE(?12, read_time_minutes),is_featured=COALESCE(?13, is_featured) WHERE id=?14")
         .bind(&p.title).bind(&slug).bind(&p.excerpt).bind(&p.body_markdown)
         .bind(&p.author_name).bind(&p.author_role).bind(&p.author_batch).bind(&p.cover_image_url)
-        .bind(p.category.as_deref().unwrap_or("Explainer"))
+        .bind(p.category.as_deref())
         .bind(&p.material_formula).bind(&p.crystal_structure)
-        .bind(p.read_time_minutes.unwrap_or(5))
-        .bind(p.is_featured.unwrap_or(false))
+        .bind(p.read_time_minutes)
+        .bind(p.is_featured)
         .bind(id)
         .execute(&pool).await;
 
@@ -1161,10 +1156,14 @@ async fn delete_post(
 async fn list_resources(
     _claims: AdminClaims,
     State(pool): State<SqlitePool>,
+    Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<Vec<Resource>>, AppError> {
     let rows = sqlx::query_as::<_, Resource>(
-        "SELECT id, title, url, category, software_tag, description, is_pinned FROM resources ORDER BY is_pinned DESC, id DESC"
-    ).fetch_all(&pool).await?;
+        "SELECT id, title, url, category, software_tag, description, is_pinned FROM resources ORDER BY is_pinned DESC, id DESC LIMIT ?1 OFFSET ?2"
+    )
+    .bind(pagination.limit())
+    .bind(pagination.offset())
+    .fetch_all(&pool).await?;
     Ok(Json(rows))
 }
 
@@ -1202,9 +1201,9 @@ async fn update_resource(
     if p.url.trim().is_empty() {
         return Err(AppError::BadRequest("url is required".into()));
     }
-    let res = sqlx::query("UPDATE resources SET title=?1,url=?2,category=?3,software_tag=?4,description=?5,is_pinned=?6 WHERE id=?7")
-        .bind(&p.title).bind(&p.url).bind(p.category.as_deref().unwrap_or("Software"))
-        .bind(&p.software_tag).bind(&p.description).bind(p.is_pinned.unwrap_or(false)).bind(id)
+    let res = sqlx::query("UPDATE resources SET title=?1,url=?2,category=COALESCE(?3, category),software_tag=?4,description=?5,is_pinned=COALESCE(?6, is_pinned) WHERE id=?7")
+        .bind(&p.title).bind(&p.url).bind(p.category.as_deref())
+        .bind(&p.software_tag).bind(&p.description).bind(p.is_pinned).bind(id)
         .execute(&pool).await?;
     if res.rows_affected() == 0 {
         return Err(AppError::NotFound);
@@ -1240,10 +1239,14 @@ async fn delete_resource(
 async fn list_opportunities(
     _claims: AdminClaims,
     State(pool): State<SqlitePool>,
+    Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<Vec<Opportunity>>, AppError> {
     let rows = sqlx::query_as::<_, Opportunity>(
-        "SELECT id, title, organization, opportunity_type, location, deadline, apply_url, description, posted_by_alumnus, is_active, created_at FROM opportunities ORDER BY id DESC"
-    ).fetch_all(&pool).await?;
+        "SELECT id, title, organization, opportunity_type, location, deadline, apply_url, description, posted_by_alumnus, is_active, created_at FROM opportunities ORDER BY id DESC LIMIT ?1 OFFSET ?2"
+    )
+    .bind(pagination.limit())
+    .bind(pagination.offset())
+    .fetch_all(&pool).await?;
     Ok(Json(rows))
 }
 
@@ -1258,6 +1261,11 @@ async fn create_opportunity(
     }
     if p.organization.trim().is_empty() {
         return Err(AppError::BadRequest("organization is required".into()));
+    }
+    if let Some(deadline) = p.deadline.as_deref() {
+        if !deadline.trim().is_empty() {
+            crate::util::validate_iso_date("deadline", deadline)?;
+        }
     }
     sqlx::query("INSERT INTO opportunities (title,organization,opportunity_type,location,deadline,apply_url,description,posted_by_alumnus,is_active) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)")
         .bind(&p.title).bind(&p.organization).bind(p.opportunity_type.as_deref().unwrap_or("Internship"))
@@ -1282,10 +1290,15 @@ async fn update_opportunity(
     if p.organization.trim().is_empty() {
         return Err(AppError::BadRequest("organization is required".into()));
     }
-    let res = sqlx::query("UPDATE opportunities SET title=?1,organization=?2,opportunity_type=?3,location=?4,deadline=?5,apply_url=?6,description=?7,posted_by_alumnus=?8,is_active=?9 WHERE id=?10")
-        .bind(&p.title).bind(&p.organization).bind(p.opportunity_type.as_deref().unwrap_or("Internship"))
+    if let Some(deadline) = p.deadline.as_deref() {
+        if !deadline.trim().is_empty() {
+            crate::util::validate_iso_date("deadline", deadline)?;
+        }
+    }
+    let res = sqlx::query("UPDATE opportunities SET title=?1,organization=?2,opportunity_type=COALESCE(?3, opportunity_type),location=?4,deadline=?5,apply_url=?6,description=?7,posted_by_alumnus=?8,is_active=COALESCE(?9, is_active) WHERE id=?10")
+        .bind(&p.title).bind(&p.organization).bind(p.opportunity_type.as_deref())
         .bind(&p.location).bind(&p.deadline).bind(&p.apply_url).bind(&p.description).bind(&p.posted_by_alumnus)
-        .bind(p.is_active.unwrap_or(true))
+        .bind(p.is_active)
         .bind(id)
         .execute(&pool).await?;
     if res.rows_affected() == 0 {
@@ -1322,10 +1335,14 @@ async fn delete_opportunity(
 async fn list_alumni(
     _claims: AdminClaims,
     State(pool): State<SqlitePool>,
+    Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<Vec<Alumnus>>, AppError> {
     let rows = sqlx::query_as::<_, Alumnus>(
-        "SELECT id, name, graduating_batch, current_role, current_organization, industry_sector, location, photo_url, quote_testimonial, linkedin_url FROM alumni ORDER BY graduating_batch DESC"
-    ).fetch_all(&pool).await?;
+        "SELECT id, name, graduating_batch, current_role, current_organization, industry_sector, location, photo_url, quote_testimonial, linkedin_url FROM alumni ORDER BY graduating_batch DESC LIMIT ?1 OFFSET ?2"
+    )
+    .bind(pagination.limit())
+    .bind(pagination.offset())
+    .fetch_all(&pool).await?;
     Ok(Json(rows))
 }
 
@@ -1403,10 +1420,14 @@ async fn delete_alumnus(
 async fn list_projects(
     _claims: AdminClaims,
     State(pool): State<SqlitePool>,
+    Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<Vec<Project>>, AppError> {
     let rows = sqlx::query_as::<_, Project>(
-        "SELECT id, title, students, batch, supervisors, project_type, abstract, image_url, paper_or_repo_url, tags FROM projects ORDER BY id DESC"
-    ).fetch_all(&pool).await?;
+        "SELECT id, title, students, batch, supervisors, project_type, abstract, image_url, paper_or_repo_url, tags FROM projects ORDER BY id DESC LIMIT ?1 OFFSET ?2"
+    )
+    .bind(pagination.limit())
+    .bind(pagination.offset())
+    .fetch_all(&pool).await?;
     Ok(Json(rows))
 }
 
@@ -1445,9 +1466,9 @@ async fn update_project(
     if p.batch.trim().is_empty() {
         return Err(AppError::BadRequest("batch is required".into()));
     }
-    let res = sqlx::query("UPDATE projects SET title=?1,students=?2,batch=?3,supervisors=?4,project_type=?5,abstract=?6,image_url=?7,paper_or_repo_url=?8,tags=?9 WHERE id=?10")
+    let res = sqlx::query("UPDATE projects SET title=?1,students=?2,batch=?3,supervisors=?4,project_type=COALESCE(?5, project_type),abstract=?6,image_url=?7,paper_or_repo_url=?8,tags=?9 WHERE id=?10")
         .bind(&p.title).bind(&p.students).bind(&p.batch).bind(&p.supervisors)
-        .bind(p.project_type.as_deref().unwrap_or("FYP"))
+        .bind(p.project_type.as_deref())
         .bind(&p.r#abstract).bind(&p.image_url).bind(&p.paper_or_repo_url).bind(&p.tags)
         .bind(id)
         .execute(&pool).await?;
@@ -1485,10 +1506,14 @@ async fn delete_project(
 async fn list_sponsors(
     _claims: AdminClaims,
     State(pool): State<SqlitePool>,
+    Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<Vec<Sponsor>>, AppError> {
     let rows = sqlx::query_as::<_, Sponsor>(
-        "SELECT id, name, logo_url, website_url, tier, since_year, display_order FROM sponsors ORDER BY display_order ASC, id DESC"
-    ).fetch_all(&pool).await?;
+        "SELECT id, name, logo_url, website_url, tier, since_year, display_order FROM sponsors ORDER BY display_order ASC, id DESC LIMIT ?1 OFFSET ?2"
+    )
+    .bind(pagination.limit())
+    .bind(pagination.offset())
+    .fetch_all(&pool).await?;
     Ok(Json(rows))
 }
 
@@ -1525,13 +1550,13 @@ async fn update_sponsor(
     if p.name.trim().is_empty() {
         return Err(AppError::BadRequest("name is required".into()));
     }
-    let res = sqlx::query("UPDATE sponsors SET name=?1,logo_url=?2,website_url=?3,tier=?4,since_year=?5,display_order=?6 WHERE id=?7")
+    let res = sqlx::query("UPDATE sponsors SET name=?1,logo_url=?2,website_url=?3,tier=COALESCE(?4, tier),since_year=?5,display_order=COALESCE(?6, display_order) WHERE id=?7")
         .bind(&p.name)
         .bind(&p.logo_url)
         .bind(&p.website_url)
-        .bind(p.tier.as_deref().unwrap_or("Partner"))
+        .bind(p.tier.as_deref())
         .bind(&p.since_year)
-        .bind(p.display_order.unwrap_or(0))
+        .bind(p.display_order)
         .bind(id)
         .execute(&pool)
         .await?;
@@ -1569,10 +1594,13 @@ async fn delete_sponsor(
 async fn list_faqs(
     _claims: AdminClaims,
     State(pool): State<SqlitePool>,
+    Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<Vec<Faq>>, AppError> {
     let rows = sqlx::query_as::<_, Faq>(
-        "SELECT id, question, answer, category, display_order FROM faqs ORDER BY display_order ASC",
+        "SELECT id, question, answer, category, display_order FROM faqs ORDER BY display_order ASC LIMIT ?1 OFFSET ?2",
     )
+    .bind(pagination.limit())
+    .bind(pagination.offset())
     .fetch_all(&pool)
     .await?;
     Ok(Json(rows))
@@ -1616,12 +1644,12 @@ async fn update_faq(
         return Err(AppError::BadRequest("answer is required".into()));
     }
     let res = sqlx::query(
-        "UPDATE faqs SET question=?1,answer=?2,category=?3,display_order=?4 WHERE id=?5",
+        "UPDATE faqs SET question=?1,answer=?2,category=COALESCE(?3, category),display_order=COALESCE(?4, display_order) WHERE id=?5",
     )
     .bind(&p.question)
     .bind(&p.answer)
-    .bind(p.category.as_deref().unwrap_or("General"))
-    .bind(p.display_order.unwrap_or(99))
+    .bind(p.category.as_deref())
+    .bind(p.display_order)
     .bind(id)
     .execute(&pool)
     .await?;
@@ -1675,12 +1703,9 @@ async fn update_membership_status(
     _claims: AdminClaims,
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
-    Json(body): Json<serde_json::Value>,
+    Json(body): Json<UpdateMembershipStatus>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    let status = body
-        .get("status")
-        .and_then(|s| s.as_str())
-        .ok_or_else(|| AppError::BadRequest("status is required".into()))?;
+    let status = body.status.trim();
 
     if !["Pending", "Approved", "Rejected"].contains(&status) {
         return Err(AppError::BadRequest(
@@ -1800,13 +1825,9 @@ async fn create_membership_from_admin(
     State(pool): State<SqlitePool>,
     Json(payload): Json<CreateMembershipApplication>,
 ) -> Result<Json<DeleteResponse>, AppError> {
-    if payload.full_name.trim().is_empty() {
-        return Err(AppError::BadRequest("full_name is required".into()));
-    }
+    // Admin-created records follow exactly the same rules as public submissions.
+    crate::util::validate_membership(&payload)?;
     let email = payload.email.trim().to_lowercase();
-    if email.is_empty() || !email.contains('@') {
-        return Err(AppError::BadRequest("A valid email is required".into()));
-    }
     let res = sqlx::query(
         "INSERT INTO membership_applications (full_name, roll_number, batch, department, email, phone, interests, why_join) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"
     )
@@ -1840,10 +1861,14 @@ async fn create_membership_from_admin(
 async fn list_sections(
     _claims: AdminClaims,
     State(pool): State<SqlitePool>,
+    Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<Vec<SiteSection>>, AppError> {
     let rows = sqlx::query_as::<_, SiteSection>(
-        "SELECT id, section_key, title, subtitle, content, badge, extra_json, updated_at FROM site_sections ORDER BY id ASC"
-    ).fetch_all(&pool).await?;
+        "SELECT id, section_key, title, subtitle, content, badge, extra_json, updated_at FROM site_sections ORDER BY id ASC LIMIT ?1 OFFSET ?2"
+    )
+    .bind(pagination.limit())
+    .bind(pagination.offset())
+    .fetch_all(&pool).await?;
     Ok(Json(rows))
 }
 

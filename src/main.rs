@@ -32,27 +32,41 @@ async fn shutdown_signal() {
 
 #[tokio::main]
 async fn main() {
-    // Load .env if present (silently ok if missing)
-    dotenvy::dotenv().ok();
+    // Load .env only outside production: a stray file in the working directory must
+    // not override the real environment of a deployed container.
+    if !pms_platform::config::is_production() {
+        dotenvy::dotenv().ok();
+    }
 
-    // Initialize tracing FIRST so all startup logs and warnings are captured
+    // Initialize tracing FIRST so all startup logs and warnings are captured.
+    let default_filter = if pms_platform::config::is_production() {
+        "pms_platform=info,tower_http=info"
+    } else {
+        "pms_platform=debug,tower_http=debug"
+    };
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "pms_platform=debug,tower_http=debug".into()),
+                .unwrap_or_else(|_| default_filter.into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
+
+    // Validate configuration before any I/O so a typo in RUST_ENV cannot silently
+    // select the development defaults in a deployed environment.
+    if let Err(problem) = pms_platform::config::validate_startup() {
+        eprintln!("\nFATAL: {problem}\n");
+        std::process::exit(1);
+    }
 
     // Validate JWT_SECRET early so fail-fast happens before any I/O.
     // This call will process::exit(1) in production if the secret is unset or insecure.
     let _secret = auth::jwt_secret();
 
-    let is_production =
-        std::env::var("RUST_ENV").unwrap_or_default().to_lowercase() == "production";
-    if is_production && std::env::var("TRUST_PROXY").is_err() {
+    if pms_platform::config::is_production() && !pms_platform::config::flag("TRUST_PROXY", false) {
         tracing::warn!(
-            "⚠️ TRUST_PROXY is unset in production mode. Reverse proxy IP headers will not be trusted."
+            "TRUST_PROXY is unset. Forwarded client IPs are only trusted when the peer is \
+             loopback or private; set TRUST_PROXY=true when running behind a reverse proxy."
         );
     }
 

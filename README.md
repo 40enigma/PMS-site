@@ -184,6 +184,10 @@ The platform reads all security and networking configurations from `.env` or sys
 | `SEED_DATA` | Flag to enable demo data seeding (`true`/`false`) | `true` | `false` for clean production DB |
 | `JWT_COOKIE_NAME` | Name of the authentication cookie | `pms_admin_token` | `pms_admin_token` |
 | `JWT_COOKIE_SECURE` | Force Secure flag on auth cookie (`true`/`false`) | `false` in dev | `true` in production |
+| `JWT_TTL_SECONDS` | Admin session lifetime in seconds (also the cookie `Max-Age`) | `86400` | `86400` |
+| `DB_MAX_CONNECTIONS` | SQLite connection pool size | `5` | `5` |
+| `DB_BUSY_TIMEOUT_MS` | How long SQLite waits for a write lock | `5000` | `5000` |
+| `MAX_UPLOAD_MB` | Upload size cap in megabytes | `20` | `20` |
 | `RATE_LIMIT_LOGIN_RPM` | Max login requests per minute per IP | `10` | `10` |
 | `RATE_LIMIT_SUBMIT_RPM`| Max generic submissions per minute per IP | `30` | `30` |
 | `RATE_LIMIT_REGISTER_RPM`| Max event registrations per minute per IP | `60` | `60` |

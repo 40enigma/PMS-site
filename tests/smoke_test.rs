@@ -1400,7 +1400,7 @@ async fn test_login_token_return_header() {
         "Browser login must not return token in JSON"
     );
 
-    // 2. Programmatic login with X-Return-Token: 1 -> token is returned in JSON body
+    // 2. The removed X-Return-Token header must not leak the token into the body
     let req_prog = Request::builder()
         .method(Method::POST)
         .uri("/api/auth/login")
@@ -1411,11 +1411,15 @@ async fn test_login_token_return_header() {
 
     let res_prog = app.oneshot(req_prog).await.unwrap();
     assert_eq!(res_prog.status(), StatusCode::OK);
+    assert!(
+        res_prog.headers().contains_key("set-cookie"),
+        "Login must always set the httpOnly cookie"
+    );
     let prog_json: serde_json::Value =
         serde_json::from_slice(&res_prog.into_body().collect().await.unwrap().to_bytes()).unwrap();
     assert!(
-        prog_json["token"].is_string(),
-        "Programmatic login must return token in JSON"
+        prog_json["token"].is_null(),
+        "The admin JWT must never be returned in a response body"
     );
 }
 

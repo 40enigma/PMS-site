@@ -28,12 +28,17 @@ use governor::{
 use crate::error::AppError;
 
 type KeyedLimiter = RateLimiter<IpAddr, DashMapStateStore<IpAddr>, DefaultClock, NoOpMiddleware>;
+/// Limiter keyed by a normalised login email rather than an address.
+type KeyedAccountLimiter =
+    RateLimiter<String, DashMapStateStore<String>, DefaultClock, NoOpMiddleware>;
 
 static GLOBAL_RATE_LIMIT: OnceLock<RateLimitState> = OnceLock::new();
 
 /// Shared rate-limit state passed through Axum state or accessed globally.
 pub struct RateLimitState {
     pub login: Arc<KeyedLimiter>,
+    /// Per-account login limiter, so one exhausted IP bucket cannot lock out an admin.
+    pub login_account: Arc<KeyedAccountLimiter>,
     pub submit: Arc<KeyedLimiter>,
     pub register: Arc<KeyedLimiter>,
     pub contact: Arc<KeyedLimiter>,
@@ -96,6 +101,7 @@ impl RateLimitState {
 
         let state = Self {
             login: Arc::new(RateLimiter::keyed(login_quota)),
+            login_account: Arc::new(RateLimiter::keyed(Quota::per_minute(login_rpm))),
             submit: Arc::new(RateLimiter::keyed(submit_quota)),
             register: Arc::new(RateLimiter::keyed(register_quota)),
             contact: Arc::new(RateLimiter::keyed(contact_quota)),
@@ -107,6 +113,7 @@ impl RateLimitState {
         // Periodic background task to prune stale entries and shrink DashMap,
         // preventing unbounded memory growth under unique IP load.
         let login_limiter = Arc::clone(&state.login);
+        let login_account_limiter = Arc::clone(&state.login_account);
         let submit_limiter = Arc::clone(&state.submit);
         let register_limiter = Arc::clone(&state.register);
         let contact_limiter = Arc::clone(&state.contact);
@@ -119,6 +126,8 @@ impl RateLimitState {
                 interval.tick().await;
                 login_limiter.retain_recent();
                 login_limiter.shrink_to_fit();
+                login_account_limiter.retain_recent();
+                login_account_limiter.shrink_to_fit();
                 submit_limiter.retain_recent();
                 submit_limiter.shrink_to_fit();
                 register_limiter.retain_recent();
@@ -146,6 +155,17 @@ impl RateLimitState {
     pub fn check_login(&self, ip: IpAddr) -> Result<(), AppError> {
         let key = canonicalize_rate_limit_ip(ip);
         self.login
+            .check_key(&key)
+            .map_err(|_| AppError::TooManyRequests)
+    }
+
+    /// Check the per-account login budget for a normalised email.
+    ///
+    /// Reverse proxies collapse every visitor onto one address, so an IP-only budget
+    /// lets a single attacker deny admin login; this second dimension is per account.
+    pub fn check_login_account(&self, email: &str) -> Result<(), AppError> {
+        let key = email.trim().to_ascii_lowercase();
+        self.login_account
             .check_key(&key)
             .map_err(|_| AppError::TooManyRequests)
     }
@@ -207,16 +227,12 @@ impl Default for RateLimitState {
 
 /// Check if TRUST_PROXY is enabled.
 pub fn is_trust_proxy() -> bool {
-    std::env::var("TRUST_PROXY")
-        .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
-        .unwrap_or(false)
+    crate::config::flag("TRUST_PROXY", false)
 }
 
 /// Check if TRUST_CLOUDFLARE is enabled.
 pub fn is_trust_cloudflare() -> bool {
-    std::env::var("TRUST_CLOUDFLARE")
-        .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
-        .unwrap_or(false)
+    crate::config::flag("TRUST_CLOUDFLARE", false)
 }
 
 /// Extract client IP from HTTP headers ONLY if `TRUST_PROXY=true` is set in the environment.
@@ -266,18 +282,37 @@ pub fn client_ip_from_headers(headers: &axum::http::HeaderMap) -> IpAddr {
 /// 2. Extract TCP socket address from `ConnectInfo<SocketAddr>` extension.
 /// 3. Fallback to `127.0.0.1` (e.g. for in-memory oneshot tests without ConnectInfo).
 pub fn client_ip_from_request_parts(parts: &Parts) -> IpAddr {
-    if is_trust_proxy() {
+    let peer = parts
+        .extensions
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|ConnectInfo(addr)| addr.ip())
+        .unwrap_or(IpAddr::from([127, 0, 0, 1]));
+
+    // Trust forwarded headers when explicitly configured, and also when the request
+    // arrives from a loopback or private peer, which is how a local reverse proxy
+    // connects. Without that second case every visitor behind Docker/Nginx shares a
+    // single bucket and one attacker can exhaust the limiter for the whole site.
+    if is_trust_proxy() || is_local_peer(peer) {
         let header_ip = client_ip_from_headers(&parts.headers);
         if header_ip != IpAddr::from([127, 0, 0, 1]) {
             return header_ip;
         }
     }
 
-    if let Some(ConnectInfo(addr)) = parts.extensions.get::<ConnectInfo<SocketAddr>>() {
-        return addr.ip();
-    }
+    peer
+}
 
-    "127.0.0.1".parse().unwrap()
+/// Loopback, RFC1918, link-local or IPv6 unique-local peer address.
+fn is_local_peer(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => v4.is_loopback() || v4.is_private() || v4.is_link_local(),
+        IpAddr::V6(v6) => {
+            let segments = v6.segments();
+            v6.is_loopback()
+                || (segments[0] & 0xfe00) == 0xfc00
+                || (segments[0] & 0xffc0) == 0xfe80
+        }
+    }
 }
 
 /// Type-safe Axum extractor for resolving the client's verified IP address.

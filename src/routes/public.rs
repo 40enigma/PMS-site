@@ -149,7 +149,7 @@ pub async fn get_events(
     State(pool): State<SqlitePool>,
     Query(filter): Query<EventFilter>,
 ) -> Result<Json<Vec<Event>>, AppError> {
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let today = crate::util::today_local();
 
     let mut rows = match filter.is_past {
         Some(true) => {
@@ -226,7 +226,7 @@ pub async fn get_event(
     .await?
     .ok_or(AppError::NotFound)?;
 
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let today = crate::util::today_local();
     row.is_past = row.is_past || row.date < today;
 
     Ok(Json(row))
@@ -298,17 +298,19 @@ pub async fn register_for_event(
             .await?
             .ok_or(AppError::NotFound)?;
 
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let today = crate::util::today_local();
     if is_past || date < today {
         return Err(AppError::BadRequest(
             "Registration is closed for past events".into(),
         ));
     }
 
+    // 16 hex characters (64 bits) rather than 8: the code is the only secret behind
+    // certificate verification, which discloses the holder's name.
     let cert_code = format!(
         "PMS-{}-{}",
         event_id,
-        uuid::Uuid::new_v4().to_string()[..8].to_uppercase()
+        uuid::Uuid::new_v4().simple().to_string()[..16].to_uppercase()
     );
 
     let insert_res = sqlx::query(
@@ -327,8 +329,10 @@ pub async fn register_for_event(
 
     if let Err(err) = insert_res {
         if is_unique_violation(&err) {
+            // Generic message: the specific one confirmed whether a roll number or
+            // email was already registered for this event.
             return Err(AppError::Conflict(
-                "You are already registered for this event".into(),
+                "These details are already registered for this event".into(),
             ));
         }
         return Err(AppError::Database(err));
@@ -487,7 +491,7 @@ pub async fn get_opportunities(
     State(pool): State<SqlitePool>,
     Query(filter): Query<OpportunityFilter>,
 ) -> Result<Json<Vec<Opportunity>>, AppError> {
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let today = crate::util::today_local();
     let rows = sqlx::query_as::<_, Opportunity>(
         "SELECT id, title, organization, opportunity_type, location, deadline, apply_url, description, posted_by_alumnus, is_active, created_at FROM opportunities
          WHERE is_active = 1

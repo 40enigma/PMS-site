@@ -12,11 +12,11 @@ pub async fn init_pool() -> SqlitePool {
         .expect("Invalid DB URL")
         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
         .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
-        .busy_timeout(std::time::Duration::from_secs(5))
+        .busy_timeout(crate::config::db_busy_timeout())
         .foreign_keys(true);
 
     let pool = SqlitePoolOptions::new()
-        .max_connections(5)
+        .max_connections(crate::config::db_max_connections())
         .connect_with(options)
         .await
         .expect("Failed to create pool");
@@ -61,6 +61,10 @@ pub async fn run_migrations(pool: &SqlitePool) {
         (
             "0004_event_registrations_attended",
             include_str!("../migrations/0004_event_registrations_attended.sql"),
+        ),
+        (
+            "0005_admin_list_indexes",
+            include_str!("../migrations/0005_admin_list_indexes.sql"),
         ),
     ];
 
@@ -140,7 +144,8 @@ pub async fn seed_data(pool: &SqlitePool) {
         };
 
         let admin_password = match std::env::var("ADMIN_INITIAL_PASSWORD") {
-            Ok(p) if p.len() >= 8 => p,
+            // A weak initial admin password is the highest-value credential here.
+            Ok(p) if p.len() >= 12 => p,
             _ => {
                 tracing::error!(
                     "SEED_ADMIN=true but ADMIN_INITIAL_PASSWORD is missing or too short. \
@@ -198,8 +203,7 @@ pub async fn seed_data(pool: &SqlitePool) {
         }
     }
 
-    let is_production =
-        std::env::var("RUST_ENV").unwrap_or_default().to_lowercase() == "production";
+    let is_production = crate::config::is_production();
     let default_seed_data = !is_production;
     let seed_data = std::env::var("SEED_DATA")
         .map(|v| v.to_lowercase() != "false" && v != "0")

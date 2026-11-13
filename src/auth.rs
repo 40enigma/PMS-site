@@ -1,8 +1,10 @@
 use std::sync::OnceLock;
 
 use axum::{
-    extract::FromRequestParts,
+    extract::{FromRequestParts, Request},
     http::{header, request::Parts},
+    middleware::Next,
+    response::Response,
 };
 use axum_extra::extract::CookieJar;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
@@ -43,8 +45,7 @@ pub fn validate_jwt_secret_candidate(secret: &str) -> Result<(), &'static str> {
 /// - In any other environment, fall back to an insecure placeholder and emit a single warning.
 pub fn jwt_secret() -> &'static str {
     RESOLVED_JWT_SECRET.get_or_init(|| {
-        let is_production =
-            std::env::var("RUST_ENV").unwrap_or_default().to_lowercase() == "production";
+        let is_production = crate::config::is_production();
 
         match std::env::var("JWT_SECRET") {
             Ok(secret) if !secret.is_empty() => {
@@ -98,7 +99,7 @@ pub fn jwt_cookie_name() -> &'static str {
 /// Create a short-lived (24 h) JWT access token for an authenticated admin user.
 pub fn create_token(user_id: i64, email: &str) -> Result<String, AppError> {
     let expiration = chrono::Utc::now()
-        .checked_add_signed(chrono::Duration::hours(24))
+        .checked_add_signed(chrono::Duration::seconds(crate::config::jwt_ttl_seconds()))
         .expect("valid timestamp")
         .timestamp() as usize;
 
@@ -214,4 +215,35 @@ where
 
         Ok(claims)
     }
+}
+
+/// Defence-in-depth guard for every `/api/admin` route.
+///
+/// Handlers still run the full `AdminClaims` extractor (revocation denylist and
+/// account existence checks); this layer exists so a newly added admin route that
+/// forgets the extractor still requires a signed, unexpired token instead of being
+/// world-writable.
+pub async fn admin_guard(req: Request, next: Next) -> Result<Response, AppError> {
+    if !req.uri().path().starts_with("/api/admin") {
+        return Ok(next.run(req).await);
+    }
+
+    let bearer = req
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .map(str::to_owned);
+
+    let token = match bearer {
+        Some(token) => token,
+        None => CookieJar::from_headers(req.headers())
+            .get(jwt_cookie_name())
+            .map(|cookie| cookie.value().to_string())
+            .ok_or(AppError::Unauthorized)?,
+    };
+
+    verify_token(&token)?;
+
+    Ok(next.run(req).await)
 }

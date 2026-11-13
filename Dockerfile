@@ -14,8 +14,8 @@ COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY migrations ./migrations
 
-# Build optimized release binary
-RUN cargo build --release
+# Build optimized release binary (--locked keeps Cargo.lock authoritative)
+RUN cargo build --release --locked
 
 # ── Stage 2: Runtime image ──
 FROM debian:bookworm-slim AS runner
@@ -50,6 +50,9 @@ ENV HOST=0.0.0.0 \
     UPLOAD_DIR=/app/uploads
 
 EXPOSE 3000
+
+# Stop gracefully on `docker stop` so the shutdown handler runs.
+STOPSIGNAL SIGTERM
 
 CMD ["/app/pms-platform"]
 

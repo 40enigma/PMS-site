@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod config;
 pub mod db;
 pub mod error;
 pub mod models;
@@ -16,8 +17,10 @@ use axum::{
 };
 use sqlx::SqlitePool;
 use tower_http::{
+    catch_panic::CatchPanicLayer,
     compression::CompressionLayer,
     cors::CorsLayer,
+    request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer},
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
@@ -33,11 +36,8 @@ pub fn upload_dir() -> String {
 ///   Server exits if it is missing or empty.
 /// - In development: falls back to allowing localhost on common ports.
 pub fn build_cors() -> CorsLayer {
-    let is_production =
-        std::env::var("RUST_ENV").unwrap_or_default().to_lowercase() == "production";
-
-    let origins_raw = std::env::var("ALLOWED_ORIGINS").unwrap_or_default();
-    let origins_raw = origins_raw.trim().to_string();
+    let is_production = crate::config::is_production();
+    let origins_raw = crate::config::allowed_origins().join(",");
 
     if origins_raw.is_empty() {
         if is_production {
@@ -133,8 +133,7 @@ pub async fn uploads_security_headers(req: Request, next: Next) -> Response {
 pub async fn security_headers(req: Request, next: Next) -> Response {
     let path = req.uri().path().to_string();
     let method = req.method().clone();
-    let is_production =
-        std::env::var("RUST_ENV").unwrap_or_default().to_lowercase() == "production";
+    let is_production = crate::config::is_production();
 
     let mut res = next.run(req).await;
     let headers = res.headers_mut();
@@ -177,6 +176,10 @@ pub async fn security_headers(req: Request, next: Next) -> Response {
     headers.insert(
         "Referrer-Policy",
         HeaderValue::from_static("strict-origin-when-cross-origin"),
+    );
+    headers.insert(
+        "Permissions-Policy",
+        HeaderValue::from_static("camera=(), microphone=(), geolocation=(), payment=()"),
     );
     headers.insert(
         "Content-Security-Policy",
@@ -274,20 +277,43 @@ pub fn asset_version() -> &'static str {
 
 /// Render an HTML template substituting `{{ASSET_V}}` and `{{APP_URL}}` placeholders.
 pub fn render_html(template: &str) -> String {
-    let app_url =
-        std::env::var("APP_URL").unwrap_or_else(|_| "https://pms.pieas.edu.pk".to_string());
+    let app_url = crate::config::app_url();
     let base_url = app_url.trim_end_matches('/');
     template
         .replace("{{ASSET_V}}", asset_version())
         .replace("{{APP_URL}}", base_url)
 }
 
+/// Read an HTML shell once and keep it in memory for the lifetime of the process.
+///
+/// Templates are static build output, so re-reading them on every request only adds
+/// syscalls. Changes therefore need a restart, which was already true of the
+/// compiled-in 404 fallback.
+async fn template_for(path: &'static str) -> std::io::Result<&'static str> {
+    type TemplateCache = std::sync::Mutex<std::collections::HashMap<&'static str, &'static str>>;
+    static CACHE: std::sync::OnceLock<TemplateCache> = std::sync::OnceLock::new();
+
+    let cache = CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+    if let Ok(map) = cache.lock() {
+        if let Some(hit) = map.get(path) {
+            return Ok(*hit);
+        }
+    }
+
+    let raw = tokio::fs::read_to_string(path).await?;
+    let leaked: &'static str = Box::leak(raw.into_boxed_str());
+    if let Ok(mut map) = cache.lock() {
+        map.insert(path, leaked);
+    }
+    Ok(leaked)
+}
+
 async fn render_html_file(path: &'static str, status: StatusCode) -> Response {
-    match tokio::fs::read_to_string(path).await {
+    match template_for(path).await {
         Ok(raw) => (
             status,
             [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
-            render_html(&raw),
+            render_html(raw),
         )
             .into_response(),
         Err(e) => {
@@ -325,13 +351,13 @@ async fn not_found_fallback(req: Request) -> Response {
 
 /// Dedicated 404 route handler returning StatusCode::NOT_FOUND with 404.html.
 async fn not_found_page() -> Response {
-    let raw = tokio::fs::read_to_string("frontend/static/404.html")
+    let raw = template_for("frontend/static/404.html")
         .await
-        .unwrap_or_else(|_| NOT_FOUND_HTML.to_string());
+        .unwrap_or(NOT_FOUND_HTML);
     (
         StatusCode::NOT_FOUND,
         [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
-        render_html(&raw),
+        render_html(raw),
     )
         .into_response()
 }
@@ -361,11 +387,25 @@ pub async fn health_check(State(pool): State<SqlitePool>) -> Response {
     }
 }
 
+/// Escape a value for XML text content.
+fn xml_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+/// True for a `YYYY-MM-DD` value usable as a sitemap `<lastmod>`.
+fn is_iso_date(value: &str) -> bool {
+    value.len() == 10 && chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok()
+}
+
 /// Dynamic sitemap.xml generator listing canonical static pages, published articles, and events.
 #[axum::debug_handler]
 pub async fn sitemap_xml(State(pool): State<SqlitePool>) -> Response {
-    let base_url =
-        std::env::var("APP_URL").unwrap_or_else(|_| "https://pms.pieas.edu.pk".to_string());
+    let base_url = crate::config::app_url();
     let base_url = base_url.trim_end_matches('/');
 
     let static_routes = [
@@ -400,26 +440,37 @@ pub async fn sitemap_xml(State(pool): State<SqlitePool>) -> Response {
             .await
     {
         for (slug, pub_date) in posts {
+            // Only ISO dates are valid <lastmod> values; anything else is omitted.
             let lastmod = pub_date
-                .map(|d| format!("    <lastmod>{}</lastmod>\n", d))
+                .filter(|value| is_iso_date(value))
+                .map(|value| format!("    <lastmod>{}</lastmod>\n", xml_escape(&value)))
                 .unwrap_or_default();
             xml.push_str(&format!(
                 "  <url>\n    <loc>{}/blog/{}</loc>\n{}    <changefreq>monthly</changefreq>\n    <priority>0.7</priority>\n  </url>\n",
-                base_url, slug, lastmod
+                base_url,
+                xml_escape(&slug),
+                lastmod
             ));
         }
     }
 
-    if let Ok(events) = sqlx::query_as::<_, (String, String)>("SELECT slug, date FROM events")
+    if let Ok(dates) = sqlx::query_scalar::<_, String>("SELECT date FROM events")
         .fetch_all(&pool)
         .await
     {
-        for (_slug, date) in events {
-            xml.push_str(&format!(
-                "  <url>\n    <loc>{}/events</loc>\n    <lastmod>{}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.6</priority>\n  </url>\n",
-                base_url, date
-            ));
-        }
+        // One canonical /events entry: the page lists every event, so emitting one
+        // <url> per event produced duplicate <loc> values and no unique URL.
+        let newest = dates
+            .iter()
+            .filter(|value| is_iso_date(value.as_str()))
+            .max();
+        let lastmod = newest
+            .map(|value| format!("    <lastmod>{}</lastmod>\n", xml_escape(value)))
+            .unwrap_or_default();
+        xml.push_str(&format!(
+            "  <url>\n    <loc>{}/events</loc>\n{}    <changefreq>weekly</changefreq>\n    <priority>0.6</priority>\n  </url>\n",
+            base_url, lastmod
+        ));
     }
 
     xml.push_str("</urlset>");
@@ -431,6 +482,32 @@ pub async fn sitemap_xml(State(pool): State<SqlitePool>) -> Response {
             "application/xml; charset=utf-8",
         )],
         xml,
+    )
+        .into_response()
+}
+
+/// Convert a handler panic into a logged 500 response.
+///
+/// Without this the panic unwinds the connection task: the client sees a dropped
+/// connection, the server log has no request context, and monitoring sees nothing.
+fn handle_panic(payload: Box<dyn std::any::Any + Send + 'static>) -> Response {
+    let detail = if let Some(message) = payload.downcast_ref::<&str>() {
+        (*message).to_string()
+    } else if let Some(message) = payload.downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "unknown panic payload".to_string()
+    };
+
+    tracing::error!(panic = %detail, "Handler panicked");
+
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        [(axum::http::header::CONTENT_TYPE, "application/json")],
+        axum::Json(serde_json::json!({
+            "error": "Internal error",
+            "status": 500
+        })),
     )
         .into_response()
 }
@@ -515,6 +592,14 @@ pub fn create_app(pool: SqlitePool) -> Router {
         .layer(middleware::from_fn(standardize_api_errors))
         .layer(middleware::from_fn(security_headers))
         .layer(cors)
+        // Report panics as 500s instead of dropping the connection silently.
+        .layer(CatchPanicLayer::custom(handle_panic))
+        // Give every request an id that appears in logs, error bodies and responses.
+        .layer(PropagateRequestIdLayer::x_request_id())
+        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+        // Defence in depth: anything under /api/admin needs a valid admin token even
+        // if a future handler forgets to extract `AdminClaims`.
+        .layer(middleware::from_fn(auth::admin_guard))
         .layer(TraceLayer::new_for_http())
         .with_state(pool)
 }
