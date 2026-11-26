@@ -96,8 +96,10 @@ PMS-site/
 ├── migrations/                # Numbered database schema migrations (tracked in _pms_migrations)
 │   ├── 0001_initial_schema.sql# Initial core database schema
 │   ├── 0002_token_revocation.sql# Token revocation denylist for invalidated admin sessions
-│   ├── 0003_email_lowercasing.sql# Lowercase email normalization
-│   └── 0004_event_registrations_attended.sql# Added attended column to event_registrations
+│   ├── 0003_email_lowercasing.sql# Lowercase email normalization (admin & newsletter)
+│   ├── 0004_event_registrations_attended.sql# Added attended column to event_registrations
+│   ├── 0005_default_site_sections.sql# One-time default site_sections seed
+│   └── 0006_email_lowercasing_remaining.sql# Lowercase email normalization (registrations, membership, contacts, team)
 ├── tests/                     # Integration tests
 │   └── smoke_test.rs          # Smoke & security test suite
 ├── src/                       # Rust Backend
@@ -108,6 +110,7 @@ PMS-site/
 │   ├── auth.rs                # JWT token signing, verification, cookie extraction
 │   ├── rate_limit.rs          # Governor per-IP rate limiter
 │   ├── error.rs               # Safe uniform JSON error handling (AppError)
+│   ├── util.rs                # Shared validation, slugify, XML escaping, and date helpers
 │   └── routes/
 │       ├── mod.rs             # Module declarations
 │       ├── public.rs          # Public endpoints (events, team, forms)
@@ -180,19 +183,20 @@ The platform reads all security and networking configurations from `.env` or sys
 | `DATABASE_URL` | SQLite connection string | `sqlite://pms.db?mode=rwc` | `sqlite://pms.db?mode=rwc` |
 | `SEED_ADMIN` | Flag to authorize admin creation (`true`/`false`) | `false` | Set `true` only when creating initial admin |
 | `ADMIN_INITIAL_EMAIL` | Initial admin account email | Unset | Required if `SEED_ADMIN=true` |
-| `ADMIN_INITIAL_PASSWORD`| Initial admin account password (min 8 chars) | Unset | Required if `SEED_ADMIN=true` |
+| `ADMIN_INITIAL_PASSWORD`| Initial admin account password (min 12 chars) | Unset | Required if `SEED_ADMIN=true` |
 | `SEED_DATA` | Flag to enable demo data seeding (`true`/`false`) | `true` | `false` for clean production DB |
 | `JWT_COOKIE_NAME` | Name of the authentication cookie | `pms_admin_token` | `pms_admin_token` |
 | `JWT_COOKIE_SECURE` | Force Secure flag on auth cookie (`true`/`false`) | `false` in dev | `true` in production |
 | `RATE_LIMIT_LOGIN_RPM` | Max login requests per minute per IP | `10` | `10` |
-| `RATE_LIMIT_SUBMIT_RPM`| Max generic submissions per minute per IP | `30` | `30` |
+| `RATE_LIMIT_SUBMIT_RPM`| Max logout requests per minute per IP | `30` | `30` |
 | `RATE_LIMIT_REGISTER_RPM`| Max event registrations per minute per IP | `60` | `60` |
 | `RATE_LIMIT_CONTACT_RPM` | Max contact form messages per minute per IP | `10` | `10` |
 | `RATE_LIMIT_NEWSLETTER_RPM`| Max newsletter subscriptions per minute per IP | `10` | `10` |
 | `RATE_LIMIT_MEMBERSHIP_RPM`| Max membership applications per minute per IP | `15` | `15` |
-| `RATE_LIMIT_CERT_VERIFY_RPM`| Max certificate verification checks per minute per IP | `30` | `30` |
-| `TRUST_PROXY` | Trust proxy headers (`X-Real-IP`, rightmost `X-Forwarded-For`) (`true`/`false`) | `false` | Set `true` behind reverse proxy (Nginx/Caddy) to prevent all users sharing `127.0.0.1` |
+| `RATE_LIMIT_CERT_VERIFY_RPM`| Max certificate verification checks per minute per IP | `60` | `60` |
+| `TRUST_PROXY` | Trust proxy headers when peer is a trusted proxy (`true`/`false`) | `false` | Set `true` behind reverse proxy (Nginx/Caddy) to prevent all users sharing `127.0.0.1` |
 | `TRUST_CLOUDFLARE` | Trust `CF-Connecting-IP` / `True-Client-IP` when `TRUST_PROXY=true` | `false` | Set `true` only if deployed directly behind Cloudflare |
+| `TRUST_PROXY_HEADER` | Proxy header selection (`auto`, `x-forwarded-for`, `x-real-ip`, `cf-connecting-ip`) | `auto` | Set `x-forwarded-for` if proxy does not set/strip `X-Real-IP` |
 | `UPLOAD_DIR` | Directory to store uploaded media assets | `uploads` | `/var/www/pms-platform/uploads` |
 | `APP_URL` | Canonical public base URL for `/sitemap.xml` and `{{APP_URL}}` HTML meta/canonical tags | `https://pms.pieas.edu.pk` | Your public site URL (e.g. `https://pms.pieas.edu.pk`) |
 | `ASSET_V` | Override for `{{ASSET_V}}` cache-busting query string on `/assets/*` URLs | 8-char SHA-256 hash of `frontend/static/assets` | Optional explicit version override or leave unset for content hash |
@@ -385,7 +389,7 @@ All list endpoints accept optional pagination query parameters: `limit` (default
 | `GET` | `/api/events` | Event listings. Filters: `is_past=false` (sorted ASC) or `is_past=true` (sorted DESC), `is_featured=true` | Unthrottled |
 | `GET` | `/api/events/{id}` | Detailed event information | Unthrottled |
 | `POST` | `/api/events/{id}/register` | Event registration (trims and lowercases email; issues certificate code) | `RATE_LIMIT_REGISTER_RPM` (60) |
-| `GET` | `/api/certificates/verify?code=...` | Verify participation certificate (`valid: true` if `attended = 1`; otherwise `valid: false` with `reason: "not_attended"` or `"not_found"`) | `RATE_LIMIT_CERT_VERIFY_RPM` (30) |
+| `GET` | `/api/certificates/verify?code=...` | Verify participation certificate (`valid: true` if `attended = 1`; otherwise `valid: false` with `reason: "not_attended"` or `"not_found"`) | `RATE_LIMIT_CERT_VERIFY_RPM` (60) |
 | `GET` | `/api/team` | Team directory and council members | Unthrottled |
 | `GET` | `/api/resources` | Categorized ASTM standards and academic guides | Unthrottled |
 | `GET` | `/api/posts` | Technical articles summary list (omits `body_markdown` for bandwidth efficiency) | Unthrottled |

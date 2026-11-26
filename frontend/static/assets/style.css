@@ -30,7 +30,6 @@
   /* Accent: Tempered Bronze / Forged Gold (Metallurgical World) */
   --accent:          #e59a3c;
   --accent-hover:    #d97706;
-  --accent-contrast: #141415; /* Dark ink on accent fills */
   --accent-subtle:   rgba(229, 154, 60, 0.10);
   --accent-border:   rgba(229, 154, 60, 0.24);
 
@@ -41,7 +40,6 @@
   --danger:          #e5484d;
   --danger-subtle:   rgba(229, 72, 77, 0.10);
   --danger-border:   rgba(229, 72, 77, 0.25);
-  --info:            #94a3b8;
   --info-subtle:     rgba(148, 163, 184, 0.10);
   --info-border:     rgba(148, 163, 184, 0.20);
   --warning:         #f5b83d;
@@ -74,28 +72,20 @@
   --fs-lg:           20px;   /* card titles */
   --fs-xl:           24px;
   --fs-2xl:          28px;
-  --fs-3xl:          34px;
 
   --sp-1:            4px;
   --sp-2:            8px;
   --sp-3:            12px;
   --sp-4:            16px;
   --sp-5:            20px;
-  --sp-6:            24px;
   --sp-8:            32px;
-  --sp-10:           40px;
-  --sp-12:           48px;
-  --sp-16:           64px;
 
   /* Nested Radii (inner = outer - padding) */
-  --radius-xs:       4px;   /* Keycaps, micro badges */
   --radius-sm:       4px;
   --radius-btn-sm:   6px;   /* Small buttons */
   --radius-btn:      8px;   /* Buttons, inputs, search */
   --radius-card:     12px;  /* Cards */
   --radius-lg:       14px;
-  --radius-modal:    16px;  /* Modals, dialogs */
-  --radius-pill:     999px;
 
   /* Depth, Layers & Interactive Minimums */
   --shadow-sm:       0 1px 2px rgba(0, 0, 0, 0.35);
@@ -146,7 +136,6 @@
   /* Accent: Tempered Bronze / Amber with AA contrast */
   --accent:          #b45309; /* 4.56+:1 on --bg-raised, 5.02:1 on white */
   --accent-hover:    #92400e;
-  --accent-contrast: #ffffff;
   --accent-subtle:   rgba(180, 83, 9, 0.10);
   --accent-border:   rgba(180, 83, 9, 0.25);
 
@@ -157,7 +146,6 @@
   --danger:          #b91c1c;
   --danger-subtle:   rgba(185, 28, 28, 0.10);
   --danger-border:   rgba(185, 28, 28, 0.25);
-  --info:            #1d4ed8;
   --info-subtle:     rgba(29, 78, 216, 0.10);
   --info-border:     rgba(29, 78, 216, 0.25);
   --warning:         #92400e;
@@ -794,7 +782,7 @@ textarea.form-control {
   align-items: center;
   gap: 4px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-2xs);
   font-weight: 500;
   padding: 2px 7px;
   border-radius: var(--radius-sm);

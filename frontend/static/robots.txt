@@ -3,5 +3,4 @@ Disallow: /admin
 Disallow: /api/
 Allow: /
 
-Sitemap: https://pms.pieas.edu.pk/sitemap.xml
-
+Sitemap: {{APP_URL}}/sitemap.xml

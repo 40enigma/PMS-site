@@ -4,27 +4,45 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::SqlitePool;
 use std::str::FromStr;
 
+use crate::util::is_production;
+
 /// Initialize the SQLite connection pool with WAL mode and foreign keys.
+///
+/// # Panics
+/// Panics if `DATABASE_URL` is invalid or the database pool fails to connect.
 pub async fn init_pool() -> SqlitePool {
     let db_url =
         std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite://pms.db?mode=rwc".to_string());
+    let max_connections = std::env::var("DB_MAX_CONNECTIONS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u32>().ok())
+        .unwrap_or(10)
+        .clamp(1, 50);
+    let busy_timeout_secs = std::env::var("DB_BUSY_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .unwrap_or(5)
+        .clamp(1, 60);
+
     let options = SqliteConnectOptions::from_str(&db_url)
         .expect("Invalid DB URL")
+        .create_if_missing(true)
         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
         .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
-        .busy_timeout(std::time::Duration::from_secs(5))
+        .busy_timeout(std::time::Duration::from_secs(busy_timeout_secs))
         .foreign_keys(true);
 
-    let pool = SqlitePoolOptions::new()
-        .max_connections(5)
+    SqlitePoolOptions::new()
+        .max_connections(max_connections)
         .connect_with(options)
         .await
-        .expect("Failed to create pool");
-
-    pool
+        .expect("Failed to create pool")
 }
 
-/// Run all migrations and track version in _pms_migrations.
+/// Run all migrations and track version in `_pms_migrations`.
+///
+/// # Panics
+/// Panics if any migration statement or metadata operation fails.
 pub async fn run_migrations(pool: &SqlitePool) {
     // Ensure migration tracking table exists
     sqlx::raw_sql(
@@ -62,6 +80,14 @@ pub async fn run_migrations(pool: &SqlitePool) {
             "0004_event_registrations_attended",
             include_str!("../migrations/0004_event_registrations_attended.sql"),
         ),
+        (
+            "0005_default_site_sections",
+            include_str!("../migrations/0005_default_site_sections.sql"),
+        ),
+        (
+            "0006_email_lowercasing_remaining",
+            include_str!("../migrations/0006_email_lowercasing_remaining.sql"),
+        ),
     ];
 
     for (version, sql) in migrations {
@@ -74,13 +100,13 @@ pub async fn run_migrations(pool: &SqlitePool) {
             sqlx::raw_sql(sql)
                 .execute(&mut *tx)
                 .await
-                .unwrap_or_else(|e| panic!("Failed running migration {}: {}", version, e));
+                .unwrap_or_else(|e| panic!("Failed running migration {version}: {e}"));
 
             sqlx::query("INSERT INTO _pms_migrations (version) VALUES (?1)")
                 .bind(version)
                 .execute(&mut *tx)
                 .await
-                .unwrap_or_else(|e| panic!("Failed recording migration {}: {}", version, e));
+                .unwrap_or_else(|e| panic!("Failed recording migration {version}: {e}"));
 
             tx.commit()
                 .await
@@ -95,27 +121,6 @@ pub async fn run_migrations(pool: &SqlitePool) {
         .execute(pool)
         .await
         .expect("Failed to initialize site_stats row");
-
-    // Startup prune for expired revoked tokens
-    prune_expired_revoked_tokens(pool).await;
-
-    // Ensure site_sections default entries exist (runs for new and existing databases)
-    sqlx::query(
-        r#"
-        INSERT OR IGNORE INTO site_sections (section_key, title, subtitle, content, badge, extra_json) VALUES
-        ('home_hero', 'Advancing Materials Science & Metallurgy at PIEAS', 'The official academic society of the Department of Metallurgy & Materials Engineering (DMME), PIEAS. Connecting students with research, practical engineering, and career development.', 'Advancing materials science and metallurgy at PIEAS.', 'DMME • PIEAS Islamabad', '{"cta_primary_text": "Join PMS", "cta_primary_url": "/join", "cta_secondary_text": "Student Resources", "cta_secondary_url": "/resources"}'),
-        ('home_activities', 'Bridging Theory and Materials Engineering', 'Society Portfolios', 'PMS organizes initiatives designed to support metallurgy students in academic research and industrial engineering.', 'Society Portfolios', '[{"title":"Technical Seminars","desc":"Technical lectures by researchers and engineers on advanced materials, characterization, and metallurgical processing.","icon":"Atom"},{"title":"Hands-On Workshops","desc":"Practical training on metallurgical tools including Thermo-Calc, optical metallography, hardness testing, and computational modeling.","icon":"Cpu"},{"title":"Competitions & Olympiads","desc":"Materials design competitions, metallography contests, technical poster sessions, and engineering quizzes.","icon":"Award"},{"title":"Industrial & Lab Visits","desc":"Organized educational visits to metallurgical manufacturing units, testing laboratories, and research facilities.","icon":"Building"}]'),
-        ('about_mission', 'Our Mission', 'Theory into Metallurgical Practice', 'To bridge academic metallurgical theory with practical industry applications. PMS equips students with hands-on exposure to phase diagrams, materials characterization, failure analysis, and professional engineering standards.', 'Mission', NULL),
-        ('about_vision', 'Our Vision', 'Collaborative Community', 'To cultivate a collaborative community of materials engineers and researchers at PIEAS who contribute meaningfully to academia, strategic industries, and advanced manufacturing.', 'Vision', NULL),
-        ('about_story', 'About PMS and DMME', 'Department & Society', 'The Department of Metallurgy & Materials Engineering (DMME) at PIEAS is dedicated to education and research in metallurgy, materials characterization, and advanced manufacturing. PMS was founded by students and faculty to provide an active extracurricular platform for technical workshops, guest lectures, industrial tours, and peer mentorship.', 'Department & Society', NULL),
-        ('team_guidance', 'Council Portfolios & Responsibilities', 'Overview of responsibilities for executive positions within the PIEAS Materials Society.', 'Overview of responsibilities for executive positions within the PIEAS Materials Society.', 'Portfolios', '[{"title":"President","scope":"Executive Leadership & External Representation","desc":"Liaises with DMME faculty, administration, and partner institutions. Sets the society roadmap and coordinates executive initiatives."},{"title":"General Secretary","scope":"Operational Coordination & Administration","desc":"Manages society communications, official documentation, event venue permissions, and meeting agendas."},{"title":"Treasurer","scope":"Financial Governance & Budgeting","desc":"Maintains society accounts, event budgets, equipment disbursements, and financial records."},{"title":"Technical & Academic Head","scope":"Workshops & Academic Support","desc":"Coordinates technical workshops, guest lectures, and student academic resources for DMME coursework."},{"title":"Media & Publications Head","scope":"Visual Communication & Publications","desc":"Oversees event announcements, photography, technical articles, and society social media channels."},{"title":"Event Coordinator & Logistics Head","scope":"Event Management & Logistics","desc":"Coordinates logistics, equipment, venue setups, and industrial visits for society events."}]'),
-        ('resources_standards', 'Materials Testing & Cheatsheets', 'ASTM & Metallography Protocols', 'Essential testing protocols and lab safety procedures referenced across DMME undergraduate coursework.', 'Standards', '[{"code":"ASTM E8 / E8M","title":"Tension Testing of Metallic Materials","detail":"Yield strength, UTS & elongation protocol"},{"code":"ASTM E112","title":"Determining Average Grain Size","detail":"Heyn lineal intercept & comparison charts"},{"code":"ASTM E23","title":"Charpy V-Notch Impact Testing","detail":"Ductile-to-brittle transition behavior (DBTT)"},{"code":"Acid Safety","title":"Nital & Kroll''s Reagents","detail":"HNO3 in ethanol (≤5%) & HF fume hood rules"}]'),
-        ('sponsors_pitch', 'Partner with PIEAS Materials Society', 'Collaboration', 'Connect with materials engineering students at PIEAS for technical seminars, research projects, and campus engagement.', 'Collaboration', '[{"title":"Direct Talent Linkages","desc":"Engage directly with graduating metallurgy and materials engineering students for internships, trainee programs, and recruitment."},{"title":"Technical Event Visibility","desc":"Prominent organizational presence at society workshops, annual symposia, conference proceedings, and student competitions."},{"title":"Collaborative Projects","desc":"Support student research initiatives, industrial testing challenges, and metallurgical case studies with DMME faculty guidance."}]')
-        "#
-    )
-    .execute(pool)
-    .await
-    .expect("Failed to seed default site_sections");
 
     tracing::info!("✅ Database migrations complete");
 }
@@ -140,10 +145,10 @@ pub async fn seed_data(pool: &SqlitePool) {
         };
 
         let admin_password = match std::env::var("ADMIN_INITIAL_PASSWORD") {
-            Ok(p) if p.len() >= 8 => p,
+            Ok(p) if p.len() >= 12 => p,
             _ => {
                 tracing::error!(
-                    "SEED_ADMIN=true but ADMIN_INITIAL_PASSWORD is missing or too short. \
+                    "SEED_ADMIN=true but ADMIN_INITIAL_PASSWORD is missing or too short (min 12 chars). \
                      Skipping admin seeding."
                 );
                 String::new()
@@ -169,9 +174,9 @@ pub async fn seed_data(pool: &SqlitePool) {
             .expect("Failed to seed admin user");
 
             if res.rows_affected() == 0 {
-                tracing::info!(email = %admin_email, "Admin user already exists (skipped creation)");
+                tracing::info!("Admin user already exists (skipped creation)");
             } else {
-                tracing::info!(email = %admin_email, "✅ Admin user seeded (SEED_ADMIN=true)");
+                tracing::info!("✅ Admin user seeded (SEED_ADMIN=true)");
             }
         }
     } else {
@@ -198,12 +203,10 @@ pub async fn seed_data(pool: &SqlitePool) {
         }
     }
 
-    let is_production =
-        std::env::var("RUST_ENV").unwrap_or_default().to_lowercase() == "production";
-    let default_seed_data = !is_production;
-    let seed_data = std::env::var("SEED_DATA")
-        .map(|v| v.to_lowercase() != "false" && v != "0")
-        .unwrap_or(default_seed_data);
+    let default_seed_data = !is_production();
+    let seed_data = std::env::var("SEED_DATA").map_or(default_seed_data, |v| {
+        v.to_lowercase() != "false" && v != "0"
+    });
 
     if !seed_data {
         tracing::info!("SEED_DATA=false, skipping database seeding.");
@@ -527,23 +530,39 @@ The Continuous Cooling Transformation diagram maps these transformations as a fu
 /// Prune expired revoked tokens from the database.
 pub async fn prune_expired_revoked_tokens(pool: &SqlitePool) {
     let now = chrono::Utc::now().timestamp();
-    let _ = sqlx::query("DELETE FROM revoked_tokens WHERE expires_at < ?1")
+    if let Err(err) = sqlx::query("DELETE FROM revoked_tokens WHERE expires_at < ?1")
         .bind(now)
         .execute(pool)
-        .await;
+        .await
+    {
+        tracing::warn!(error = %err, "Failed to prune expired revoked tokens");
+    }
 }
 
-/// Start background tokio task that deletes expired revoked_tokens every 10 minutes,
-/// and executes an immediate startup prune.
-pub fn spawn_revoked_token_pruner(pool: SqlitePool) {
+/// Start background tokio task that deletes expired `revoked_tokens` every 10 minutes,
+/// executes an immediate startup prune, and stops cleanly when `shutdown` signals.
+pub fn spawn_revoked_token_pruner(
+    pool: SqlitePool,
+    mut shutdown: tokio::sync::watch::Receiver<bool>,
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         // Startup prune
         prune_expired_revoked_tokens(&pool).await;
 
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(600));
+        // Consume the immediate first tick so we don't double-prune right after startup
+        interval.tick().await;
         loop {
-            interval.tick().await;
-            prune_expired_revoked_tokens(&pool).await;
+            tokio::select! {
+                _ = interval.tick() => {
+                    prune_expired_revoked_tokens(&pool).await;
+                }
+                res = shutdown.changed() => {
+                    if res.is_err() || *shutdown.borrow() {
+                        break;
+                    }
+                }
+            }
         }
-    });
+    })
 }

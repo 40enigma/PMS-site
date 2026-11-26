@@ -1,20 +1,23 @@
 use std::sync::OnceLock;
 
 use axum::{
-    extract::FromRequestParts,
+    extract::{FromRef, FromRequestParts},
     http::{header, request::Parts},
 };
 use axum_extra::extract::CookieJar;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use rand_core::{OsRng, RngCore};
 use sha2::{Digest, Sha256};
 
 use crate::error::AppError;
 use crate::models::AdminClaims;
+use crate::util::is_production;
 
 /// Default cookie name used to store the admin JWT token in the browser.
 pub const JWT_COOKIE_NAME: &str = "pms_admin_token";
 
 /// Compute SHA-256 hash of a JWT string for revocation tracking.
+#[must_use]
 pub fn hash_token(token: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(token.as_bytes());
@@ -25,6 +28,9 @@ static RESOLVED_JWT_SECRET: OnceLock<String> = OnceLock::new();
 static RESOLVED_COOKIE_NAME: OnceLock<String> = OnceLock::new();
 
 /// Validate JWT secret string against production security standards.
+///
+/// # Errors
+/// Returns an error message if the secret is shorter than 32 characters or contains placeholder text.
 pub fn validate_jwt_secret_candidate(secret: &str) -> Result<(), &'static str> {
     if secret.len() < 32 {
         return Err("JWT_SECRET must be at least 32 characters long");
@@ -35,30 +41,39 @@ pub fn validate_jwt_secret_candidate(secret: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
+fn generate_ephemeral_dev_secret() -> String {
+    let mut bytes = [0u8; 32];
+    OsRng.fill_bytes(&mut bytes);
+    let mut hex = String::with_capacity(64);
+    for b in bytes {
+        use std::fmt::Write as _;
+        let _ = write!(hex, "{b:02x}");
+    }
+    hex
+}
+
 /// Retrieve the cached JWT secret from the environment (read once at startup).
 ///
 /// Behaviour:
 /// - If `RUST_ENV=production` and `JWT_SECRET` is unset, <32 chars, or contains
 ///   "replace-with"/"placeholder" → exit immediately with FATAL message (fail-fast).
-/// - In any other environment, fall back to an insecure placeholder and emit a single warning.
+/// - In any other environment, generate an ephemeral random 256-bit secret and emit a warning.
 pub fn jwt_secret() -> &'static str {
     RESOLVED_JWT_SECRET.get_or_init(|| {
-        let is_production =
-            std::env::var("RUST_ENV").unwrap_or_default().to_lowercase() == "production";
+        let prod = is_production();
 
         match std::env::var("JWT_SECRET") {
             Ok(secret) if !secret.is_empty() => {
-                if is_production {
+                if prod {
                     if let Err(err) = validate_jwt_secret_candidate(&secret) {
                         eprintln!(
                             "\n\
                             ╔══════════════════════════════════════════════════════════╗\n\
                             ║  FATAL: Insecure JWT_SECRET in production mode:          ║\n\
-                            ║  {:<56}║\n\
+                            ║  {err:<56}║\n\
                             ║  Set JWT_SECRET to a cryptographically random value:     ║\n\
                             ║      openssl rand -hex 32                                ║\n\
-                            ╚══════════════════════════════════════════════════════════╝\n",
-                            err
+                            ╚══════════════════════════════════════════════════════════╝\n"
                         );
                         std::process::exit(1);
                     }
@@ -66,7 +81,7 @@ pub fn jwt_secret() -> &'static str {
                 secret
             }
             _ => {
-                if is_production {
+                if prod {
                     eprintln!(
                         "\n\
                         ╔══════════════════════════════════════════════════════════╗\n\
@@ -76,13 +91,12 @@ pub fn jwt_secret() -> &'static str {
                         ╚══════════════════════════════════════════════════════════╝\n"
                     );
                     std::process::exit(1);
-                } else {
-                    tracing::warn!(
-                        "⚠️  JWT_SECRET is not set. Using insecure placeholder for development. \
-                         DO NOT use in production!"
-                    );
-                    "pms-dev-insecure-placeholder-do-not-use-in-production".to_string()
                 }
+                tracing::warn!(
+                    "⚠️  JWT_SECRET is not set. Generating an ephemeral random secret for this \
+                     development process. DO NOT omit JWT_SECRET in production!"
+                );
+                generate_ephemeral_dev_secret()
             }
         }
     })
@@ -95,17 +109,36 @@ pub fn jwt_cookie_name() -> &'static str {
     })
 }
 
-/// Create a short-lived (24 h) JWT access token for an authenticated admin user.
+/// Configured JWT lifetime in hours (`JWT_EXPIRY_HOURS`, default 24, clamped 1..=168).
+#[must_use]
+pub fn jwt_expiry_hours() -> i64 {
+    std::env::var("JWT_EXPIRY_HOURS")
+        .ok()
+        .and_then(|v| v.trim().parse::<i64>().ok())
+        .unwrap_or(24)
+        .clamp(1, 168)
+}
+
+/// Create a short-lived JWT access token for an authenticated admin user.
+///
+/// # Errors
+/// Returns `AppError::Internal` if JWT encoding fails.
 pub fn create_token(user_id: i64, email: &str) -> Result<String, AppError> {
-    let expiration = chrono::Utc::now()
-        .checked_add_signed(chrono::Duration::hours(24))
-        .expect("valid timestamp")
-        .timestamp() as usize;
+    let now = chrono::Utc::now();
+    let issued_at = usize::try_from(now.timestamp().max(0)).unwrap_or(0);
+    let expiration_ts = now
+        .checked_add_signed(chrono::Duration::hours(jwt_expiry_hours()))
+        .ok_or_else(|| AppError::Internal("Timestamp overflow".into()))?
+        .timestamp();
+    let expiration = usize::try_from(expiration_ts.max(0))
+        .map_err(|_| AppError::Internal("Invalid expiration timestamp".into()))?;
 
     let claims = AdminClaims {
         sub: user_id,
         email: email.to_string(),
+        iat: issued_at,
         exp: expiration,
+        jti: uuid::Uuid::new_v4().to_string(),
     };
 
     encode(
@@ -113,10 +146,13 @@ pub fn create_token(user_id: i64, email: &str) -> Result<String, AppError> {
         &claims,
         &EncodingKey::from_secret(jwt_secret().as_bytes()),
     )
-    .map_err(|e| AppError::Internal(format!("Token creation failed: {}", e)))
+    .map_err(|e| AppError::Internal(format!("Token creation failed: {e}")))
 }
 
-/// Verify a JWT token and return the claims, explicitly pinning Algorithm::HS256.
+/// Verify a JWT token and return the claims, explicitly pinning `Algorithm::HS256`.
+///
+/// # Errors
+/// Returns `AppError::Unauthorized` if signature, algorithm, or expiration validation fails.
 pub fn verify_token(token: &str) -> Result<AdminClaims, AppError> {
     let mut validation = Validation::new(jsonwebtoken::Algorithm::HS256);
     validation.validate_exp = true;
@@ -136,14 +172,15 @@ pub fn verify_token(token: &str) -> Result<AdminClaims, AppError> {
 /// 1. `Authorization: Bearer <token>` header — for programmatic API clients.
 /// 2. The `pms_admin_token` httpOnly cookie — for browser-based flows.
 ///
-/// Also verifies that the user still exists in `admin_users` table when the db pool is present.
+/// Also verifies that the token is not revoked and the user still exists in `admin_users`.
 impl<S> FromRequestParts<S> for AdminClaims
 where
     S: Send + Sync,
+    sqlx::SqlitePool: FromRef<S>,
 {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let (token_str, claims, is_cookie_auth) = if let Some(auth_header) = parts
             .headers
             .get(header::AUTHORIZATION)
@@ -186,16 +223,13 @@ where
             }
         }
 
-        // Database pool must be available in request extensions (fail closed)
-        let pool = parts.extensions.get::<sqlx::SqlitePool>().ok_or_else(|| {
-            AppError::Internal("Database pool missing from request extensions".into())
-        })?;
+        let pool = sqlx::SqlitePool::from_ref(state);
 
         let token_h = hash_token(&token_str);
         let is_revoked: Option<(String,)> =
             sqlx::query_as("SELECT token_hash FROM revoked_tokens WHERE token_hash = ?1")
                 .bind(&token_h)
-                .fetch_optional(pool)
+                .fetch_optional(&pool)
                 .await
                 .map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -205,7 +239,7 @@ where
 
         let exists: Option<(i64,)> = sqlx::query_as("SELECT id FROM admin_users WHERE id = ?1")
             .bind(claims.sub)
-            .fetch_optional(pool)
+            .fetch_optional(&pool)
             .await
             .map_err(|e| AppError::Internal(e.to_string()))?;
         if exists.is_none() {

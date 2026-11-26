@@ -50,6 +50,8 @@ PMS-site/
 │   ├── db.rs                # SQLite connection pool, single-source migration runner, seed logic
 │   ├── auth.rs              # Cached JWT secret/cookie OnceLock, token generation & extractor
 │   ├── rate_limit.rs        # In-memory IP rate limiter (TRUST_PROXY aware, DashMap pruning)
+│   ├── error.rs             # Uniform JSON error handling & correlation IDs (AppError)
+│   ├── util.rs              # Shared validation, slugify, XML escaping, and date helpers
 │   └── routes/
 │       ├── mod.rs           # Module exports (public, admin)
 │       ├── public.rs        # Public read endpoints, filter queries, rate-limited submissions
@@ -57,8 +59,10 @@ PMS-site/
 ├── migrations/
 │   ├── 0001_initial_schema.sql              # Core schema for application tables
 │   ├── 0002_token_revocation.sql            # Token revocation denylist for admin sessions
-│   ├── 0003_email_lowercasing.sql           # Lowercase email normalization
-│   └── 0004_event_registrations_attended.sql # Participant attendance tracking column
+│   ├── 0003_email_lowercasing.sql           # Lowercase email normalization (admin & newsletter)
+│   ├── 0004_event_registrations_attended.sql # Participant attendance tracking column
+│   ├── 0005_default_site_sections.sql       # One-time default site_sections seed
+│   └── 0006_email_lowercasing_remaining.sql # Lowercase email normalization (remaining tables)
 ├── frontend/
 │   └── static/
 │       ├── index.html       # Homepage with dynamic hero & activities
@@ -96,8 +100,10 @@ PMS-site/
 The database schema is managed via sequential, numbered migrations tracked in `_pms_migrations`:
 - `migrations/0001_initial_schema.sql` — Initial schema establishing all core tables
 - `migrations/0002_token_revocation.sql` — Created `revoked_tokens` table and expiration index for admin logout revocation
-- `migrations/0003_email_lowercasing.sql` — Normalized emails to lowercase across all account and submission tables
+- `migrations/0003_email_lowercasing.sql` — Normalized emails to lowercase in `admin_users` and `newsletter_subscribers`
 - `migrations/0004_event_registrations_attended.sql` — Added `attended` BOOLEAN column to `event_registrations`
+- `migrations/0005_default_site_sections.sql` — One-time default `site_sections` seed
+- `migrations/0006_email_lowercasing_remaining.sql` — Normalized emails in `event_registrations`, `membership_applications`, `contact_messages`, and `team_members`
 
 ### Core Application Tables:
 
@@ -109,10 +115,10 @@ The database schema is managed via sequential, numbered migrations tracked in `_
 6. **`team_members`**: Executive council & faculty advisors (`id`, `name`, `role`, `role_responsibility`, `photo_url`, `batch`, `tenure_year`, `is_current`, `is_faculty_advisor`, `bio`, `linkedin_url`, `email`, `display_order`).
 7. **`gallery_images`**: Micrograph repository and event photos (`id`, `image_url`, `caption`, `event_name`, `year`, `event_id`, `created_at`).
 8. **`posts`**: Technical explainers and blog articles (`id`, `title`, `slug` UNIQUE, `category`, `excerpt`, `body_markdown`, `material_formula`, `crystal_structure`, `cover_image_url`, `author_name`, `author_role`, `author_batch`, `published_at`, `read_time_minutes`, `is_featured`).
-9. **`resources`**: Undergraduate toolkit, ASTM standards, software links (`id`, `title`, `category`, `description`, `url`, `software_tag`, `is_pinned`, `created_at`).
+9. **`resources`**: Undergraduate toolkit, ASTM standards, software links (`id`, `title`, `category`, `description`, `url`, `software_tag`, `is_pinned`).
 10. **`opportunities`**: Internships, scholarships, research postings (`id`, `title`, `organization`, `opportunity_type`, `location`, `deadline`, `description`, `apply_url`, `is_active`, `posted_by_alumnus`, `created_at`).
 11. **`alumni`**: Departmental alumni directory (`id`, `name`, `graduating_batch`, `current_role`, `current_organization`, `industry_sector`, `location`, `quote_testimonial`, `linkedin_url`, `photo_url`).
-12. **`projects`**: FYP and student research archive (`id`, `title`, `project_type`, `batch`, `supervisors`, `abstract`, `students`, `image_url`, `tags`, `paper_or_repo_url`, `created_at`).
+12. **`projects`**: FYP and student research archive (`id`, `title`, `project_type`, `batch`, `supervisors`, `abstract`, `students`, `image_url`, `tags`, `paper_or_repo_url`).
 13. **`sponsors`**: Corporate and industrial partners (`id`, `name`, `tier`, `logo_url`, `website_url`, `since_year`, `display_order`).
 14. **`faqs`**: Frequently asked questions (`id`, `question`, `answer`, `category`, `display_order`).
 15. **`membership_applications`**: Student society membership submissions (`id`, `full_name`, `roll_number`, `batch`, `department`, `email`, `phone`, `interests`, `why_join`, `status`, `created_at`).
@@ -130,13 +136,13 @@ The database schema is managed via sequential, numbered migrations tracked in `_
 1. **IP Rate Limiting & Anti-Spoofing**:
    - `X-Forwarded-For` and `X-Real-IP` are strictly untrusted unless `TRUST_PROXY=true` is explicitly set in production behind Nginx/Caddy.
    - Cloudflare headers (`CF-Connecting-IP`, `True-Client-IP`) are only parsed when both `TRUST_PROXY=true` and `TRUST_CLOUDFLARE=true`.
-   - Separate rate limiting buckets are enforced for login, generic submit, registrations (60 RPM), contacts (10 RPM), newsletter (10 RPM), and membership (15 RPM).
+   - Separate rate limiting buckets are enforced for login (10 RPM), logout (30 RPM), registrations (60 RPM), contacts (10 RPM), newsletter (10 RPM), membership (15 RPM), and certificate verification (60 RPM).
    - IPv6 addresses are canonicalized and masked to `/64` subnets before bucket lookup.
    - Governor's in-memory `DashMapStateStore` is automatically pruned every 5 minutes (`retain_recent()` and `shrink_to_fit()`).
 2. **CORS & Origin Isolation**:
    - Allowed origins are enforced via `ALLOWED_ORIGINS`. In production mode (`RUST_ENV=production`), missing origins or weak configurations fail fast.
 3. **Modern Security Headers**:
-   - `Content-Security-Policy`: Scripts restricted to `'self'` (all page scripts are modular and externalized, zero `'unsafe-inline'`), styles (`'self' 'unsafe-inline' https://fonts.googleapis.com`), Google Fonts (`https://fonts.gstatic.com`), and approved image hosts.
+   - `Content-Security-Policy`: Scripts restricted to `'self'` (all page scripts are modular and externalized, zero `'unsafe-inline'`), styles (`'self' 'unsafe-inline' https://fonts.googleapis.com`), Google Fonts (`https://fonts.gstatic.com`), `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, and approved image hosts.
    - `Strict-Transport-Security: max-age=31536000; includeSubDomains` in production.
    - `Referrer-Policy: strict-origin-when-cross-origin`.
    - `X-Content-Type-Options: nosniff`.
@@ -144,7 +150,7 @@ The database schema is managed via sequential, numbered migrations tracked in `_
 4. **Runtime Integrity**:
    - The application verifies that `frontend/static/index.html` exists at startup and halts with a fatal message if static assets are missing.
 5. **XSS URL Sanitization**:
-   - Dynamic URLs placed into HTML properties or attributes use `PMS.safeUrlRaw(url)` and `PMS.safeUrl(url)` which strictly validate permitted protocols (`https:`, `http:`, `mailto:`, `/`), preventing `javascript:` injection.
+   - Dynamic URLs placed into HTML properties or attributes use internal `safeUrlRaw(url)` and exported `PMS.safeUrl(url)` which strictly validate permitted protocols (`https:`, `http:`, `mailto:`, `/`, `#`), preventing `javascript:` injection.
 
 ---
 

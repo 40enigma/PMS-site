@@ -31,23 +31,20 @@
   }
 
   /**
-   * Fetch all paginated rows for the four paginated admin tabs.
-   * Guarded against more than 500 pages to prevent accidental infinite loops.
-   * @param {string} tab
+   * Fetch all paginated rows for an admin list endpoint.
+   * Guarded against more than 100 pages to prevent accidental infinite loops.
+   * @param {string} _tab
    * @param {string} api
    * @returns {Promise<any[]>}
    */
-  async function fetchAllRows(tab, api) {
-    if (!PAGINATED_TABS.has(tab)) {
-      return PMS.apiFetch(api);
-    }
+  async function fetchAllRows(_tab, api) {
     const all = [];
     for (let page = 0; page < MAX_PAGES; page++) {
       const sep = api.includes('?') ? '&' : '?';
       const rows = await PMS.apiFetch(`${api}${sep}limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`);
       if (!Array.isArray(rows) || rows.length === 0) break;
       // Guard against endpoints that ignore offset and replay the first page.
-      if (all.length && rows[0] && all[0] && rows[0].id === all[0].id) break;
+      if (all.length && rows[0] && rows[0].id === all[0].id) break;
       all.push(...rows);
       if (rows.length < PAGE_SIZE) break;
     }
@@ -583,16 +580,12 @@
     },
   };
 
-  /** Every admin collection is paginated so no record is invisible past row 50. */
-  const PAGINATED_TABS = new Set(Object.keys(SCHEMAS));
-
   window.PMSAdmin = Object.assign(window.PMSAdmin || {}, {
     currentTab: 'announcements',
     currentCache: [],
     currentEditingId: null,
     loadSeq: 0,
     eventsMap: {},
-    PAGINATED_TABS,
     isUnauthorized,
     currentAcademicYear,
     fetchAllRows,

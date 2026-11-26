@@ -376,7 +376,7 @@
     if (formEl) {
       formEl.querySelectorAll('[aria-invalid]').forEach(el => {
         el.removeAttribute('aria-invalid');
-        if (el.dataset.pmsBaseDescribedby !== undefined) {
+        if (el instanceof HTMLElement && el.dataset.pmsBaseDescribedby !== undefined) {
           if (el.dataset.pmsBaseDescribedby) {
             el.setAttribute('aria-describedby', el.dataset.pmsBaseDescribedby);
           } else {
@@ -521,7 +521,7 @@
     if (!md) return '';
 
     const tok = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-    /** @type {Array<{ lang: string, code: string }>} */
+    /** @type {string[]} */
     const codeBlocks = [];
     /** @type {string[]} */
     const inlineCodes = [];
@@ -534,9 +534,9 @@
     let text = String(md).split('\u0000').join('');
 
     // 1. Protect fenced code blocks (```lang ... ```)
-    text = text.replace(/```([a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    text = text.replace(/```(?:[a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g, (_, code) => {
       const idx = codeBlocks.length;
-      codeBlocks.push({ lang, code: code.trim() });
+      codeBlocks.push(code.trim());
       return `\n\n\u0000PMS_${tok}_CODE_BLOCK_${idx}\u0000\n\n`;
     });
 
@@ -685,9 +685,9 @@
     text = text.replace(
       new RegExp(`\u0000PMS_${tok}_CODE_BLOCK_(\\d+)\u0000`, 'g'),
       (match, idx) => {
-        const item = codeBlocks[Number(idx)];
-        if (!item) return match;
-        return `<pre class="code-block" style="background:var(--bg-deep);padding:1.1rem;border-radius:10px;overflow-x:auto;margin:1.25rem 0;border:1px solid var(--border)"><code style="font-family:var(--font-mono);font-size:.875rem;line-height:1.55;color:var(--text)">${escHtml(item.code)}</code></pre>`;
+        const code = codeBlocks[Number(idx)];
+        if (code === undefined) return match;
+        return `<pre class="code-block" style="background:var(--bg-deep);padding:1.1rem;border-radius:10px;overflow-x:auto;margin:1.25rem 0;border:1px solid var(--border)"><code style="font-family:var(--font-mono);font-size:.875rem;line-height:1.55;color:var(--text)">${escHtml(code)}</code></pre>`;
       }
     );
 
@@ -1109,8 +1109,9 @@
 
       // Populate contact and constitution details wherever mapped
       qsa('.pms-constitution-link').forEach(el => {
-        if (s.constitution_pdf_url && el instanceof HTMLAnchorElement) {
-          el.href = safeUrlRaw(s.constitution_pdf_url);
+        const safeHref = s.constitution_pdf_url ? safeUrlRaw(s.constitution_pdf_url) : '#';
+        if (safeHref !== '#' && el instanceof HTMLAnchorElement) {
+          el.href = safeHref;
           el.style.display = 'inline-block';
         }
       });
@@ -1195,7 +1196,7 @@
       ${m.batch ? `<p class="card__meta card__meta--mono">Batch ${escHtml(m.batch)}</p>` : ''}
       ${m.bio ? `<p class="card__text card__text--sm">${escHtml(m.bio)}</p>` : ''}
       <div class="card__footer card__footer--center">
-        ${m.email ? `<a href="mailto:${escHtml(m.email)}" class="card__link">${icon('mail', 13)} Email</a>` : ''}
+        ${m.email && isEmail(m.email) ? `<a href="mailto:${escHtml(m.email.trim())}" class="card__link">${icon('mail', 13)} Email</a>` : ''}
         ${m.linkedin_url ? `<a href="${safeUrl(m.linkedin_url)}" target="_blank" rel="noopener" class="card__link">${icon('external', 13)} LinkedIn</a>` : ''}
       </div>
     </article>`;
@@ -1546,7 +1547,7 @@
           const curSubmitBtn = /** @type {HTMLButtonElement | null} */ (
             dialogEl.querySelector('#reg-submit')
           );
-          const curMsgBox = dialogEl.querySelector('#reg-msg');
+          const curMsgBox = /** @type {HTMLElement | null} */ (dialogEl.querySelector('#reg-msg'));
           const curEventInput = /** @type {HTMLInputElement | null} */ (
             dialogEl.querySelector('#reg-event-id')
           );
@@ -1802,6 +1803,9 @@
     set('link[rel="canonical"]', 'href', listingMeta.canonical);
   }
 
+  /** @type {number} */
+  let articleLoadSeq = 0;
+
   /* ── Open Article Modal and load full article (with URL Deep Linking) ── */
   /**
    * Open the article reader dialog and load a blog post by slug.
@@ -1811,6 +1815,7 @@
    */
   async function openArticleModal(slug, triggerEl, opts = {}) {
     if (!slug) return;
+    const reqSeq = ++articleLoadSeq;
     let modal = /** @type {PmsDialog | null} */ (document.getElementById('article-reader-modal'));
     if (!modal) {
       modal = /** @type {PmsDialog} */ (document.createElement('dialog'));
@@ -1876,6 +1881,7 @@
     if (!contentEl) return;
     try {
       const post = await apiFetch(`/api/posts/${encodeURIComponent(slug)}`);
+      if (reqSeq !== articleLoadSeq) return;
       const readerTitle = document.getElementById('article-reader-title');
       if (readerTitle) readerTitle.textContent = post.title;
       applyArticleMeta(post);
@@ -1897,12 +1903,13 @@
       </div>
     `;
     } catch (err) {
+      if (reqSeq !== articleLoadSeq) return;
       const msg = err instanceof Error ? err.message : 'Unknown error';
       contentEl.innerHTML = `
       <div class="alert alert-error" role="alert">Failed to load article: ${escHtml(msg)}</div>
     `;
     } finally {
-      contentEl.setAttribute('aria-busy', 'false');
+      if (reqSeq === articleLoadSeq) contentEl.setAttribute('aria-busy', 'false');
     }
   }
 
@@ -1981,8 +1988,6 @@
     isEmail,
     emptyState,
     errorState,
-    fmtDate,
-    openArticleModal,
     enableBackdropClose,
     showModalWithFocusReturn,
     skeletonGrid,
@@ -2001,6 +2006,5 @@
     projectCard,
     opportunityCard,
     sponsorCard,
-    sponsorTierClass,
   });
 })();

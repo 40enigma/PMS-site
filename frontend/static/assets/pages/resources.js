@@ -42,9 +42,9 @@
           const rCat = r.category.toLowerCase().trim();
           const target = category.toLowerCase().trim();
           if (ALIASES[target]) {
-            return ALIASES[target].some(alias => rCat === alias || rCat.includes(alias));
+            return ALIASES[target].includes(rCat);
           }
-          return rCat === target || rCat.includes(target);
+          return rCat === target;
         })
       : allResources;
 

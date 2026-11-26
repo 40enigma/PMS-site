@@ -95,7 +95,7 @@
             email: emailEl.value,
             password: pwEl.value,
           });
-          showDashboard(res.admin || res);
+          showDashboard(res);
         } catch (e) {
           PMS.reportError('login', e);
           PMS.showAlert(msg, e.message || 'Invalid administrator credentials.');

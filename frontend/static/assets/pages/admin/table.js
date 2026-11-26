@@ -92,7 +92,7 @@
 
       if (tab === 'registrations') {
         try {
-          const evts = await PMS.apiFetch('/api/admin/events');
+          const evts = await PMSAdmin.fetchAllRows('events', '/api/admin/events');
           if (req !== PMSAdmin.loadSeq) return;
           PMSAdmin.eventsMap = {};
           evts.forEach(e => {
@@ -101,9 +101,7 @@
         } catch (_) {}
       }
 
-      const data = PMSAdmin.PAGINATED_TABS.has(tab)
-        ? await PMSAdmin.fetchAllRows(tab, schema.api)
-        : await PMS.apiFetch(schema.api);
+      const data = await PMSAdmin.fetchAllRows(tab, schema.api);
       if (req !== PMSAdmin.loadSeq) return;
       PMSAdmin.currentCache = data;
 
@@ -210,6 +208,12 @@
             displayed = val ? data.filter(d => String(d.event_id) === String(val)) : data;
             const tbody = document.getElementById('table-body');
             if (tbody) tbody.innerHTML = displayed.map(renderRow).join('');
+            const meta = content.querySelector('.table-meta');
+            if (meta) {
+              meta.textContent = val
+                ? `Showing ${displayed.length} of ${data.length} record${data.length === 1 ? '' : 's'}`
+                : `Showing all ${data.length} record${data.length === 1 ? '' : 's'}`;
+            }
           };
           if (savedRegFilter) {
             filterEl.value = savedRegFilter;

@@ -9,6 +9,16 @@ use serial_test::serial;
 use sqlx::sqlite::SqlitePoolOptions;
 use tower::ServiceExt;
 
+struct TempDbGuard(String);
+
+impl Drop for TempDbGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+        let _ = std::fs::remove_file(format!("{}-wal", self.0));
+        let _ = std::fs::remove_file(format!("{}-shm", self.0));
+    }
+}
+
 async fn setup_test_app_and_pool() -> (axum::Router, sqlx::SqlitePool) {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
@@ -564,6 +574,11 @@ async fn test_body_limits_global_and_upload() {
         StatusCode::OK,
         "Upload of 500KB file should succeed on /api/admin/upload"
     );
+    let upload_body = res_upload.into_body().collect().await.unwrap().to_bytes();
+    let upload_json: serde_json::Value = serde_json::from_slice(&upload_body).unwrap();
+    if let Some(url_str) = upload_json["url"].as_str() {
+        let _ = tokio::fs::remove_file(url_str.trim_start_matches('/')).await;
+    }
 }
 
 #[tokio::test]
@@ -647,6 +662,7 @@ async fn test_csrf_cookie_protection() {
 async fn test_migrations_on_copy_of_existing_db() {
     if std::path::Path::new("pms.db").exists() {
         let temp_db_path = format!("target/test_copy_{}.db", uuid::Uuid::new_v4());
+        let _guard = TempDbGuard(temp_db_path.clone());
         std::fs::copy("pms.db", &temp_db_path).unwrap();
 
         let pool = SqlitePoolOptions::new()
@@ -657,14 +673,14 @@ async fn test_migrations_on_copy_of_existing_db() {
         // Verify migrations run cleanly and idempotently
         db::run_migrations(&pool).await;
 
-        drop(pool);
-        let _ = std::fs::remove_file(temp_db_path);
+        pool.close().await;
     }
 }
 
 #[tokio::test]
 async fn test_email_lowercasing_migration_handles_mixed_case_duplicates_without_losing_rows() {
     let temp_db_path = format!("target/test_email_dups_{}.db", uuid::Uuid::new_v4());
+    let _guard = TempDbGuard(temp_db_path.clone());
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
         .connect(&format!("sqlite://{}?mode=rwc", temp_db_path))
@@ -807,10 +823,7 @@ async fn test_email_lowercasing_migration_handles_mixed_case_duplicates_without_
     );
 
     // 10. Clean up temp DB files
-    drop(pool);
-    let _ = std::fs::remove_file(&temp_db_path);
-    let _ = std::fs::remove_file(format!("{}-wal", temp_db_path));
-    let _ = std::fs::remove_file(format!("{}-shm", temp_db_path));
+    pool.close().await;
 }
 
 #[tokio::test]
@@ -1687,15 +1700,7 @@ async fn test_sitemap_includes_seeded_post_slug_and_events() {
 async fn test_team_member_default_tenure_year_is_computed() {
     let app = setup_test_app().await;
     let token = create_token(1, "admin@pieas.edu.pk").unwrap();
-
-    use chrono::{Datelike, Utc};
-    let now = Utc::now();
-    let y = now.year();
-    let expected_tenure = if now.month() >= 8 {
-        format!("{}-{}", y, y + 1)
-    } else {
-        format!("{}-{}", y - 1, y)
-    };
+    let expected_tenure = pms_platform::util::current_academic_year();
 
     let payload = serde_json::json!({
         "name": "Test Coordinator",
@@ -1721,6 +1726,7 @@ async fn test_team_member_default_tenure_year_is_computed() {
     let body: serde_json::Value =
         serde_json::from_slice(&res_get.into_body().collect().await.unwrap().to_bytes()).unwrap();
     assert_eq!(body[0]["tenure_year"], expected_tenure);
+    assert_eq!(body[0]["display_order"], 0);
 }
 
 #[tokio::test]
@@ -1770,4 +1776,737 @@ async fn test_blog_slug_routes_and_template_placeholders() {
     let html_404 = String::from_utf8_lossy(&body_404);
     assert!(!html_404.contains("{{ASSET_V}}"));
     assert!(html_404.contains("/assets/style.css?v="));
+}
+
+#[tokio::test]
+#[serial]
+async fn test_sitemap_no_duplicate_events_and_escapes_xml() {
+    let (app, pool) = setup_test_app_and_pool().await;
+
+    sqlx::query(
+        "INSERT INTO events (title, slug, date, category) VALUES ('Event 1', 'event-1', '2026-11-20', 'Seminar'), ('Event 2', 'event-2', '2026-12-01', 'Workshop')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO posts (title, slug, category, published_at) VALUES ('XML Post', 'alloy-&-steel<1>', 'Explainer', '2026-10-01 12:30:00')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/sitemap.xml")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let xml =
+        String::from_utf8_lossy(&res.into_body().collect().await.unwrap().to_bytes()).to_string();
+
+    // /events must appear exactly once despite multiple event rows
+    assert_eq!(xml.matches("/events</loc>").count(), 1);
+    // XML special characters in slug must be escaped, and timestamp formatted for W3C
+    assert!(xml.contains("/blog/alloy-&amp;-steel&lt;1&gt;</loc>"));
+    assert!(xml.contains("<lastmod>2026-10-01T12:30:00Z</lastmod>"));
+}
+
+#[tokio::test]
+async fn test_logout_csrf_and_same_second_jti_relogin() {
+    let app = setup_test_app().await;
+
+    let token1 = create_token(1, "admin@pieas.edu.pk").unwrap();
+    let token2 = create_token(1, "admin@pieas.edu.pk").unwrap();
+    assert_ne!(
+        token1, token2,
+        "Tokens issued in the same second must have distinct jti claims"
+    );
+
+    // 1. Cookie-only logout without X-Requested-With must fail with 403 Forbidden
+    let req_csrf_fail = Request::builder()
+        .method(Method::POST)
+        .uri("/api/auth/logout")
+        .header(header::COOKIE, format!("pms_admin_token={token1}"))
+        .body(Body::empty())
+        .unwrap();
+    let res_csrf_fail = app.clone().oneshot(req_csrf_fail).await.unwrap();
+    assert_eq!(res_csrf_fail.status(), StatusCode::FORBIDDEN);
+
+    // 2. Logout sending BOTH Bearer (token1) and Cookie (token2) with CSRF header revokes BOTH
+    let req_both = Request::builder()
+        .method(Method::POST)
+        .uri("/api/auth/logout")
+        .header(header::AUTHORIZATION, format!("Bearer {token1}"))
+        .header(header::COOKIE, format!("pms_admin_token={token2}"))
+        .header("X-Requested-With", "PMS-Client")
+        .body(Body::empty())
+        .unwrap();
+    let res_both = app.clone().oneshot(req_both).await.unwrap();
+    assert_eq!(res_both.status(), StatusCode::OK);
+
+    // Both token1 and token2 are now rejected
+    for tok in [&token1, &token2] {
+        let req_me = Request::builder()
+            .method(Method::GET)
+            .uri("/api/auth/me")
+            .header(header::AUTHORIZATION, format!("Bearer {tok}"))
+            .body(Body::empty())
+            .unwrap();
+        let res_me = app.clone().oneshot(req_me).await.unwrap();
+        assert_eq!(res_me.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    // 3. Re-issuing a fresh token within the same second still works
+    let token3 = create_token(1, "admin@pieas.edu.pk").unwrap();
+    let req_me3 = Request::builder()
+        .method(Method::GET)
+        .uri("/api/auth/me")
+        .header(header::AUTHORIZATION, format!("Bearer {token3}"))
+        .body(Body::empty())
+        .unwrap();
+    let res_me3 = app.oneshot(req_me3).await.unwrap();
+    assert_eq!(res_me3.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_url_scheme_date_enum_and_membership_validation() {
+    let app = setup_test_app().await;
+    let token = create_token(1, "admin@pieas.edu.pk").unwrap();
+
+    // 1. javascript: URL rejected on announcement, resource, and stats
+    let bad_ann = serde_json::json!({
+        "message": "Click here",
+        "link_url": "javascript:alert(1)"
+    });
+    let res_ann = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/admin/announcements")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&bad_ann).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_ann.status(), StatusCode::BAD_REQUEST);
+
+    let bad_res = serde_json::json!({
+        "title": "Bad Resource",
+        "url": "data:text/html,<script>alert(1)</script>"
+    });
+    let res_r = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/admin/resources")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&bad_res).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_r.status(), StatusCode::BAD_REQUEST);
+
+    // 2. Invalid ISO date rejected on event creation
+    let bad_evt = serde_json::json!({
+        "title": "Bad Date Event",
+        "date": "15-11-2026"
+    });
+    let res_evt = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/admin/events")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&bad_evt).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_evt.status(), StatusCode::BAD_REQUEST);
+
+    // 3. Invalid enum tier rejected on sponsor creation
+    let bad_sponsor = serde_json::json!({
+        "name": "Acme Corp",
+        "tier": "Diamond"
+    });
+    let res_sp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/admin/sponsors")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&bad_sponsor).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_sp.status(), StatusCode::BAD_REQUEST);
+
+    // 4. Admin membership creation validates required fields consistently with public endpoint
+    let bad_mem = serde_json::json!({
+        "full_name": "Test Student",
+        "roll_number": "   ",
+        "batch": "2024",
+        "department": "DMME",
+        "email": "student@pieas.edu.pk"
+    });
+    let res_mem = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/admin/membership")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&bad_mem).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_mem.status(), StatusCode::BAD_REQUEST);
+
+    // 5. Contact subject > 300 chars rejected
+    let bad_contact = serde_json::json!({
+        "name": "User",
+        "email": "user@pieas.edu.pk",
+        "subject": "x".repeat(301),
+        "message": "Hello"
+    });
+    let res_c = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/contact")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&bad_contact).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_c.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_section_whitespace_clearing_and_deleted_section_persistence() {
+    let (app, pool) = setup_test_app_and_pool().await;
+    let token = create_token(1, "admin@pieas.edu.pk").unwrap();
+
+    // Update a seeded section with whitespace-only extra_json -> should clear to NULL
+    let (sec_id,): (i64,) =
+        sqlx::query_as("SELECT id FROM site_sections WHERE section_key = 'home_hero'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    let res_put = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri(format!("/api/admin/sections/{sec_id}"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&serde_json::json!({ "extra_json": "   " })).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_put.status(), StatusCode::OK);
+
+    let (extra_after,): (Option<String>,) =
+        sqlx::query_as("SELECT extra_json FROM site_sections WHERE id = ?1")
+            .bind(sec_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(
+        extra_after.is_none(),
+        "Whitespace-only extra_json should clear to NULL"
+    );
+
+    // Delete a default seeded section, then re-run migrations: must NOT resurrect it
+    let res_del = app
+        .oneshot(
+            Request::builder()
+                .method(Method::DELETE)
+                .uri(format!("/api/admin/sections/{sec_id}"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_del.status(), StatusCode::OK);
+
+    db::run_migrations(&pool).await;
+    let count_after: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM site_sections WHERE section_key = 'home_hero'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        count_after.0, 0,
+        "Deleted default section must not be resurrected by run_migrations"
+    );
+}
+
+#[tokio::test]
+async fn test_slug_empty_fallback_and_sanitization() {
+    let (app, pool) = setup_test_app_and_pool().await;
+    let token = create_token(1, "admin@pieas.edu.pk").unwrap();
+
+    // Empty slug falls back to slugified title
+    let res1 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/admin/events")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&serde_json::json!({
+                        "title": "Nano Steels Seminar",
+                        "slug": "   ",
+                        "date": "2026-12-20"
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res1.status(), StatusCode::OK);
+
+    let (slug1,): (String,) =
+        sqlx::query_as("SELECT slug FROM events WHERE title = 'Nano Steels Seminar'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(slug1, "nano-steels-seminar");
+
+    // Custom slug with unsafe chars is normalized via slugify
+    let res2 = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/admin/posts")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&serde_json::json!({
+                        "title": "Alloy Guide",
+                        "slug": "Custom Slug & Test!"
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res2.status(), StatusCode::OK);
+
+    let (slug2,): (String,) = sqlx::query_as("SELECT slug FROM posts WHERE title = 'Alloy Guide'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(slug2, "custom-slug-test");
+}
+
+#[tokio::test]
+async fn test_upload_hardening_delete_and_security_headers() {
+    let app = setup_test_app().await;
+    let token = create_token(1, "admin@pieas.edu.pk").unwrap();
+    let boundary = "----UploadHardeningBoundary999";
+
+    // 1. Non-.txt CSV file must NOT be accepted as text/plain
+    let csv_body = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"data.csv\"\r\nContent-Type: text/csv\r\n\r\na,b,c\r\n--{boundary}--\r\n"
+    );
+    let res_csv = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/admin/upload")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(
+                    header::CONTENT_TYPE,
+                    format!("multipart/form-data; boundary={boundary}"),
+                )
+                .body(Body::from(csv_body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_csv.status(), StatusCode::BAD_REQUEST);
+
+    // 2. Deleting .gitkeep must be rejected with 400
+    let res_dot = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::DELETE)
+                .uri("/api/admin/uploads/.gitkeep")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_dot.status(), StatusCode::BAD_REQUEST);
+
+    // 3. Upload valid PNG, check list_uploads + CSP headers, then delete via API
+    let png_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82";
+    let mut png_data = Vec::new();
+    png_data.extend_from_slice(
+        format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"pic.png\"\r\nContent-Type: image/png\r\n\r\n"
+        )
+        .as_bytes(),
+    );
+    png_data.extend_from_slice(png_bytes);
+    png_data.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+
+    let res_up = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/admin/upload")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(
+                    header::CONTENT_TYPE,
+                    format!("multipart/form-data; boundary={boundary}"),
+                )
+                .body(Body::from(png_data))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_up.status(), StatusCode::OK);
+    let up_json: serde_json::Value =
+        serde_json::from_slice(&res_up.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let fname = up_json["filename"].as_str().unwrap().to_string();
+
+    // Check hardened CSP on /api/stats and X-Frame-Options: DENY on /uploads/...
+    let res_stats = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/api/stats")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let csp = res_stats
+        .headers()
+        .get("Content-Security-Policy")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(csp.contains("object-src 'none'"));
+    assert!(csp.contains("base-uri 'self'"));
+    assert!(csp.contains("form-action 'self'"));
+
+    let res_file = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri(format!("/uploads/{fname}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_file.headers().get("X-Frame-Options").unwrap(), "DENY");
+
+    // Delete uploaded file via API, then second delete returns 404
+    let res_del1 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::DELETE)
+                .uri(format!("/api/admin/uploads/{fname}"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_del1.status(), StatusCode::OK);
+
+    let res_del2 = app
+        .oneshot(
+            Request::builder()
+                .method(Method::DELETE)
+                .uri(format!("/api/admin/uploads/{fname}"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_del2.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+#[serial]
+async fn test_proxy_spoof_rejection_from_untrusted_peer_and_header_mode() {
+    use pms_platform::rate_limit::{client_ip_from_headers, client_ip_from_request_parts};
+    use std::net::{IpAddr, SocketAddr};
+
+    std::env::set_var("TRUST_PROXY", "true");
+    std::env::remove_var("TRUST_CLOUDFLARE");
+
+    // 1. Public direct peer with spoofed X-Real-IP must NOT trust proxy headers
+    let mut parts = Request::builder()
+        .uri("/")
+        .header("X-Real-IP", "203.0.113.99")
+        .body(())
+        .unwrap()
+        .into_parts()
+        .0;
+    let public_peer: SocketAddr = "198.51.100.77:5555".parse().unwrap();
+    parts
+        .extensions
+        .insert(axum::extract::ConnectInfo(public_peer));
+    assert_eq!(
+        client_ip_from_request_parts(&parts),
+        "198.51.100.77".parse::<IpAddr>().unwrap()
+    );
+
+    // 2. TRUST_PROXY_HEADER=x-forwarded-for ignores X-Real-IP
+    std::env::set_var("TRUST_PROXY_HEADER", "x-forwarded-for");
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert("X-Real-IP", "203.0.113.99".parse().unwrap());
+    headers.insert(
+        "X-Forwarded-For",
+        "192.0.2.10, 198.51.100.20".parse().unwrap(),
+    );
+    assert_eq!(
+        client_ip_from_headers(&headers),
+        "198.51.100.20".parse::<IpAddr>().unwrap()
+    );
+
+    std::env::remove_var("TRUST_PROXY_HEADER");
+    std::env::remove_var("TRUST_PROXY");
+}
+
+#[tokio::test]
+#[serial]
+async fn test_init_pool_creates_missing_sqlite_file_without_mode_rwc() {
+    let temp_db = format!(
+        "{}/pms_missing_test_{}.db",
+        std::env::temp_dir().display(),
+        uuid::Uuid::new_v4()
+    );
+    let _guard = TempDbGuard(temp_db.clone());
+    let db_url = format!("sqlite://{temp_db}");
+    std::env::set_var("DATABASE_URL", &db_url);
+
+    let pool = db::init_pool().await;
+    db::run_migrations(&pool).await;
+    pool.close().await;
+
+    std::env::remove_var("DATABASE_URL");
+}
+
+#[tokio::test]
+async fn test_email_lowercasing_remaining_migration_0006() {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+
+    // Run migrations 0001..0004 only and record them in _pms_migrations
+    for (ver, sql) in [
+        (
+            "0001_initial_schema",
+            include_str!("../migrations/0001_initial_schema.sql"),
+        ),
+        (
+            "0002_token_revocation",
+            include_str!("../migrations/0002_token_revocation.sql"),
+        ),
+        (
+            "0003_email_lowercasing",
+            include_str!("../migrations/0003_email_lowercasing.sql"),
+        ),
+        (
+            "0004_event_registrations_attended",
+            include_str!("../migrations/0004_event_registrations_attended.sql"),
+        ),
+    ] {
+        sqlx::raw_sql(sql).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO _pms_migrations (version) VALUES (?1)")
+            .bind(ver)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+
+    sqlx::query(
+        "INSERT INTO events (id, title, slug, date) VALUES (1, 'Symposium', 'symposium', '2026-12-01')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO event_registrations (event_id, student_name, roll_number, batch, department, email) VALUES (1, 'Ali', 'R1', '2024', 'DMME', 'Ali@PIEAS.EDU.PK')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO membership_applications (full_name, roll_number, batch, department, email) VALUES ('Sara', 'R2', '2024', 'DMME', 'Sara@PIEAS.EDU.PK')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO contact_messages (name, email, message) VALUES ('Bilal', 'Bilal@PIEAS.EDU.PK', 'Hi')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO team_members (name, role, email) VALUES ('Hira', 'Head', 'Hira@PIEAS.EDU.PK')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    db::run_migrations(&pool).await;
+
+    let (reg_email,): (String,) =
+        sqlx::query_as("SELECT email FROM event_registrations WHERE roll_number = 'R1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let (mem_email,): (String,) =
+        sqlx::query_as("SELECT email FROM membership_applications WHERE roll_number = 'R2'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let (msg_email,): (String,) =
+        sqlx::query_as("SELECT email FROM contact_messages WHERE name = 'Bilal'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let (team_email,): (String,) =
+        sqlx::query_as("SELECT email FROM team_members WHERE name = 'Hira'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    assert_eq!(reg_email, "ali@pieas.edu.pk");
+    assert_eq!(mem_email, "sara@pieas.edu.pk");
+    assert_eq!(msg_email, "bilal@pieas.edu.pk");
+    assert_eq!(team_email, "hira@pieas.edu.pk");
+}
+
+#[tokio::test]
+async fn test_empty_query_filters_are_treated_as_unset() {
+    let (app, pool) = setup_test_app_and_pool().await;
+    sqlx::query("INSERT INTO events (title, slug, date, category) VALUES ('Seminar 1', 'sem-1', '2099-01-01', 'Workshop')")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/api/events?category=")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body: serde_json::Value =
+        serde_json::from_slice(&res.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(body.as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn test_gallery_invalid_event_id_returns_400_and_faq_default_order_is_0() {
+    let app = setup_test_app().await;
+    let token = create_token(1, "admin@pieas.edu.pk").unwrap();
+
+    let gallery_payload = serde_json::json!({
+        "image_url": "https://example.com/photo.jpg",
+        "event_id": 999999
+    });
+    let req_gal = Request::builder()
+        .method(Method::POST)
+        .uri("/api/admin/gallery")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&gallery_payload).unwrap()))
+        .unwrap();
+    let res_gal = app.clone().oneshot(req_gal).await.unwrap();
+    assert_eq!(res_gal.status(), StatusCode::BAD_REQUEST);
+
+    let faq_payload = serde_json::json!({
+        "question": "How to join?",
+        "answer": "Fill the membership form."
+    });
+    let req_faq = Request::builder()
+        .method(Method::POST)
+        .uri("/api/admin/faqs")
+        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&faq_payload).unwrap()))
+        .unwrap();
+    let res_faq = app.clone().oneshot(req_faq).await.unwrap();
+    assert_eq!(res_faq.status(), StatusCode::OK);
+
+    let req_get = Request::builder()
+        .method(Method::GET)
+        .uri("/api/faqs")
+        .body(Body::empty())
+        .unwrap();
+    let res_get = app.oneshot(req_get).await.unwrap();
+    assert_eq!(res_get.status(), StatusCode::OK);
+    let body: serde_json::Value =
+        serde_json::from_slice(&res_get.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(body[0]["display_order"], 0);
+}
+
+#[tokio::test]
+#[serial]
+async fn test_robots_txt_substitutes_app_url() {
+    std::env::set_var("APP_URL", "https://custom.pms.example/");
+    let app = setup_test_app().await;
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/robots.txt")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body =
+        String::from_utf8_lossy(&res.into_body().collect().await.unwrap().to_bytes()).to_string();
+    assert!(body.contains("Sitemap: https://custom.pms.example/sitemap.xml"));
+    assert!(!body.contains("{{APP_URL}}"));
+
+    std::env::remove_var("APP_URL");
 }

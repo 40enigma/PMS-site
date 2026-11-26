@@ -6,6 +6,9 @@ pub mod rate_limit;
 pub mod routes;
 pub mod util;
 
+use std::collections::HashMap;
+use std::sync::{OnceLock, RwLock};
+
 use axum::{
     extract::{DefaultBodyLimit, Request, State},
     http::{HeaderValue, Method, StatusCode},
@@ -22,25 +25,47 @@ use tower_http::{
     trace::TraceLayer,
 };
 
-/// Helper to read the upload directory from UPLOAD_DIR env var (defaulting to "uploads").
+use crate::util::{is_production, xml_escape};
+
+/// Helper to read the upload directory from `UPLOAD_DIR` env var (defaulting to `"uploads"`).
+#[must_use]
 pub fn upload_dir() -> String {
     std::env::var("UPLOAD_DIR").unwrap_or_else(|_| "uploads".to_string())
 }
 
-/// Build the CORS layer from ALLOWED_ORIGINS env var.
+/// Read the canonical public base URL (`APP_URL`) trimmed of trailing slashes.
+#[must_use]
+pub fn app_base_url() -> String {
+    let raw = std::env::var("APP_URL").unwrap_or_else(|_| "https://pms.pieas.edu.pk".to_string());
+    raw.trim_end_matches('/').to_string()
+}
+
+/// Build the CORS layer from `ALLOWED_ORIGINS` env var.
 ///
-/// - In production (`RUST_ENV=production`): ALLOWED_ORIGINS is required.
-///   Server exits if it is missing or empty.
-/// - In development: falls back to allowing localhost on common ports.
+/// - In production (`RUST_ENV=production`): `ALLOWED_ORIGINS` is required.
+///   Server exits if it is missing, empty, or contains wildcard `*`.
+/// - In development: falls back to allowing localhost on port 3000.
+///
+/// # Panics
+/// Panics if hardcoded fallback localhost origins fail to parse as `HeaderValue`.
 pub fn build_cors() -> CorsLayer {
-    let is_production =
-        std::env::var("RUST_ENV").unwrap_or_default().to_lowercase() == "production";
+    let prod = is_production();
 
     let origins_raw = std::env::var("ALLOWED_ORIGINS").unwrap_or_default();
     let origins_raw = origins_raw.trim().to_string();
 
+    let allowed_headers = [
+        axum::http::header::AUTHORIZATION,
+        axum::http::header::CONTENT_TYPE,
+        axum::http::header::ACCEPT,
+        axum::http::header::COOKIE,
+        axum::http::HeaderName::from_static("x-correlation-id"),
+        axum::http::HeaderName::from_static("x-requested-with"),
+        axum::http::HeaderName::from_static("x-return-token"),
+    ];
+
     if origins_raw.is_empty() {
-        if is_production {
+        if prod {
             eprintln!(
                 "\n\
                 ╔══════════════════════════════════════════════════════════╗\n\
@@ -51,7 +76,7 @@ pub fn build_cors() -> CorsLayer {
             std::process::exit(1);
         }
 
-        // Development fallback: allow common localhost ports.
+        // Development fallback: allow localhost:3000.
         tracing::warn!("⚠️  ALLOWED_ORIGINS not set. Allowing localhost in development mode.");
         return CorsLayer::new()
             .allow_origin([
@@ -65,23 +90,31 @@ pub fn build_cors() -> CorsLayer {
                 Method::DELETE,
                 Method::OPTIONS,
             ])
-            .allow_headers([
-                axum::http::header::AUTHORIZATION,
-                axum::http::header::CONTENT_TYPE,
-                axum::http::header::ACCEPT,
-                axum::http::header::COOKIE,
-                axum::http::HeaderName::from_static("x-correlation-id"),
-                axum::http::HeaderName::from_static("x-requested-with"),
-            ])
+            .allow_headers(allowed_headers)
             .allow_credentials(true);
     }
 
-    let allowed: Vec<HeaderValue> = origins_raw
+    if origins_raw.split(',').any(|s| s.trim() == "*") {
+        eprintln!(
+            "FATAL: Wildcard '*' is not allowed in ALLOWED_ORIGINS with allow_credentials(true)."
+        );
+        std::process::exit(1);
+    }
+
+    let mut allowed = Vec::new();
+    for origin in origins_raw
         .split(',')
-        .map(|s| s.trim())
+        .map(str::trim)
         .filter(|s| !s.is_empty())
-        .filter_map(|origin| origin.parse::<HeaderValue>().ok())
-        .collect();
+    {
+        match origin.parse::<HeaderValue>() {
+            Ok(hv) => allowed.push(hv),
+            Err(e) => {
+                eprintln!("FATAL: Invalid origin '{origin}' in ALLOWED_ORIGINS: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
 
     if allowed.is_empty() {
         eprintln!("FATAL: ALLOWED_ORIGINS contains no valid origins.");
@@ -99,14 +132,7 @@ pub fn build_cors() -> CorsLayer {
             Method::DELETE,
             Method::OPTIONS,
         ])
-        .allow_headers([
-            axum::http::header::AUTHORIZATION,
-            axum::http::header::CONTENT_TYPE,
-            axum::http::header::ACCEPT,
-            axum::http::header::COOKIE,
-            axum::http::HeaderName::from_static("x-correlation-id"),
-            axum::http::HeaderName::from_static("x-requested-with"),
-        ])
+        .allow_headers(allowed_headers)
         .allow_credentials(true)
 }
 
@@ -123,6 +149,14 @@ pub async fn uploads_security_headers(req: Request, next: Next) -> Response {
         HeaderValue::from_static("nosniff"),
     );
     headers.insert(
+        axum::http::header::X_FRAME_OPTIONS,
+        HeaderValue::from_static("DENY"),
+    );
+    headers.insert(
+        "Referrer-Policy",
+        HeaderValue::from_static("strict-origin-when-cross-origin"),
+    );
+    headers.insert(
         axum::http::header::CACHE_CONTROL,
         HeaderValue::from_static("public, max-age=2592000"),
     );
@@ -133,13 +167,12 @@ pub async fn uploads_security_headers(req: Request, next: Next) -> Response {
 pub async fn security_headers(req: Request, next: Next) -> Response {
     let path = req.uri().path().to_string();
     let method = req.method().clone();
-    let is_production =
-        std::env::var("RUST_ENV").unwrap_or_default().to_lowercase() == "production";
+    let prod = is_production();
 
     let mut res = next.run(req).await;
     let headers = res.headers_mut();
 
-    if is_production {
+    if prod {
         headers.insert(
             axum::http::header::STRICT_TRANSPORT_SECURITY,
             HeaderValue::from_static("max-age=31536000; includeSubDomains"),
@@ -179,9 +212,13 @@ pub async fn security_headers(req: Request, next: Next) -> Response {
         HeaderValue::from_static("strict-origin-when-cross-origin"),
     );
     headers.insert(
+        "Permissions-Policy",
+        HeaderValue::from_static("geolocation=(), microphone=(), camera=()"),
+    );
+    headers.insert(
         "Content-Security-Policy",
         HeaderValue::from_static(
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'self';"
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self';"
         ),
     );
     res
@@ -226,7 +263,8 @@ pub async fn standardize_api_errors(req: Request, next: Next) -> Response {
 }
 
 static NOT_FOUND_HTML: &str = include_str!("../frontend/static/404.html");
-static ASSET_VERSION_CACHE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+static ASSET_VERSION_CACHE: OnceLock<String> = OnceLock::new();
+static RENDERED_HTML_CACHE: OnceLock<RwLock<HashMap<&'static str, String>>> = OnceLock::new();
 
 fn collect_asset_files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
@@ -273,36 +311,71 @@ pub fn asset_version() -> &'static str {
 }
 
 /// Render an HTML template substituting `{{ASSET_V}}` and `{{APP_URL}}` placeholders.
+#[must_use]
 pub fn render_html(template: &str) -> String {
-    let app_url =
-        std::env::var("APP_URL").unwrap_or_else(|_| "https://pms.pieas.edu.pk".to_string());
-    let base_url = app_url.trim_end_matches('/');
+    let base_url = app_base_url();
     template
         .replace("{{ASSET_V}}", asset_version())
-        .replace("{{APP_URL}}", base_url)
+        .replace("{{APP_URL}}", &base_url)
+}
+
+async fn render_cached_template(
+    path: &'static str,
+    fallback: Option<&'static str>,
+    status: StatusCode,
+    content_type: &'static str,
+) -> Response {
+    if is_production() {
+        let cache = RENDERED_HTML_CACHE.get_or_init(|| RwLock::new(HashMap::new()));
+        if let Ok(guard) = cache.read() {
+            if let Some(rendered) = guard.get(path) {
+                return (
+                    status,
+                    [(axum::http::header::CONTENT_TYPE, content_type)],
+                    rendered.clone(),
+                )
+                    .into_response();
+            }
+        }
+    }
+
+    let raw = match tokio::fs::read_to_string(path).await {
+        Ok(raw) => raw,
+        Err(e) => {
+            if let Some(fb) = fallback {
+                fb.to_string()
+            } else {
+                tracing::error!(path = path, error = %e, "Failed to read HTML template");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    [(
+                        axum::http::header::CONTENT_TYPE,
+                        "text/plain; charset=utf-8",
+                    )],
+                    "Internal server error",
+                )
+                    .into_response();
+            }
+        }
+    };
+
+    let rendered = render_html(&raw);
+    if is_production() {
+        let cache = RENDERED_HTML_CACHE.get_or_init(|| RwLock::new(HashMap::new()));
+        if let Ok(mut guard) = cache.write() {
+            guard.insert(path, rendered.clone());
+        }
+    }
+    (
+        status,
+        [(axum::http::header::CONTENT_TYPE, content_type)],
+        rendered,
+    )
+        .into_response()
 }
 
 async fn render_html_file(path: &'static str, status: StatusCode) -> Response {
-    match tokio::fs::read_to_string(path).await {
-        Ok(raw) => (
-            status,
-            [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
-            render_html(&raw),
-        )
-            .into_response(),
-        Err(e) => {
-            tracing::error!(path = path, error = %e, "Failed to read HTML template");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                [(
-                    axum::http::header::CONTENT_TYPE,
-                    "text/plain; charset=utf-8",
-                )],
-                "Internal server error",
-            )
-                .into_response()
-        }
-    }
+    render_cached_template(path, None, status, "text/html; charset=utf-8").await
 }
 
 /// Fallback handler for unmatched routes:
@@ -323,20 +396,29 @@ async fn not_found_fallback(req: Request) -> Response {
     }
 }
 
-/// Dedicated 404 route handler returning StatusCode::NOT_FOUND with 404.html.
+/// Dedicated 404 route handler returning `StatusCode::NOT_FOUND` with `404.html`.
 async fn not_found_page() -> Response {
-    let raw = tokio::fs::read_to_string("frontend/static/404.html")
-        .await
-        .unwrap_or_else(|_| NOT_FOUND_HTML.to_string());
-    (
+    render_cached_template(
+        "frontend/static/404.html",
+        Some(NOT_FOUND_HTML),
         StatusCode::NOT_FOUND,
-        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
-        render_html(&raw),
+        "text/html; charset=utf-8",
     )
-        .into_response()
+    .await
 }
 
-/// Health check endpoint returning 200 {"status":"ok"} on successful DB ping, 503 on failure.
+/// Serve `/robots.txt` with `{{APP_URL}}` dynamically substituted from environment config.
+async fn robots_txt() -> Response {
+    render_cached_template(
+        "frontend/static/robots.txt",
+        Some("User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\n\nSitemap: {{APP_URL}}/sitemap.xml\n"),
+        StatusCode::OK,
+        "text/plain; charset=utf-8",
+    )
+    .await
+}
+
+/// Health check endpoint returning 200 `{"status":"ok"}` on successful DB ping, 503 on failure.
 #[axum::debug_handler]
 pub async fn health_check(State(pool): State<SqlitePool>) -> Response {
     match sqlx::query("SELECT 1").execute(&pool).await {
@@ -361,12 +443,23 @@ pub async fn health_check(State(pool): State<SqlitePool>) -> Response {
     }
 }
 
-/// Dynamic sitemap.xml generator listing canonical static pages, published articles, and events.
+fn format_sitemap_lastmod(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.len() == 10 && trimmed.chars().nth(4) == Some('-') {
+        return trimmed.to_string();
+    }
+    if trimmed.len() >= 19 && trimmed.as_bytes().get(10) == Some(&b' ') {
+        return format!("{}Z", trimmed.replace(' ', "T"));
+    }
+    trimmed.to_string()
+}
+
+/// Dynamic `sitemap.xml` generator listing canonical static pages and published articles.
 #[axum::debug_handler]
 pub async fn sitemap_xml(State(pool): State<SqlitePool>) -> Response {
-    let base_url =
-        std::env::var("APP_URL").unwrap_or_else(|_| "https://pms.pieas.edu.pk".to_string());
-    let base_url = base_url.trim_end_matches('/');
+    use std::fmt::Write as _;
+
+    let base_url = xml_escape(&app_base_url());
 
     let static_routes = [
         "",
@@ -383,42 +476,36 @@ pub async fn sitemap_xml(State(pool): State<SqlitePool>) -> Response {
         "/join",
     ];
 
-    let mut xml = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n");
+    let mut xml = String::from(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n",
+    );
 
     for route in static_routes {
-        xml.push_str(&format!(
-            "  <url>\n    <loc>{}{}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>{}</priority>\n  </url>\n",
-            base_url,
-            route,
-            if route.is_empty() { "1.0" } else { "0.8" }
-        ));
+        let priority = if route.is_empty() { "1.0" } else { "0.8" };
+        let _ = writeln!(
+            xml,
+            "  <url>\n    <loc>{base_url}{route}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>{priority}</priority>\n  </url>"
+        );
     }
 
-    if let Ok(posts) =
-        sqlx::query_as::<_, (String, Option<String>)>("SELECT slug, published_at FROM posts")
-            .fetch_all(&pool)
-            .await
+    if let Ok(posts) = sqlx::query_as::<_, (String, Option<String>)>(
+        "SELECT slug, published_at FROM posts ORDER BY published_at DESC LIMIT 10000",
+    )
+    .fetch_all(&pool)
+    .await
     {
         for (slug, pub_date) in posts {
+            let escaped_slug = xml_escape(&slug);
             let lastmod = pub_date
-                .map(|d| format!("    <lastmod>{}</lastmod>\n", d))
+                .as_deref()
+                .map(format_sitemap_lastmod)
+                .filter(|d| !d.is_empty())
+                .map(|d| format!("    <lastmod>{}</lastmod>\n", xml_escape(&d)))
                 .unwrap_or_default();
-            xml.push_str(&format!(
-                "  <url>\n    <loc>{}/blog/{}</loc>\n{}    <changefreq>monthly</changefreq>\n    <priority>0.7</priority>\n  </url>\n",
-                base_url, slug, lastmod
-            ));
-        }
-    }
-
-    if let Ok(events) = sqlx::query_as::<_, (String, String)>("SELECT slug, date FROM events")
-        .fetch_all(&pool)
-        .await
-    {
-        for (_slug, date) in events {
-            xml.push_str(&format!(
-                "  <url>\n    <loc>{}/events</loc>\n    <lastmod>{}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.6</priority>\n  </url>\n",
-                base_url, date
-            ));
+            let _ = writeln!(
+                xml,
+                "  <url>\n    <loc>{base_url}/blog/{escaped_slug}</loc>\n{lastmod}    <changefreq>monthly</changefreq>\n    <priority>0.7</priority>\n  </url>"
+            );
         }
     }
 
@@ -426,10 +513,13 @@ pub async fn sitemap_xml(State(pool): State<SqlitePool>) -> Response {
 
     (
         StatusCode::OK,
-        [(
-            axum::http::header::CONTENT_TYPE,
-            "application/xml; charset=utf-8",
-        )],
+        [
+            (
+                axum::http::header::CONTENT_TYPE,
+                "application/xml; charset=utf-8",
+            ),
+            (axum::http::header::CACHE_CONTROL, "public, max-age=300"),
+        ],
         xml,
     )
         .into_response()
@@ -437,6 +527,7 @@ pub async fn sitemap_xml(State(pool): State<SqlitePool>) -> Response {
 
 /// Construct the complete Axum application router.
 pub fn create_app(pool: SqlitePool) -> Router {
+    let _ = asset_version();
     let cors = build_cors();
 
     let uploads_router = Router::new()
@@ -446,7 +537,7 @@ pub fn create_app(pool: SqlitePool) -> Router {
     let mut router = Router::new()
         .route("/healthz", get(health_check))
         .route("/sitemap.xml", get(sitemap_xml))
-        .route_service("/robots.txt", ServeFile::new("frontend/static/robots.txt"))
+        .route("/robots.txt", get(robots_txt))
         .merge(routes::public::public_routes())
         .merge(routes::admin::admin_routes())
         // uploads served as raw files wrapped in custom response headers
@@ -487,7 +578,7 @@ pub fn create_app(pool: SqlitePool) -> Router {
         router = router
             .route(route, get(move || render_html_file(fp, StatusCode::OK)))
             .route(
-                &format!("{}/", route),
+                &format!("{route}/"),
                 get(move || render_html_file(fp, StatusCode::OK)),
             );
     }
@@ -511,7 +602,6 @@ pub fn create_app(pool: SqlitePool) -> Router {
         .fallback(not_found_fallback)
         .layer(DefaultBodyLimit::max(256 * 1024))
         .layer(CompressionLayer::new())
-        .layer(axum::Extension(pool.clone()))
         .layer(middleware::from_fn(standardize_api_errors))
         .layer(middleware::from_fn(security_headers))
         .layer(cors)

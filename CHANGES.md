@@ -39,13 +39,13 @@ This document details all bugs fixed, architectural improvements, files touched,
 - **Health Check (`src/lib.rs`, `tests/smoke_test.rs`)**: Added `GET /healthz` endpoint returning 200 `{"status":"ok"}` upon `SELECT 1` DB ping (503 if unreachable).
 
 ### Phase 3: Frontend Fixes
-- **F-01 (`frontend/static/assets/app.js`)**: Split URL handling into `safeUrlRaw(url)` (un-escaped URL string validation) and `safeUrl(url)` (escaped for HTML attribute interpolation). Used `safeUrlRaw` for property assignments (`el.href`, `img.src`). Exported both on `window.PMS`.
+- **F-01 (`frontend/static/assets/app.js`)**: Split URL handling into `safeUrlRaw(url)` (un-escaped URL string validation) and `safeUrl(url)` (escaped for HTML attribute interpolation). Used `safeUrlRaw` for property assignments (`el.href`, `img.src`). Exported `safeUrl` on `window.PMS`.
 - **F-02 (`frontend/static/assets/pages/admin.js`)**: Neutralized CSV formula injection by prefixing `'` to any cell starting with `= + - @ \t \r`.
 - **F-03 (`frontend/static/assets/app.js`)**: Enhanced `renderMarkdown` with ordered list support (`1. `), horizontal rules (`---`), and sanitized `![alt](url)` rendering via `safeUrlRaw`. Guarded link placeholder restoration against throwing on literal matches.
 - **F-04 (`frontend/static/assets/pages/admin.js`)**: Added `loadSeq` request counter discarding stale async responses.
 - **F-05 (`frontend/static/assets/pages/admin.js`)**: Select field renderer prepends current value if missing from options. Added seeded FAQ categories (Council, Certificates, Collaboration).
 - **F-06 (`frontend/static/assets/app.js`)**: `apiFetch` properly merges headers and throws descriptive errors on invalid JSON.
-- **F-07 (`frontend/static/assets/app.js`)**: `openRegistrationModal` persists issued certificate code in `localStorage` (`pms_cert_<id>`), provides a "Copy Code" button with clipboard integration, sets `aria-labelledby`, and closes on backdrop click.
+- **F-07 (`frontend/static/assets/app.js`)**: `openRegistrationModal` persists issued certificate code in `sessionStorage` (`pms_cert_<id>`), provides a "Copy Code" button with clipboard integration, sets `aria-labelledby`, and closes on backdrop click.
 - **F-08 (`frontend/static/assets/app.js`, `frontend/static/assets/style.css`, page scripts)**: Replaced `animation-delay` with `transition-delay` on staggered cards. Added `.no-js .fade-up` CSS fallback.
 - **F-09 (`frontend/static/assets/app.js`, `frontend/static/assets/pages/gallery.js`)**: Micrograph lightbox closes on backdrop click, sets `aria-labelledby`, handles null captions, and triggers on Enter/Space keypress. Added `tabindex="0"`, `role="button"`, and `aria-label`.
 - **F-10 (`frontend/static/assets/pages/*.js`, HTML pages)**: Subtitle elements added and rendered for `home_hero`, `home_activities`, `team_guidance`, and `sponsors_pitch`.
@@ -73,7 +73,7 @@ This document details all bugs fixed, architectural improvements, files touched,
 
 ### Phase 6 & Audit Remediation (Phases 1–6)
 - **Data Integrity & API Correctness**:
-  - Added `fetchAllRows` pagination (200 rows/page, up to 500 pages) for `/api/admin/registrations`, `/api/admin/membership`, `/api/admin/contacts`, and `/api/admin/newsletter` so CSV exports and counts include all rows.
+  - Added `fetchAllRows` pagination (200 rows/page, up to 100 pages) for `/api/admin/*` endpoints so CSV exports and counts include all rows.
   - Preserved `savedRegFilter` before clearing the admin toolbar, cleared optional stats/section strings with `''` while keeping `null` on create, replaced brittle 401 string matching with `isUnauthorized(err)` (`err.status === 401`), and added a sequence guard in `events.js` to discard stale async filter responses.
   - Escaped gallery `data-img-url` with `PMS.safeUrl`, normalized `'Partner'` tier labels, stopped HTML-escaping `mailto:` `href` attributes in `loadStats` (and removed dead stat selectors), formatted date-only and SQLite UTC timestamps consistently in `fmtDate`, joined only non-empty alumni subtitle parts, grouped past team members under `tenure_year`, and updated `renderMarkdown` to emit `<h2>`–`<h4>` with collision-proof per-call NUL-delimited tokens.
   - Added `CertificateVerification.reason` (`"not_found"` / `"not_attended"`), fixed `sitemap_xml` to emit `/blog/{slug}` and `/events`, and replaced hardcoded default years with computed academic tenure year (Aug–Jul rollover) and current calendar year.
@@ -171,7 +171,7 @@ This document details all bugs fixed, architectural improvements, files touched,
 | `RATE_LIMIT_CONTACT_RPM` | Integer (`10`) | Per-IP requests per minute for `/api/contact`. |
 | `RATE_LIMIT_NEWSLETTER_RPM` | Integer (`10`) | Per-IP requests per minute for `/api/newsletter`. |
 | `RATE_LIMIT_MEMBERSHIP_RPM` | Integer (`15`) | Per-IP requests per minute for `/api/membership`. |
-| `RATE_LIMIT_CERT_VERIFY_RPM` | Integer (`30`) | Per-IP requests per minute for `/api/certificates/verify`. |
+| `RATE_LIMIT_CERT_VERIFY_RPM` | Integer (`60`) | Per-IP requests per minute for `/api/certificates/verify`. |
 | `APP_URL` | String (`https://pms.pieas.edu.pk`) | Canonical base URL for `/sitemap.xml` and `{{APP_URL}}` HTML canonical/OG placeholders. |
 | `ASSET_V` | String (optional; default 8-char SHA-256 digest of `frontend/static/assets`) | Cache-busting query value substituted for `{{ASSET_V}}` in HTML `/assets/*` URLs. |
 

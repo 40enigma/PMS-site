@@ -20,10 +20,9 @@ RUN cargo build --release
 # ── Stage 2: Runtime image ──
 FROM debian:bookworm-slim AS runner
 
-# Install ca-certificates and sqlite runtime library
+# Install runtime CA certificates
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root unprivileged service user
@@ -46,10 +45,13 @@ USER pmsuser:pms
 ENV HOST=0.0.0.0 \
     PORT=3000 \
     RUST_ENV=production \
-    DATABASE_URL=sqlite:///app/data/pms.db \
+    DATABASE_URL=sqlite:///app/data/pms.db?mode=rwc \
     UPLOAD_DIR=/app/uploads
 
 EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/${PORT:-3000} && printf 'GET /healthz HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q '200 OK'"]
 
 CMD ["/app/pms-platform"]
 

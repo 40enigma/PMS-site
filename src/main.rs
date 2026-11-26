@@ -1,7 +1,7 @@
-use pms_platform::{auth, create_app, db};
+use pms_platform::{asset_version, auth, create_app, db, util::is_production};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-async fn shutdown_signal() {
+async fn shutdown_signal(shutdown_tx: tokio::sync::watch::Sender<bool>) {
     let ctrl_c = async {
         tokio::signal::ctrl_c()
             .await
@@ -23,11 +23,12 @@ async fn shutdown_signal() {
     let terminate = std::future::pending::<Option<()>>();
 
     tokio::select! {
-        _ = ctrl_c => {},
+        () = ctrl_c => {},
         _ = terminate => {},
     }
 
     tracing::info!("Shutdown signal received, starting graceful shutdown");
+    let _ = shutdown_tx.send(true);
 }
 
 #[tokio::main]
@@ -48,9 +49,7 @@ async fn main() {
     // This call will process::exit(1) in production if the secret is unset or insecure.
     let _secret = auth::jwt_secret();
 
-    let is_production =
-        std::env::var("RUST_ENV").unwrap_or_default().to_lowercase() == "production";
-    if is_production && std::env::var("TRUST_PROXY").is_err() {
+    if is_production() && std::env::var("TRUST_PROXY").is_err() {
         tracing::warn!(
             "⚠️ TRUST_PROXY is unset in production mode. Reverse proxy IP headers will not be trusted."
         );
@@ -68,6 +67,9 @@ async fn main() {
         std::process::exit(1);
     }
 
+    // Pre-compute asset cache-buster at startup so the first request does not block on disk I/O
+    let _asset_v = asset_version();
+
     // Create uploads directory
     tokio::fs::create_dir_all(pms_platform::upload_dir())
         .await
@@ -77,15 +79,17 @@ async fn main() {
     let pool = db::init_pool().await;
     db::run_migrations(&pool).await;
     db::seed_data(&pool).await;
-    db::spawn_revoked_token_pruner(pool.clone());
+
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+    let pruner_handle = db::spawn_revoked_token_pruner(pool.clone(), shutdown_rx);
 
     // Build application router
-    let app = create_app(pool);
+    let app = create_app(pool.clone());
 
     let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
-    let addr = format!("{}:{}", host, port);
-    tracing::info!("🚀 PMS Platform running at http://{}", addr);
+    let addr = format!("{host}:{port}");
+    tracing::info!("🚀 PMS Platform running at http://{addr}");
 
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
@@ -95,7 +99,11 @@ async fn main() {
         listener,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
-    .with_graceful_shutdown(shutdown_signal())
+    .with_graceful_shutdown(shutdown_signal(shutdown_tx))
     .await
     .expect("Server error");
+
+    let _ = pruner_handle.await;
+    pool.close().await;
+    tracing::info!("Shutdown complete");
 }

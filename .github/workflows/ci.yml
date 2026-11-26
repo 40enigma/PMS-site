@@ -57,6 +57,9 @@ jobs:
       - name: Prettier Format Check
         run: npx --yes prettier --check "frontend/static/assets/**/*.js"
 
+      - name: TypeScript CheckJS
+        run: npx --yes -p typescript tsc --noEmit --allowJs --checkJs frontend/static/assets/app.js frontend/static/assets/layout.js
+
   security-audit:
     name: Security Vulnerability Audit
     runs-on: ubuntu-latest
